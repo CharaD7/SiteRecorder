@@ -32,7 +32,7 @@ if [ "$OS" == "linux" ]; then
     echo "Updating package list..."
     sudo apt update
     
-    # Install dependencies
+    # Install dependencies (removed Tauri/GTK dependencies)
     echo "Installing required packages..."
     sudo apt install -y \
         build-essential \
@@ -40,15 +40,6 @@ if [ "$OS" == "linux" ]; then
         libssl-dev \
         libdbus-1-dev \
         libnotify-dev \
-        libx11-dev \
-        libxcb1-dev \
-        libsoup2.4-dev \
-        libjavascriptcoregtk-4.0-dev \
-        libwebkit2gtk-4.0-dev \
-        libgtk-3-dev \
-        libayatana-appindicator3-dev \
-        librsvg2-dev \
-        patchelf \
         libavcodec-dev \
         libavformat-dev \
         libavutil-dev \
@@ -98,5 +89,5 @@ echo "================================================"
 echo ""
 echo "Next steps:"
 echo "  1. cargo build --release"
-echo "  2. cargo run -- https://example.com"
+echo "  2. cargo run -- --url http://localhost:3000"
 echo ""

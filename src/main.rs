@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap::Parser;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
@@ -11,21 +12,55 @@ use notifier::{Notifier, NotificationConfig};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
 use session::SessionManager;
 
+#[derive(Parser, Debug)]
+#[command(name = "SiteRecorder")]
+#[command(author, version, about = "Record and crawl any website", long_about = None)]
+struct Args {
+    /// URL to crawl and record
+    #[arg(value_name = "URL")]
+    url: Option<String>,
+
+    /// Maximum number of pages to visit
+    #[arg(short, long, default_value = "50")]
+    max_pages: usize,
+
+    /// Delay between page visits in milliseconds
+    #[arg(short, long, default_value = "2000")]
+    delay: u64,
+
+    /// Output directory for recordings
+    #[arg(short, long, default_value = "./recordings")]
+    output: String,
+
+    /// Run in headless mode (no visible browser)
+    #[arg(long)]
+    headless: bool,
+}
+
 #[derive(Debug)]
 struct AppConfig {
     base_url: String,
     max_pages: Option<usize>,
     delay_between_pages_ms: u64,
     output_dir: String,
+    headless: bool,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
+impl From<Args> for AppConfig {
+    fn from(args: Args) -> Self {
+        let base_url = args.url.unwrap_or_else(|| {
+            println!("No URL provided. Please enter the URL to record:");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).expect("Failed to read input");
+            input.trim().to_string()
+        });
+
         Self {
-            base_url: "https://example.com".to_string(),
-            max_pages: Some(100),
-            delay_between_pages_ms: 2000,
-            output_dir: "./recordings".to_string(),
+            base_url,
+            max_pages: Some(args.max_pages),
+            delay_between_pages_ms: args.delay,
+            output_dir: args.output,
+            headless: args.headless,
         }
     }
 }
@@ -42,7 +77,13 @@ struct SiteRecorder {
 
 impl SiteRecorder {
     fn new(config: AppConfig) -> Result<Self> {
-        let browser = Browser::new()?;
+        let browser = if config.headless {
+            info!("Launching browser in headless mode");
+            Browser::new_headless()?
+        } else {
+            info!("Launching browser in visible mode");
+            Browser::new()?
+        };
         
         let crawl_config = CrawlConfig::new(&config.base_url)?;
         let crawler = Crawler::new(crawl_config);
@@ -76,6 +117,7 @@ impl SiteRecorder {
 
     async fn run(&mut self) -> Result<()> {
         info!("Starting SiteRecorder");
+        info!("Target: {}", self.config.base_url);
         
         // Create session
         let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
@@ -188,23 +230,18 @@ async fn main() -> Result<()> {
         .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .init();
 
-    info!("SiteRecorder starting...");
-
-    // Parse command line arguments or use defaults
-    let config = AppConfig {
-        base_url: std::env::args()
-            .nth(1)
-            .unwrap_or_else(|| "https://example.com".to_string()),
-        max_pages: Some(50),
-        delay_between_pages_ms: 2000,
-        output_dir: "./recordings".to_string(),
-    };
+    info!("SiteRecorder - Desktop Application");
+    
+    // Parse command line arguments
+    let args = Args::parse();
+    let config = AppConfig::from(args);
 
     info!("Configuration:");
     info!("  Base URL: {}", config.base_url);
     info!("  Max pages: {:?}", config.max_pages);
     info!("  Delay: {}ms", config.delay_between_pages_ms);
     info!("  Output dir: {}", config.output_dir);
+    info!("  Headless: {}", config.headless);
 
     // Create and run the recorder
     match SiteRecorder::new(config) {
