@@ -1,0 +1,45 @@
+[workspace]
+members = [
+    "crates/browser",
+    "crates/crawler",
+    "crates/recorder",
+    "crates/session",
+    "crates/notifier",
+    "crates/exporter",
+]
+resolver = "2"
+
+[package]
+name = "site-recorder"
+version = "0.1.0"
+edition = "2021"
+authors = ["SiteRecorder Team"]
+description = "Cross-platform desktop application for automated site traversal and browser activity recording"
+license = "MIT"
+
+[dependencies]
+# Tauri for cross-platform GUI
+tauri = { version = "1.5", features = ["dialog-all", "notification-all", "shell-open"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Workspace crates
+browser = { path = "crates/browser" }
+crawler = { path = "crates/crawler" }
+recorder = { path = "crates/recorder" }
+session = { path = "crates/session" }
+notifier = { path = "crates/notifier" }
+exporter = { path = "crates/exporter" }
+
+[build-dependencies]
+tauri-build = "1.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

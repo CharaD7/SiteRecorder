@@ -1,0 +1,30 @@
+[package]
+name = "recorder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+scrap = "0.5"
+ffmpeg-next = { version = "6.1", optional = true }
+gstreamer = { version = "0.21", optional = true }
+gstreamer-video = { version = "0.21", optional = true }
+tokio = { version = "1.35", features = ["full"] }
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = ["Win32_Graphics_Gdi"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.23"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11 = "2.21"
+
+[features]
+default = ["ffmpeg"]
+ffmpeg = ["ffmpeg-next"]
+gst = ["gstreamer", "gstreamer-video"]

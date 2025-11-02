@@ -1,0 +1,58 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Recordings
+/recordings
+*.mp4
+*.webm
+*.avi
+*.mkv
+*_results.json
+*_data.json
+*_data.csv
+*_data.html
+
+# Session files
+*.session
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+
+# Test outputs
+/test-output
+
+# Coverage
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+
+# Environment
+.env
+.env.local
+
+# Documentation builds
+/target/doc
