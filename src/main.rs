@@ -1,261 +1,256 @@
 use anyhow::Result;
-use clap::Parser;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tauri::State;
+use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use browser::{Browser, NavigationOptions, ScrollBehavior};
 use crawler::{CrawlConfig, Crawler};
-use exporter::{ExportFormat, Exporter, RecordingData};
+use exporter::{Exporter, RecordingData};
 use notifier::{Notifier, NotificationConfig};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
 use session::SessionManager;
 
-#[derive(Parser, Debug)]
-#[command(name = "SiteRecorder")]
-#[command(author, version, about = "Record and crawl any website", long_about = None)]
-struct Args {
-    /// URL to crawl and record
-    #[arg(value_name = "URL")]
-    url: Option<String>,
-
-    /// Maximum number of pages to visit
-    #[arg(short, long, default_value = "50")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RecordingSettings {
+    url: String,
     max_pages: usize,
-
-    /// Delay between page visits in milliseconds
-    #[arg(short, long, default_value = "2000")]
-    delay: u64,
-
-    /// Output directory for recordings
-    #[arg(short, long, default_value = "./recordings")]
-    output: String,
-
-    /// Run in headless mode (no visible browser)
-    #[arg(long)]
+    delay_ms: u64,
     headless: bool,
-}
-
-#[derive(Debug)]
-struct AppConfig {
-    base_url: String,
-    max_pages: Option<usize>,
-    delay_between_pages_ms: u64,
     output_dir: String,
-    headless: bool,
 }
 
-impl From<Args> for AppConfig {
-    fn from(args: Args) -> Self {
-        let base_url = args.url.unwrap_or_else(|| {
-            println!("No URL provided. Please enter the URL to record:");
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).expect("Failed to read input");
-            input.trim().to_string()
-        });
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CrawlStatus {
+    is_running: bool,
+    current_url: String,
+    pages_visited: usize,
+    pages_discovered: usize,
+    session_id: String,
+}
 
+impl Default for CrawlStatus {
+    fn default() -> Self {
         Self {
-            base_url,
-            max_pages: Some(args.max_pages),
-            delay_between_pages_ms: args.delay,
-            output_dir: args.output,
-            headless: args.headless,
+            is_running: false,
+            current_url: String::new(),
+            pages_visited: 0,
+            pages_discovered: 0,
+            session_id: String::new(),
         }
     }
 }
 
-struct SiteRecorder {
-    config: AppConfig,
-    browser: Browser,
-    crawler: Crawler,
-    recorder: Recorder,
-    session_manager: SessionManager,
-    notifier: Notifier,
-    exporter: Exporter,
+struct AppState {
+    status: Arc<Mutex<CrawlStatus>>,
+    session_manager: Arc<Mutex<SessionManager>>,
 }
 
-impl SiteRecorder {
-    fn new(config: AppConfig) -> Result<Self> {
-        let browser = if config.headless {
-            info!("Launching browser in headless mode");
-            Browser::new_headless()?
-        } else {
-            info!("Launching browser in visible mode");
-            Browser::new()?
-        };
-        
-        let crawl_config = CrawlConfig::new(&config.base_url)?;
-        let crawler = Crawler::new(crawl_config);
-        
-        let recording_config = RecordingConfig {
-            output_dir: std::path::PathBuf::from(&config.output_dir),
-            format: VideoFormat::Mp4,
-            fps: 30,
-            quality: 80,
-            audio_enabled: false,
-        };
-        let recorder = Recorder::new(recording_config);
-        
-        let session_manager = SessionManager::new();
-        
-        let notification_config = NotificationConfig::default();
-        let notifier = Notifier::new(notification_config);
-        
-        let exporter = Exporter::new();
+#[tauri::command]
+async fn start_recording(
+    settings: RecordingSettings,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    info!("Starting recording with settings: {:?}", settings);
 
-        Ok(Self {
-            config,
-            browser,
-            crawler,
-            recorder,
-            session_manager,
-            notifier,
-            exporter,
-        })
+    let mut status = state.status.lock().await;
+    if status.is_running {
+        return Err("Recording already in progress".to_string());
     }
 
-    async fn run(&mut self) -> Result<()> {
-        info!("Starting SiteRecorder");
-        info!("Target: {}", self.config.base_url);
-        
-        // Create session
-        let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
-        self.session_manager.create_session(session_id.clone()).await?;
-        
-        // Start recording
-        self.recorder.start_recording(session_id.clone()).await?;
-        self.notifier.notify_recording_started(&session_id)?;
-        
-        // Get browser tab
-        let tab = self.browser.get_tab()?;
-        
-        // Navigation options
-        let nav_options = NavigationOptions {
-            timeout_ms: 30000,
-            wait_for_idle: true,
-            scroll_behavior: ScrollBehavior::Incremental {
-                steps: 5,
-                delay_ms: 500,
-            },
-        };
+    status.is_running = true;
+    status.session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    status.current_url = settings.url.clone();
+    status.pages_visited = 0;
+    status.pages_discovered = 0;
+    drop(status);
 
-        let mut pages_visited = 0;
-        let mut recording_data = Vec::new();
+    let state_clone = state.inner().clone();
+    let session_id = state.status.lock().await.session_id.clone();
 
-        self.notifier.notify_crawl_started(&self.config.base_url)?;
+    // Spawn background task
+    tokio::spawn(async move {
+        if let Err(e) = run_recording(settings, state_clone).await {
+            error!("Recording failed: {}", e);
+        }
+    });
 
-        // Main crawling loop
-        while let Some(url) = self.crawler.get_next_url() {
-            if let Some(max) = self.config.max_pages {
-                if pages_visited >= max {
-                    info!("Reached maximum page limit: {}", max);
-                    break;
-                }
+    Ok(session_id)
+}
+
+#[tauri::command]
+async fn stop_recording(state: State<'_, AppState>) -> Result<(), String> {
+    let mut status = state.status.lock().await;
+    status.is_running = false;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_status(state: State<'_, AppState>) -> Result<CrawlStatus, String> {
+    let status = state.status.lock().await;
+    Ok(status.clone())
+}
+
+async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Result<()> {
+    // Initialize components
+    let browser = if settings.headless {
+        Browser::new_headless()?
+    } else {
+        Browser::new()?
+    };
+
+    let crawl_config = CrawlConfig::new(&settings.url)?;
+    let mut crawler = Crawler::new(crawl_config);
+
+    let recording_config = RecordingConfig {
+        output_dir: std::path::PathBuf::from(&settings.output_dir),
+        format: VideoFormat::Mp4,
+        fps: 30,
+        quality: 80,
+        audio_enabled: false,
+    };
+    let recorder = Recorder::new(recording_config);
+
+    let session_manager = SessionManager::new();
+    let notifier = Notifier::new(NotificationConfig::default());
+    let exporter = Exporter::new();
+
+    // Get session ID
+    let session_id = state.status.lock().await.session_id.clone();
+
+    // Create session
+    session_manager.create_session(session_id.clone()).await?;
+
+    // Start recording
+    recorder.start_recording(session_id.clone()).await?;
+    notifier.notify_recording_started(&session_id)?;
+
+    // Get browser tab
+    let tab = browser.get_tab()?;
+
+    let nav_options = NavigationOptions {
+        timeout_ms: 30000,
+        wait_for_idle: true,
+        scroll_behavior: ScrollBehavior::Incremental {
+            steps: 5,
+            delay_ms: 500,
+        },
+    };
+
+    let mut recording_data = Vec::new();
+
+    // Main crawling loop
+    while let Some(url) = crawler.get_next_url() {
+        // Check if stopped
+        {
+            let status = state.status.lock().await;
+            if !status.is_running {
+                info!("Recording stopped by user");
+                break;
             }
+        }
 
-            info!("Visiting page {}: {}", pages_visited + 1, url);
+        // Check page limit
+        let pages_visited = state.status.lock().await.pages_visited;
+        if pages_visited >= settings.max_pages {
+            info!("Reached maximum page limit: {}", settings.max_pages);
+            break;
+        }
 
-            // Navigate to URL
-            match self.browser.navigate(&tab, &url, &nav_options) {
-                Ok(_) => {
-                    pages_visited += 1;
+        info!("Visiting page {}: {}", pages_visited + 1, url);
 
-                    // Record the visit
-                    recording_data.push(RecordingData {
-                        session_id: session_id.clone(),
-                        timestamp: chrono::Utc::now(),
-                        url: url.clone(),
-                        action: "navigate".to_string(),
-                        metadata: serde_json::json!({
-                            "page_number": pages_visited,
-                        }),
-                    });
+        // Update status
+        {
+            let mut status = state.status.lock().await;
+            status.current_url = url.clone();
+        }
 
-                    // Extract links from the page
-                    if let Ok(content) = self.browser.get_page_content(&tab) {
-                        if let Ok(links) = self.crawler.extract_links_from_html(&content, &url) {
-                            info!("Found {} links on page", links.len());
-                            self.crawler.add_discovered_links(links);
-                        }
+        // Navigate to URL
+        match browser.navigate(&tab, &url, &nav_options) {
+            Ok(_) => {
+                let mut status = state.status.lock().await;
+                status.pages_visited += 1;
+                drop(status);
+
+                recording_data.push(RecordingData {
+                    session_id: session_id.clone(),
+                    timestamp: chrono::Utc::now(),
+                    url: url.clone(),
+                    action: "navigate".to_string(),
+                    metadata: serde_json::json!({
+                        "page_number": pages_visited + 1,
+                    }),
+                });
+
+                // Extract links
+                if let Ok(content) = browser.get_page_content(&tab) {
+                    if let Ok(links) = crawler.extract_links_from_html(&content, &url) {
+                        info!("Found {} links on page", links.len());
+                        crawler.add_discovered_links(links);
+
+                        let mut status = state.status.lock().await;
+                        status.pages_discovered = crawler.get_discovered_count();
                     }
+                }
 
-                    // Delay between pages
-                    sleep(Duration::from_millis(self.config.delay_between_pages_ms)).await;
-                }
-                Err(e) => {
-                    warn!("Failed to navigate to {}: {}", url, e);
-                    recording_data.push(RecordingData {
-                        session_id: session_id.clone(),
-                        timestamp: chrono::Utc::now(),
-                        url: url.clone(),
-                        action: "error".to_string(),
-                        metadata: serde_json::json!({
-                            "error": e.to_string(),
-                        }),
-                    });
-                }
+                sleep(Duration::from_millis(settings.delay_ms)).await;
+            }
+            Err(e) => {
+                warn!("Failed to navigate to {}: {}", url, e);
             }
         }
-
-        info!("Crawling completed. Visited {} pages", pages_visited);
-        self.notifier.notify_crawl_completed(pages_visited)?;
-
-        // Stop recording
-        let video_path = self.recorder.stop_recording().await?;
-        if let Some(metadata) = self.recorder.get_metadata().await {
-            if let Some(duration) = metadata.duration_secs {
-                self.notifier.notify_recording_stopped(&session_id, duration)?;
-            }
-        }
-
-        // Export recording data
-        let export_path = std::path::PathBuf::from(&self.config.output_dir)
-            .join(format!("{}_data.json", session_id));
-        self.exporter.export_to_json(&recording_data, &export_path)?;
-        self.notifier.notify_export_completed(export_path.to_str().unwrap_or("unknown"))?;
-
-        info!("SiteRecorder completed successfully");
-        info!("Video saved to: {:?}", video_path);
-        info!("Data exported to: {:?}", export_path);
-
-        Ok(())
     }
+
+    let pages_visited = state.status.lock().await.pages_visited;
+    info!("Crawling completed. Visited {} pages", pages_visited);
+    notifier.notify_crawl_completed(pages_visited)?;
+
+    // Stop recording
+    let video_path = recorder.stop_recording().await?;
+    if let Some(metadata) = recorder.get_metadata().await {
+        if let Some(duration) = metadata.duration_secs {
+            notifier.notify_recording_stopped(&session_id, duration)?;
+        }
+    }
+
+    // Export data
+    let export_path = std::path::PathBuf::from(&settings.output_dir)
+        .join(format!("{}_data.json", session_id));
+    exporter.export_to_json(&recording_data, &export_path)?;
+
+    info!("Recording saved to: {:?}", video_path);
+    info!("Data exported to: {:?}", export_path);
+
+    // Update final status
+    let mut status = state.status.lock().await;
+    status.is_running = false;
+
+    Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .init();
 
-    info!("SiteRecorder - Desktop Application");
-    
-    // Parse command line arguments
-    let args = Args::parse();
-    let config = AppConfig::from(args);
+    info!("SiteRecorder GUI starting...");
 
-    info!("Configuration:");
-    info!("  Base URL: {}", config.base_url);
-    info!("  Max pages: {:?}", config.max_pages);
-    info!("  Delay: {}ms", config.delay_between_pages_ms);
-    info!("  Output dir: {}", config.output_dir);
-    info!("  Headless: {}", config.headless);
+    let app_state = AppState {
+        status: Arc::new(Mutex::new(CrawlStatus::default())),
+        session_manager: Arc::new(Mutex::new(SessionManager::new())),
+    };
 
-    // Create and run the recorder
-    match SiteRecorder::new(config) {
-        Ok(mut recorder) => {
-            if let Err(e) = recorder.run().await {
-                error!("Application error: {}", e);
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            error!("Failed to initialize SiteRecorder: {}", e);
-            std::process::exit(1);
-        }
-    }
-
-    Ok(())
+    tauri::Builder::default()
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![
+            start_recording,
+            stop_recording,
+            get_status
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

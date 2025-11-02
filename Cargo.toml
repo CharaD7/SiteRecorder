@@ -18,7 +18,8 @@ description = "Cross-platform desktop application for automated site traversal a
 license = "MIT"
 
 [dependencies]
-# Core dependencies
+# Tauri for cross-platform GUI
+tauri = { version = "1.5", features = ["dialog-all", "notification-all", "shell-open"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.35", features = ["full"] }
@@ -27,7 +28,6 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
-clap = { version = "4.4", features = ["derive"] }
 
 # Workspace crates
 browser = { path = "crates/browser" }
@@ -36,6 +36,9 @@ recorder = { path = "crates/recorder" }
 session = { path = "crates/session" }
 notifier = { path = "crates/notifier" }
 exporter = { path = "crates/exporter" }
+
+[build-dependencies]
+tauri-build = "1.5"
 
 [profile.release]
 opt-level = 3

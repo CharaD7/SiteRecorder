@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiteRecorder</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 SiteRecorder</h1>
+            <p>Automated Site Crawling & Recording</p>
+        </header>
+
+        <main>
+            <!-- Settings Panel -->
+            <section class="panel settings-panel">
+                <h2>Recording Settings</h2>
+                
+                <div class="form-group">
+                    <label for="url">Website URL</label>
+                    <input 
+                        type="text" 
+                        id="url" 
+                        placeholder="https://example.com"
+                        value="https://example.com"
+                    />
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="maxPages">Max Pages</label>
+                        <input 
+                            type="number" 
+                            id="maxPages" 
+                            value="50"
+                            min="1"
+                            max="1000"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="delay">Delay (ms)</label>
+                        <input 
+                            type="number" 
+                            id="delay" 
+                            value="2000"
+                            min="500"
+                            max="10000"
+                            step="500"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="outputDir">Output Directory</label>
+                    <input 
+                        type="text" 
+                        id="outputDir" 
+                        value="./recordings"
+                    />
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="headless" />
+                        <span>Headless Mode (no browser window)</span>
+                    </label>
+                </div>
+
+                <div class="button-group">
+                    <button id="startBtn" class="btn btn-primary">
+                        ▶️ Start Recording
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        ⏹️ Stop Recording
+                    </button>
+                </div>
+            </section>
+
+            <!-- Status Panel -->
+            <section class="panel status-panel">
+                <h2>Status</h2>
+                
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="status-label">State:</span>
+                        <span id="recordingState" class="status-value">Idle</span>
+                    </div>
+                    
+                    <div class="status-item">
+                        <span class="status-label">Session ID:</span>
+                        <span id="sessionId" class="status-value">—</span>
+                    </div>
+                    
+                    <div class="status-item">
+                        <span class="status-label">Current URL:</span>
+                        <span id="currentUrl" class="status-value">—</span>
+                    </div>
+                    
+                    <div class="status-item">
+                        <span class="status-label">Pages Visited:</span>
+                        <span id="pagesVisited" class="status-value">0</span>
+                    </div>
+                    
+                    <div class="status-item">
+                        <span class="status-label">Pages Discovered:</span>
+                        <span id="pagesDiscovered" class="status-value">0</span>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+            </section>
+
+            <!-- Log Panel -->
+            <section class="panel log-panel">
+                <h2>Activity Log</h2>
+                <div id="logContainer" class="log-container"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>SiteRecorder v0.1.0 | Cross-platform Site Crawler</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

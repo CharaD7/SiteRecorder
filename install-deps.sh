@@ -32,7 +32,7 @@ if [ "$OS" == "linux" ]; then
     echo "Updating package list..."
     sudo apt update
     
-    # Install dependencies (removed Tauri/GTK dependencies)
+    # Install dependencies for Tauri GUI
     echo "Installing required packages..."
     sudo apt install -y \
         build-essential \
@@ -40,6 +40,11 @@ if [ "$OS" == "linux" ]; then
         libssl-dev \
         libdbus-1-dev \
         libnotify-dev \
+        libwebkit2gtk-4.0-dev \
+        libgtk-3-dev \
+        libayatana-appindicator3-dev \
+        librsvg2-dev \
+        patchelf \
         libavcodec-dev \
         libavformat-dev \
         libavutil-dev \
@@ -73,7 +78,8 @@ elif [ "$OS" == "windows" ]; then
     echo "Windows detected."
     echo "Please ensure you have:"
     echo "  1. Visual Studio Build Tools installed"
-    echo "  2. FFmpeg installed and in PATH"
+    echo "  2. WebView2 (usually pre-installed on Windows 10/11)"
+    echo "  3. FFmpeg installed and in PATH"
     echo ""
     echo "For detailed Windows setup instructions, see README.md"
     
@@ -89,5 +95,5 @@ echo "================================================"
 echo ""
 echo "Next steps:"
 echo "  1. cargo build --release"
-echo "  2. cargo run -- --url http://localhost:3000"
+echo "  2. cargo run (launches GUI application)"
 echo ""
