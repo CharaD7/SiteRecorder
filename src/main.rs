@@ -54,10 +54,15 @@ async fn start_recording(
     settings: RecordingSettings,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    eprintln!("=== START RECORDING CALLED ===");
+    eprintln!("Settings: {:?}", settings);
     info!("Starting recording with settings: {:?}", settings);
 
     let mut status = state.status.lock().await;
+    eprintln!("Got status lock, is_running: {}", status.is_running);
+    
     if status.is_running {
+        eprintln!("ERROR: Recording already in progress");
         return Err("Recording already in progress".to_string());
     }
 
@@ -66,18 +71,25 @@ async fn start_recording(
     status.current_url = settings.url.clone();
     status.pages_visited = 0;
     status.pages_discovered = 0;
+    let session_id = status.session_id.clone();
+    eprintln!("Created session: {}", session_id);
     drop(status);
 
-    let state_clone = state.inner().clone();
-    let session_id = state.status.lock().await.session_id.clone();
+    let status_arc = state.status.clone();
+    let session_manager_arc = state.session_manager.clone();
 
+    eprintln!("Spawning background task...");
     // Spawn background task
     tokio::spawn(async move {
-        if let Err(e) = run_recording(settings, state_clone).await {
+        eprintln!("Background task started");
+        if let Err(e) = run_recording(settings, status_arc, session_manager_arc).await {
+            eprintln!("Recording failed: {}", e);
             error!("Recording failed: {}", e);
         }
+        eprintln!("Background task completed");
     });
 
+    eprintln!("Returning session_id: {}", session_id);
     Ok(session_id)
 }
 
@@ -94,13 +106,22 @@ async fn get_status(state: State<'_, AppState>) -> Result<CrawlStatus, String> {
     Ok(status.clone())
 }
 
-async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Result<()> {
+async fn run_recording(
+    settings: RecordingSettings,
+    status: Arc<Mutex<CrawlStatus>>,
+    session_manager: Arc<Mutex<SessionManager>>,
+) -> Result<()> {
+    eprintln!("=== RUN RECORDING STARTED ===");
+    eprintln!("Settings: {:?}", settings);
+    
     // Initialize components
+    eprintln!("Creating browser...");
     let browser = if settings.headless {
         Browser::new_headless()?
     } else {
         Browser::new()?
     };
+    eprintln!("Browser created successfully");
 
     let crawl_config = CrawlConfig::new(&settings.url)?;
     let mut crawler = Crawler::new(crawl_config);
@@ -114,15 +135,14 @@ async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Res
     };
     let recorder = Recorder::new(recording_config);
 
-    let session_manager = SessionManager::new();
     let notifier = Notifier::new(NotificationConfig::default());
     let exporter = Exporter::new();
 
     // Get session ID
-    let session_id = state.status.lock().await.session_id.clone();
+    let session_id = status.lock().await.session_id.clone();
 
     // Create session
-    session_manager.create_session(session_id.clone()).await?;
+    session_manager.lock().await.create_session(session_id.clone()).await?;
 
     // Start recording
     recorder.start_recording(session_id.clone()).await?;
@@ -146,15 +166,15 @@ async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Res
     while let Some(url) = crawler.get_next_url() {
         // Check if stopped
         {
-            let status = state.status.lock().await;
-            if !status.is_running {
+            let status_guard = status.lock().await;
+            if !status_guard.is_running {
                 info!("Recording stopped by user");
                 break;
             }
         }
 
         // Check page limit
-        let pages_visited = state.status.lock().await.pages_visited;
+        let pages_visited = status.lock().await.pages_visited;
         if pages_visited >= settings.max_pages {
             info!("Reached maximum page limit: {}", settings.max_pages);
             break;
@@ -164,16 +184,16 @@ async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Res
 
         // Update status
         {
-            let mut status = state.status.lock().await;
-            status.current_url = url.clone();
+            let mut status_guard = status.lock().await;
+            status_guard.current_url = url.clone();
         }
 
         // Navigate to URL
         match browser.navigate(&tab, &url, &nav_options) {
             Ok(_) => {
-                let mut status = state.status.lock().await;
-                status.pages_visited += 1;
-                drop(status);
+                let mut status_guard = status.lock().await;
+                status_guard.pages_visited += 1;
+                drop(status_guard);
 
                 recording_data.push(RecordingData {
                     session_id: session_id.clone(),
@@ -191,8 +211,8 @@ async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Res
                         info!("Found {} links on page", links.len());
                         crawler.add_discovered_links(links);
 
-                        let mut status = state.status.lock().await;
-                        status.pages_discovered = crawler.get_discovered_count();
+                        let mut status_guard = status.lock().await;
+                        status_guard.pages_discovered = crawler.get_discovered_count();
                     }
                 }
 
@@ -204,7 +224,7 @@ async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Res
         }
     }
 
-    let pages_visited = state.status.lock().await.pages_visited;
+    let pages_visited = status.lock().await.pages_visited;
     info!("Crawling completed. Visited {} pages", pages_visited);
     notifier.notify_crawl_completed(pages_visited)?;
 
@@ -225,8 +245,8 @@ async fn run_recording(settings: RecordingSettings, state: Arc<AppState>) -> Res
     info!("Data exported to: {:?}", export_path);
 
     // Update final status
-    let mut status = state.status.lock().await;
-    status.is_running = false;
+    let mut status_guard = status.lock().await;
+    status_guard.is_running = false;
 
     Ok(())
 }

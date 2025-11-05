@@ -54,12 +54,12 @@ pub struct Browser {
 
 impl Browser {
     pub fn new() -> Result<Self, BrowserError> {
-        let launch_options = LaunchOptions {
-            headless: false,
-            window_size: Some((1920, 1080)),
-            idle_browser_timeout: Duration::from_secs(300),
-            ..Default::default()
-        };
+        let launch_options = LaunchOptions::default_builder()
+            .headless(false)
+            .window_size(Some((1920, 1080)))
+            .idle_browser_timeout(Duration::from_secs(300))
+            .build()
+            .map_err(|e| BrowserError::LaunchFailed(e.to_string()))?;
 
         let browser = ChromeBrowser::new(launch_options)
             .map_err(|e| BrowserError::LaunchFailed(e.to_string()))?;
@@ -69,12 +69,12 @@ impl Browser {
     }
 
     pub fn new_headless() -> Result<Self, BrowserError> {
-        let launch_options = LaunchOptions {
-            headless: true,
-            window_size: Some((1920, 1080)),
-            idle_browser_timeout: Duration::from_secs(300),
-            ..Default::default()
-        };
+        let launch_options = LaunchOptions::default_builder()
+            .headless(true)
+            .window_size(Some((1920, 1080)))
+            .idle_browser_timeout(Duration::from_secs(300))
+            .build()
+            .map_err(|e| BrowserError::LaunchFailed(e.to_string()))?;
 
         let browser = ChromeBrowser::new(launch_options)
             .map_err(|e| BrowserError::LaunchFailed(e.to_string()))?;

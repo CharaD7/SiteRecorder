@@ -12,6 +12,8 @@ pub enum ExportError {
     InvalidFormat(String),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("CSV error: {0}")]
+    CsvError(#[from] csv::Error),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
