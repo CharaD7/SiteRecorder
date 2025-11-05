@@ -127,6 +127,72 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        // Immediate execution test
+        document.body.style.border = '5px solid red';
+        console.log('=== INLINE SCRIPT EXECUTING ===');
+        console.log('window.__TAURI__ exists:', !!window.__TAURI__);
+        
+        // Add visual indicator
+        const indicator = document.createElement('div');
+        indicator.id = 'jsIndicator';
+        indicator.style.cssText = 'position:fixed;top:0;left:0;background:lime;color:black;padding:10px;z-index:9999;font-weight:bold;';
+        indicator.textContent = 'JavaScript is RUNNING!';
+        document.body.appendChild(indicator);
+        
+        // Test if we can access DOM
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('=== DOM CONTENT LOADED ===');
+            indicator.textContent = 'DOM LOADED!';
+            indicator.style.background = 'yellow';
+            
+            // Check Tauri API
+            if (!window.__TAURI__) {
+                console.error('ERROR: Tauri API not found!');
+                indicator.textContent = 'ERROR: No Tauri API!';
+                indicator.style.background = 'red';
+                return;
+            }
+            
+            const { invoke } = window.__TAURI__.tauri;
+            console.log('Tauri invoke available:', !!invoke);
+            
+            const btn = document.getElementById('startBtn');
+            console.log('Start button found:', !!btn);
+            if (btn) {
+                btn.style.border = '3px solid blue';
+                btn.addEventListener('click', async () => {
+                    console.log('BUTTON CLICKED!');
+                    indicator.textContent = 'BUTTON CLICKED! Calling backend...';
+                    indicator.style.background = 'orange';
+                    
+                    try {
+                        const settings = {
+                            url: document.getElementById('url').value.trim(),
+                            max_pages: parseInt(document.getElementById('maxPages').value),
+                            delay_ms: parseInt(document.getElementById('delay').value),
+                            headless: document.getElementById('headless').checked,
+                            output_dir: document.getElementById('outputDir').value.trim()
+                        };
+                        
+                        console.log('Calling start_recording with settings:', settings);
+                        const sessionId = await invoke('start_recording', { settings });
+                        console.log('SUCCESS! Session ID:', sessionId);
+                        indicator.textContent = 'Recording started! ID: ' + sessionId;
+                        indicator.style.background = 'green';
+                        alert('Recording started! Session: ' + sessionId);
+                    } catch (error) {
+                        console.error('ERROR calling backend:', error);
+                        indicator.textContent = 'ERROR: ' + error;
+                        indicator.style.background = 'red';
+                        alert('Error: ' + error);
+                    }
+                });
+            } else {
+                indicator.textContent = 'ERROR: Button not found!';
+                indicator.style.background = 'red';
+            }
+        });
+    </script>
 </body>
 </html>
