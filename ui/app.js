@@ -66,6 +66,7 @@ async function updateStatus() {
 
 // Start recording
 async function startRecording() {
+    console.log('startRecording called');
     const settings = {
         url: urlInput.value.trim(),
         max_pages: parseInt(maxPagesInput.value),
@@ -73,6 +74,8 @@ async function startRecording() {
         headless: headlessCheckbox.checked,
         output_dir: outputDirInput.value.trim()
     };
+    
+    console.log('Settings:', settings);
     
     // Validation
     if (!settings.url) {
@@ -87,9 +90,11 @@ async function startRecording() {
     
     try {
         addLog(`Starting recording for ${settings.url}`, 'info');
+        console.log('Calling invoke with settings:', settings);
         
         const sessionId = await invoke('start_recording', { settings });
         
+        console.log('Received session ID:', sessionId);
         addLog(`Recording started! Session ID: ${sessionId}`, 'success');
         
         // Update UI
@@ -101,6 +106,7 @@ async function startRecording() {
         statusInterval = setInterval(updateStatus, 1000);
         
     } catch (error) {
+        console.error('Error in startRecording:', error);
         addLog(`Failed to start recording: ${error}`, 'error');
     }
 }
@@ -140,11 +146,26 @@ function disableInputs(disabled) {
 }
 
 // Event Listeners
-startBtn.addEventListener('click', startRecording);
-stopBtn.addEventListener('click', stopRecording);
-
-// Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    alert('DOM loaded - app initialized');
+    console.log('DOM loaded');
+    console.log('startBtn:', startBtn);
+    console.log('stopBtn:', stopBtn);
+    
+    if (!startBtn) {
+        alert('ERROR: Start button not found!');
+        console.error('startBtn not found!');
+        return;
+    }
+    
+    // Attach event listeners after DOM is ready
+    startBtn.addEventListener('click', () => {
+        alert('Start button clicked!');
+        startRecording();
+    });
+    stopBtn.addEventListener('click', stopRecording);
+    
+    console.log('Event listeners attached');
     addLog('SiteRecorder initialized', 'success');
     updateStatus();
 });
