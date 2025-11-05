@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use std::sync::mpsc;
+use tracing::{error, info, warn};
+use scrap::{Capturer, Display};
 
 #[derive(Debug, Error)]
 pub enum RecorderError {
@@ -76,6 +78,7 @@ pub struct Recorder {
     config: RecordingConfig,
     is_recording: Arc<AtomicBool>,
     metadata: Arc<RwLock<Option<RecordingMetadata>>>,
+    stop_tx: Arc<RwLock<Option<std::sync::mpsc::Sender<()>>>>,
 }
 
 impl Recorder {
@@ -84,6 +87,7 @@ impl Recorder {
             config,
             is_recording: Arc::new(AtomicBool::new(false)),
             metadata: Arc::new(RwLock::new(None)),
+            stop_tx: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -94,12 +98,17 @@ impl Recorder {
 
         info!("Starting recording for session: {}", session_id);
 
+        // Create output directory
+        let output_dir = self.config.output_dir.join(&session_id);
+        std::fs::create_dir_all(&output_dir)
+            .map_err(|e| RecorderError::StartFailed(format!("Failed to create output directory: {}", e)))?;
+
         let metadata = RecordingMetadata {
-            session_id,
+            session_id: session_id.clone(),
             start_time: Utc::now(),
             end_time: None,
             duration_secs: None,
-            file_path: None,
+            file_path: Some(output_dir.clone()),
             format: self.config.format.clone(),
         };
 
@@ -107,6 +116,89 @@ impl Recorder {
         *meta = Some(metadata);
 
         self.is_recording.store(true, Ordering::SeqCst);
+
+        // Start capture thread
+        let (stop_tx, stop_rx) = std::sync::mpsc::channel();
+        let mut stop_tx_guard = self.stop_tx.write().await;
+        *stop_tx_guard = Some(stop_tx);
+        drop(stop_tx_guard);
+
+        let is_recording = self.is_recording.clone();
+        let fps = self.config.fps;
+        let output_dir_clone = output_dir.clone();
+
+        std::thread::spawn(move || {
+            info!("Screen capture thread started");
+            
+            let display = match Display::primary() {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("Failed to get primary display: {}", e);
+                    return;
+                }
+            };
+
+            let mut capturer = match Capturer::new(display) {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Failed to create capturer: {}", e);
+                    return;
+                }
+            };
+
+            let width = capturer.width();
+            let height = capturer.height();
+            info!("Capturing screen: {}x{}", width, height);
+
+            let frame_duration = std::time::Duration::from_millis(1000 / fps as u64);
+            let mut frame_count = 0u64;
+            let mut last_frame_time = std::time::Instant::now();
+
+            loop {
+                // Check if we should stop
+                if !is_recording.load(Ordering::SeqCst) || stop_rx.try_recv().is_ok() {
+                    info!("Received stop signal, ending capture");
+                    break;
+                }
+
+                // Throttle frame capture to desired FPS
+                if last_frame_time.elapsed() < frame_duration {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+
+                match capturer.frame() {
+                    Ok(frame) => {
+                        last_frame_time = std::time::Instant::now();
+                        let filename = format!("frame_{:06}.png", frame_count);
+                        let filepath = output_dir_clone.join(filename);
+                        
+                        // Convert BGRA to RGBA and save
+                        if let Err(e) = save_frame_as_png(&filepath, &frame, width, height) {
+                            warn!("Failed to save frame {}: {}", frame_count, e);
+                        } else {
+                            frame_count += 1;
+                            if frame_count % (fps as u64 * 10) == 0 {
+                                info!("Captured {} frames", frame_count);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // Frame not ready yet or other error
+                        let err_str = format!("{:?}", e);
+                        if err_str.contains("WouldBlock") {
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                            continue;
+                        } else {
+                            error!("Capture error: {:?}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            info!("Screen capture thread stopped. Captured {} frames total", frame_count);
+        });
         
         info!("Recording started successfully");
         Ok(())
@@ -118,7 +210,18 @@ impl Recorder {
         }
 
         info!("Stopping recording");
+        
+        // Send stop signal to capture thread
+        let mut stop_tx_guard = self.stop_tx.write().await;
+        if let Some(tx) = stop_tx_guard.take() {
+            let _ = tx.send(());
+        }
+        drop(stop_tx_guard);
+
         self.is_recording.store(false, Ordering::SeqCst);
+
+        // Give capture thread time to finish
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
         let mut meta = self.metadata.write().await;
         if let Some(metadata) = meta.as_mut() {
@@ -128,22 +231,12 @@ impl Recorder {
             metadata.end_time = Some(end_time);
             metadata.duration_secs = Some(duration);
 
-            let filename = format!(
-                "recording_{}_{}_{}.{}",
-                metadata.session_id,
-                metadata.start_time.format("%Y%m%d_%H%M%S"),
-                duration,
-                self.config.format.extension()
-            );
+            let file_path = metadata.file_path.clone().unwrap_or_else(|| {
+                self.config.output_dir.join(&metadata.session_id)
+            });
 
-            let file_path = self.config.output_dir.join(&filename);
-            metadata.file_path = Some(file_path.clone());
-
-            // Create placeholder file for now
-            std::fs::create_dir_all(&self.config.output_dir)?;
-            std::fs::write(&file_path, b"Recording data placeholder")?;
-
-            info!("Recording stopped and saved to: {:?}", file_path);
+            info!("Recording stopped. Frames saved to: {:?}", file_path);
+            info!("Duration: {} seconds", duration);
             Ok(file_path)
         } else {
             Err(RecorderError::StopFailed("No recording metadata found".to_string()))
@@ -197,6 +290,29 @@ impl Default for Recorder {
     fn default() -> Self {
         Self::new(RecordingConfig::default())
     }
+}
+
+// Helper function to save frame as PNG
+fn save_frame_as_png(path: &PathBuf, frame: &[u8], width: usize, height: usize) -> Result<(), RecorderError> {
+    // Convert BGRA to RGBA
+    let mut rgba = Vec::with_capacity(frame.len());
+    for pixel in frame.chunks_exact(4) {
+        rgba.push(pixel[2]); // R
+        rgba.push(pixel[1]); // G  
+        rgba.push(pixel[0]); // B
+        rgba.push(pixel[3]); // A
+    }
+
+    // Save as PNG using image crate
+    image::save_buffer(
+        path,
+        &rgba,
+        width as u32,
+        height as u32,
+        image::ColorType::Rgba8,
+    ).map_err(|e| RecorderError::RecordingError(format!("Failed to save PNG: {}", e)))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
