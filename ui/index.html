@@ -129,69 +129,95 @@
 
     <script>
         // Immediate execution test
+        console.log('=== SCRIPT 1: Immediate execution ===');
         document.body.style.border = '5px solid red';
-        console.log('=== INLINE SCRIPT EXECUTING ===');
-        console.log('window.__TAURI__ exists:', !!window.__TAURI__);
         
-        // Add visual indicator
+        // Add visual indicator immediately
         const indicator = document.createElement('div');
         indicator.id = 'jsIndicator';
-        indicator.style.cssText = 'position:fixed;top:0;left:0;background:lime;color:black;padding:10px;z-index:9999;font-weight:bold;';
-        indicator.textContent = 'JavaScript is RUNNING!';
-        document.body.appendChild(indicator);
+        indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:lime;color:black;padding:10px;z-index:9999;font-weight:bold;';
+        indicator.textContent = 'JS Loading...';
+        document.body.insertBefore(indicator, document.body.firstChild);
         
-        // Test if we can access DOM
-        document.addEventListener('DOMContentLoaded', async () => {
-            console.log('=== DOM CONTENT LOADED ===');
-            indicator.textContent = 'DOM LOADED!';
+        console.log('window.__TAURI__ exists:', !!window.__TAURI__);
+        
+        // Wait for DOM and Tauri
+        window.addEventListener('DOMContentLoaded', async () => {
+            console.log('=== SCRIPT 2: DOMContentLoaded fired ===');
+            indicator.textContent = 'DOM Ready';
             indicator.style.background = 'yellow';
             
-            // Check Tauri API
-            if (!window.__TAURI__) {
-                console.error('ERROR: Tauri API not found!');
-                indicator.textContent = 'ERROR: No Tauri API!';
-                indicator.style.background = 'red';
-                return;
-            }
-            
-            const { invoke } = window.__TAURI__.tauri;
-            console.log('Tauri invoke available:', !!invoke);
-            
-            const btn = document.getElementById('startBtn');
-            console.log('Start button found:', !!btn);
-            if (btn) {
-                btn.style.border = '3px solid blue';
-                btn.addEventListener('click', async () => {
-                    console.log('BUTTON CLICKED!');
-                    indicator.textContent = 'BUTTON CLICKED! Calling backend...';
+            // Small delay to ensure everything is loaded
+            setTimeout(async () => {
+                console.log('=== SCRIPT 3: Setting up button ===');
+                
+                // Check Tauri API
+                if (!window.__TAURI__) {
+                    console.error('ERROR: Tauri API not found!');
+                    indicator.textContent = 'ERROR: No Tauri!';
+                    indicator.style.background = 'red';
+                    return;
+                }
+                
+                console.log('Tauri API found');
+                const { invoke } = window.__TAURI__.tauri;
+                
+                const btn = document.getElementById('startBtn');
+                console.log('Button element:', btn);
+                
+                if (!btn) {
+                    console.error('Button not found!');
+                    indicator.textContent = 'ERROR: No button!';
+                    indicator.style.background = 'red';
+                    return;
+                }
+                
+                // Remove any existing listeners by cloning
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                
+                console.log('Adding click listener...');
+                newBtn.style.border = '5px solid blue';
+                newBtn.style.cursor = 'pointer';
+                
+                newBtn.onclick = async function(e) {
+                    console.log('=== SCRIPT 4: BUTTON ONCLICK FIRED ===');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    indicator.textContent = 'Button clicked!';
                     indicator.style.background = 'orange';
                     
                     try {
                         const settings = {
-                            url: document.getElementById('url').value.trim(),
-                            max_pages: parseInt(document.getElementById('maxPages').value),
-                            delay_ms: parseInt(document.getElementById('delay').value),
+                            url: document.getElementById('url').value.trim() || 'https://example.com',
+                            max_pages: parseInt(document.getElementById('maxPages').value) || 50,
+                            delay_ms: parseInt(document.getElementById('delay').value) || 2000,
                             headless: document.getElementById('headless').checked,
-                            output_dir: document.getElementById('outputDir').value.trim()
+                            output_dir: document.getElementById('outputDir').value.trim() || './recordings'
                         };
                         
-                        console.log('Calling start_recording with settings:', settings);
+                        console.log('Calling start_recording:', settings);
+                        indicator.textContent = 'Calling backend...';
+                        
                         const sessionId = await invoke('start_recording', { settings });
-                        console.log('SUCCESS! Session ID:', sessionId);
-                        indicator.textContent = 'Recording started! ID: ' + sessionId;
+                        
+                        console.log('SUCCESS! Session:', sessionId);
+                        indicator.textContent = 'Started: ' + sessionId;
                         indicator.style.background = 'green';
                         alert('Recording started! Session: ' + sessionId);
                     } catch (error) {
-                        console.error('ERROR calling backend:', error);
+                        console.error('ERROR:', error);
                         indicator.textContent = 'ERROR: ' + error;
                         indicator.style.background = 'red';
                         alert('Error: ' + error);
                     }
-                });
-            } else {
-                indicator.textContent = 'ERROR: Button not found!';
-                indicator.style.background = 'red';
-            }
+                };
+                
+                indicator.textContent = 'Ready - Click button!';
+                indicator.style.background = 'cyan';
+                console.log('=== Setup complete ===');
+            }, 500);
         });
     </script>
 </body>
