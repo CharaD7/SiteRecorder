@@ -19,7 +19,7 @@ license = "MIT"
 
 [dependencies]
 # Tauri for cross-platform GUI
-tauri = { version = "1.5", features = ["dialog-all", "notification-all", "shell-open"] }
+tauri = { version = "1.5", features = ["api-all"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.35", features = ["full"] }
