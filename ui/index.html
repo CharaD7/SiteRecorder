@@ -128,65 +128,80 @@
     </div>
 
     <script>
-        // Immediate execution test
-        console.log('=== SCRIPT 1: Immediate execution ===');
+        // Create a visible log area
+        const logArea = document.createElement('div');
+        logArea.id = 'debugLog';
+        logArea.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:200px;background:rgba(0,0,0,0.9);color:#0f0;padding:10px;overflow-y:auto;z-index:10000;font-family:monospace;font-size:12px;border-top:3px solid #0f0;';
+        document.body.appendChild(logArea);
+        
+        function log(msg) {
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+            const logEntry = `[${timestamp}] ${msg}`;
+            console.log(logEntry);
+            logArea.innerHTML += logEntry + '<br>';
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+        
+        log('=== DIAGNOSTIC MODE STARTED ===');
+        log('Script executing...');
+        
         document.body.style.border = '5px solid red';
+        log('Body border set to red');
         
-        // Add visual indicator immediately
-        const indicator = document.createElement('div');
-        indicator.id = 'jsIndicator';
-        indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:lime;color:black;padding:10px;z-index:9999;font-weight:bold;';
-        indicator.textContent = 'JS Loading...';
-        document.body.insertBefore(indicator, document.body.firstChild);
+        log('window.__TAURI__ exists: ' + !!window.__TAURI__);
+        log('Waiting for DOM...');
         
-        console.log('window.__TAURI__ exists:', !!window.__TAURI__);
-        
-        // Wait for DOM and Tauri
         window.addEventListener('DOMContentLoaded', async () => {
-            console.log('=== SCRIPT 2: DOMContentLoaded fired ===');
-            indicator.textContent = 'DOM Ready';
-            indicator.style.background = 'yellow';
+            log('DOM loaded!');
             
-            // Small delay to ensure everything is loaded
-            setTimeout(async () => {
-                console.log('=== SCRIPT 3: Setting up button ===');
+            setTimeout(() => {
+                log('Timeout fired, checking Tauri API...');
                 
-                // Check Tauri API
                 if (!window.__TAURI__) {
-                    console.error('ERROR: Tauri API not found!');
-                    indicator.textContent = 'ERROR: No Tauri!';
-                    indicator.style.background = 'red';
+                    log('ERROR: window.__TAURI__ is undefined!');
+                    log('Available window properties: ' + Object.keys(window).filter(k => k.includes('TAURI')).join(', '));
                     return;
                 }
                 
-                console.log('Tauri API found');
+                log('Tauri API found!');
+                log('window.__TAURI__.tauri exists: ' + !!window.__TAURI__.tauri);
+                
+                if (!window.__TAURI__.tauri) {
+                    log('ERROR: window.__TAURI__.tauri is undefined!');
+                    return;
+                }
+                
                 const { invoke } = window.__TAURI__.tauri;
+                log('invoke function exists: ' + (typeof invoke));
                 
                 const btn = document.getElementById('startBtn');
-                console.log('Button element:', btn);
+                log('Button found: ' + !!btn);
                 
                 if (!btn) {
-                    console.error('Button not found!');
-                    indicator.textContent = 'ERROR: No button!';
-                    indicator.style.background = 'red';
+                    log('ERROR: startBtn not found in DOM!');
+                    log('Available IDs: ' + Array.from(document.querySelectorAll('[id]')).map(e => e.id).join(', '));
                     return;
                 }
                 
-                // Remove any existing listeners by cloning
+                log('Button text: "' + btn.textContent + '"');
+                log('Button disabled: ' + btn.disabled);
+                
+                // Replace button completely
                 const newBtn = btn.cloneNode(true);
                 btn.parentNode.replaceChild(newBtn, btn);
+                log('Button cloned and replaced');
                 
-                console.log('Adding click listener...');
-                newBtn.style.border = '5px solid blue';
+                newBtn.style.border = '5px solid #00ff00';
                 newBtn.style.cursor = 'pointer';
+                log('Button styled');
                 
                 newBtn.onclick = async function(e) {
-                    console.log('=== SCRIPT 4: BUTTON ONCLICK FIRED ===');
+                    log('>>>>> ONCLICK FIRED! <<<<<');
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    indicator.textContent = 'Button clicked!';
-                    indicator.style.background = 'orange';
+                    newBtn.style.background = '#ff0';
+                    log('Button background changed to yellow');
                     
                     try {
                         const settings = {
@@ -197,27 +212,27 @@
                             output_dir: document.getElementById('outputDir').value.trim() || './recordings'
                         };
                         
-                        console.log('Calling start_recording:', settings);
-                        indicator.textContent = 'Calling backend...';
+                        log('Settings prepared: ' + JSON.stringify(settings));
+                        log('Calling invoke("start_recording", ...)');
                         
-                        const sessionId = await invoke('start_recording', { settings });
+                        const result = await invoke('start_recording', { settings });
                         
-                        console.log('SUCCESS! Session:', sessionId);
-                        indicator.textContent = 'Started: ' + sessionId;
-                        indicator.style.background = 'green';
-                        alert('Recording started! Session: ' + sessionId);
+                        log('SUCCESS! Result: ' + JSON.stringify(result));
+                        newBtn.style.background = '#0f0';
+                        alert('Success: ' + result);
                     } catch (error) {
-                        console.error('ERROR:', error);
-                        indicator.textContent = 'ERROR: ' + error;
-                        indicator.style.background = 'red';
+                        log('ERROR: ' + error);
+                        log('Error type: ' + typeof error);
+                        log('Error string: ' + String(error));
+                        newBtn.style.background = '#f00';
                         alert('Error: ' + error);
                     }
                 };
                 
-                indicator.textContent = 'Ready - Click button!';
-                indicator.style.background = 'cyan';
-                console.log('=== Setup complete ===');
-            }, 500);
+                log('onclick handler attached');
+                log('=== SETUP COMPLETE - Try clicking Start Recording ===');
+                
+            }, 1000);
         });
     </script>
 </body>
