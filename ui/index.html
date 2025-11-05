@@ -164,15 +164,31 @@
                 }
                 
                 log('Tauri API found!');
-                log('window.__TAURI__.tauri exists: ' + !!window.__TAURI__.tauri);
+                log('window.__TAURI__ keys: ' + Object.keys(window.__TAURI__).join(', '));
                 
-                if (!window.__TAURI__.tauri) {
-                    log('ERROR: window.__TAURI__.tauri is undefined!');
+                // Try different API paths
+                let invoke;
+                if (window.__TAURI__.tauri && window.__TAURI__.tauri.invoke) {
+                    invoke = window.__TAURI__.tauri.invoke;
+                    log('Using window.__TAURI__.tauri.invoke');
+                } else if (window.__TAURI__.invoke) {
+                    invoke = window.__TAURI__.invoke;
+                    log('Using window.__TAURI__.invoke');
+                } else if (window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                    invoke = window.__TAURI__.core.invoke;
+                    log('Using window.__TAURI__.core.invoke');
+                } else {
+                    log('ERROR: Cannot find invoke function!');
+                    log('Available __TAURI__ properties: ' + JSON.stringify(Object.keys(window.__TAURI__)));
+                    for (let key in window.__TAURI__) {
+                        if (typeof window.__TAURI__[key] === 'object') {
+                            log('  ' + key + ' contains: ' + Object.keys(window.__TAURI__[key]).join(', '));
+                        }
+                    }
                     return;
                 }
                 
-                const { invoke } = window.__TAURI__.tauri;
-                log('invoke function exists: ' + (typeof invoke));
+                log('invoke function found: ' + (typeof invoke));
                 
                 const btn = document.getElementById('startBtn');
                 log('Button found: ' + !!btn);
