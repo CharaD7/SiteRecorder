@@ -1,13 +1,11 @@
 use anyhow::Result;
 use headless_chrome::Browser as ChromeBrowser;
-use headless_chrome::protocol::cdp::Page;
 use headless_chrome::{LaunchOptions, Tab};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
-use url::Url;
+use tracing::{debug, error, info};
 
 #[derive(Debug, Error)]
 pub enum BrowserError {

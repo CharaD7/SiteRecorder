@@ -2,7 +2,7 @@ use anyhow::Result;
 use notify_rust::Notification;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[derive(Debug, Error)]
 pub enum NotifierError {
@@ -46,7 +46,7 @@ impl Notifier {
         Self { config }
     }
 
-    pub fn send(&self, title: &str, message: &str, level: NotificationLevel) -> Result<(), NotifierError> {
+    pub fn send(&self, title: &str, message: &str, _level: NotificationLevel) -> Result<(), NotifierError> {
         info!("Sending notification: {} - {}", title, message);
 
         #[cfg(not(target_os = "macos"))]
