@@ -2,6 +2,14 @@
 
 A cross-platform desktop application built in Rust that automates full-site traversal and records browser activity. Works seamlessly on Linux, macOS, and Windows.
 
+## 📚 Documentation
+
+- **[Installation Guide](INSTALLATION_GUIDE.md)** - Detailed setup instructions for all platforms
+- **[Quick Start](QUICKSTART.md)** - Get started in minutes
+- **[Quick Reference](QUICK_REFERENCE.md)** - Command and API reference
+- **[Usage Guide](USAGE.md)** - Comprehensive usage documentation
+- **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
+
 ## Features
 
 ### Core Functionality
