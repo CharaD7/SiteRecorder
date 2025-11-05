@@ -1,20 +1,10 @@
-const { invoke } = window.__TAURI__.tauri;
+// Wait for Tauri API to be available
+let invoke;
 
-// DOM Elements
-const urlInput = document.getElementById('url');
-const maxPagesInput = document.getElementById('maxPages');
-const delayInput = document.getElementById('delay');
-const outputDirInput = document.getElementById('outputDir');
-const headlessCheckbox = document.getElementById('headless');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const recordingState = document.getElementById('recordingState');
-const sessionId = document.getElementById('sessionId');
-const currentUrl = document.getElementById('currentUrl');
-const pagesVisited = document.getElementById('pagesVisited');
-const pagesDiscovered = document.getElementById('pagesDiscovered');
-const progressBar = document.getElementById('progressBar');
-const logContainer = document.getElementById('logContainer');
+// DOM Elements (will be initialized in DOMContentLoaded)
+let urlInput, maxPagesInput, delayInput, outputDirInput, headlessCheckbox;
+let startBtn, stopBtn, recordingState, sessionId, currentUrl;
+let pagesVisited, pagesDiscovered, progressBar, logContainer;
 
 let statusInterval = null;
 
@@ -146,28 +136,59 @@ function disableInputs(disabled) {
 }
 
 // Event Listeners
-document.addEventListener('DOMContentLoaded', () => {
-    alert('DOM loaded - app initialized');
-    console.log('DOM loaded');
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOM loaded, initializing...');
+    
+    // Wait for Tauri API
+    if (!window.__TAURI__) {
+        console.error('ERROR: Tauri API not found!');
+        alert('ERROR: Tauri API not available. Make sure you are running this in Tauri.');
+        return;
+    }
+    
+    // Initialize Tauri invoke
+    invoke = window.__TAURI__.tauri.invoke;
+    console.log('Tauri API loaded');
+    
+    // Initialize DOM elements
+    urlInput = document.getElementById('url');
+    maxPagesInput = document.getElementById('maxPages');
+    delayInput = document.getElementById('delay');
+    outputDirInput = document.getElementById('outputDir');
+    headlessCheckbox = document.getElementById('headless');
+    startBtn = document.getElementById('startBtn');
+    stopBtn = document.getElementById('stopBtn');
+    recordingState = document.getElementById('recordingState');
+    sessionId = document.getElementById('sessionId');
+    currentUrl = document.getElementById('currentUrl');
+    pagesVisited = document.getElementById('pagesVisited');
+    pagesDiscovered = document.getElementById('pagesDiscovered');
+    progressBar = document.getElementById('progressBar');
+    logContainer = document.getElementById('logContainer');
+    
+    console.log('DOM elements initialized');
     console.log('startBtn:', startBtn);
     console.log('stopBtn:', stopBtn);
     
     if (!startBtn) {
-        alert('ERROR: Start button not found!');
-        console.error('startBtn not found!');
+        console.error('ERROR: Start button not found!');
+        alert('ERROR: Start button not found in DOM!');
         return;
     }
     
     // Attach event listeners after DOM is ready
     startBtn.addEventListener('click', () => {
-        alert('Start button clicked!');
+        console.log('Start button clicked!');
         startRecording();
     });
-    stopBtn.addEventListener('click', stopRecording);
+    stopBtn.addEventListener('click', () => {
+        console.log('Stop button clicked!');
+        stopRecording();
+    });
     
     console.log('Event listeners attached');
     addLog('SiteRecorder initialized', 'success');
-    updateStatus();
+    await updateStatus();
 });
 
 // Cleanup on window close
