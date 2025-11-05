@@ -108,7 +108,7 @@ SiteRecorder/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/SiteRecorder.git
+git clone https://github.com/CharaD7/SiteRecorder.git
 cd SiteRecorder
 
 # Build the project
