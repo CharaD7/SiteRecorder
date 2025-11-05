@@ -142,12 +142,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Wait for Tauri API
     if (!window.__TAURI__) {
         console.error('ERROR: Tauri API not found!');
-        alert('ERROR: Tauri API not available. Make sure you are running this in Tauri.');
+        addLog('ERROR: Tauri API not available', 'error');
         return;
     }
     
-    // Initialize Tauri invoke
-    invoke = window.__TAURI__.tauri.invoke;
+    // Initialize Tauri invoke - try multiple paths
+    if (window.__TAURI__.tauri && window.__TAURI__.tauri.invoke) {
+        invoke = window.__TAURI__.tauri.invoke;
+    } else if (window.__TAURI__.invoke) {
+        invoke = window.__TAURI__.invoke;
+    } else {
+        console.error('ERROR: Cannot find invoke function!');
+        addLog('ERROR: Cannot find Tauri invoke function', 'error');
+        return;
+    }
     console.log('Tauri API loaded');
     
     // Initialize DOM elements
