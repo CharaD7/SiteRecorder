@@ -148,9 +148,21 @@ main {
 }
 
 .form-group select option {
-    background-color: var(--panel-bg);
-    color: var(--text-color);
+    background-color: var(--panel-bg) !important;
+    color: var(--text-color) !important;
     padding: 10px;
+}
+
+/* Light mode select dropdown options */
+[data-theme="light"] .form-group select option {
+    background-color: #ffffff !important;
+    color: #212121 !important;
+}
+
+/* Dark mode select dropdown options */
+[data-theme="dark"] .form-group select option {
+    background-color: #2d2d2d !important;
+    color: #e0e0e0 !important;
 }
 
 .form-group input:focus,

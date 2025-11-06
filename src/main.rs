@@ -469,11 +469,54 @@ fn main() {
         session_manager: Arc::new(Mutex::new(SessionManager::new())),
     };
 
-    // System tray disabled temporarily due to icon format issues on Linux
-    // Will be re-enabled once icon format is fixed
+    use tauri::{CustomMenuItem, SystemTray, SystemTrayMenu, SystemTrayEvent, Manager};
     
+    // Create system tray menu
+    let show = CustomMenuItem::new("show".to_string(), "Show Window");
+    let hide = CustomMenuItem::new("hide".to_string(), "Hide Window");
+    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
+    
+    let tray_menu = SystemTrayMenu::new()
+        .add_item(show)
+        .add_item(hide)
+        .add_native_item(tauri::SystemTrayMenuItem::Separator)
+        .add_item(quit);
+    
+    let system_tray = SystemTray::new().with_menu(tray_menu);
+
     tauri::Builder::default()
         .manage(app_state)
+        .system_tray(system_tray)
+        .on_system_tray_event(|app, event| match event {
+            SystemTrayEvent::MenuItemClick { id, .. } => {
+                match id.as_str() {
+                    "show" => {
+                        if let Some(window) = app.get_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "hide" => {
+                        if let Some(window) = app.get_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                    "quit" => {
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        })
+        .on_window_event(|event| match event.event() {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                // Hide instead of close
+                let _ = event.window().hide();
+                api.prevent_close();
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,
