@@ -5,6 +5,8 @@ let invoke;
 let urlInput, maxPagesInput, delayInput, outputDirInput, headlessCheckbox;
 let startBtn, stopBtn, recordingState, sessionId, currentUrl;
 let pagesVisited, pagesDiscovered, progressBar, logContainer;
+let requiresAuthCheckbox, authFields, authUrl, username, password;
+let usernameSelector, passwordSelector, submitSelector;
 
 let statusInterval = null;
 
@@ -62,7 +64,14 @@ async function startRecording() {
         max_pages: parseInt(maxPagesInput.value),
         delay_ms: parseInt(delayInput.value),
         headless: headlessCheckbox.checked,
-        output_dir: outputDirInput.value.trim()
+        output_dir: outputDirInput.value.trim(),
+        requires_auth: requiresAuthCheckbox.checked,
+        auth_url: requiresAuthCheckbox.checked ? authUrl.value.trim() : null,
+        username: requiresAuthCheckbox.checked ? username.value.trim() : null,
+        password: requiresAuthCheckbox.checked ? password.value : null,
+        username_selector: requiresAuthCheckbox.checked ? usernameSelector.value.trim() : null,
+        password_selector: requiresAuthCheckbox.checked ? passwordSelector.value.trim() : null,
+        submit_selector: requiresAuthCheckbox.checked ? submitSelector.value.trim() : null
     };
     
     console.log('Settings:', settings);
@@ -76,6 +85,18 @@ async function startRecording() {
     if (!settings.url.startsWith('http://') && !settings.url.startsWith('https://')) {
         addLog('URL must start with http:// or https://', 'error');
         return;
+    }
+    
+    // Auth validation
+    if (settings.requires_auth) {
+        if (!settings.auth_url) {
+            addLog('Please enter login page URL', 'error');
+            return;
+        }
+        if (!settings.username || !settings.password) {
+            addLog('Please enter username and password', 'error');
+            return;
+        }
     }
     
     try {
@@ -202,6 +223,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     progressBar = document.getElementById('progressBar');
     logContainer = document.getElementById('logContainer');
     
+    // Initialize auth elements
+    requiresAuthCheckbox = document.getElementById('requiresAuth');
+    authFields = document.getElementById('authFields');
+    authUrl = document.getElementById('authUrl');
+    username = document.getElementById('username');
+    password = document.getElementById('password');
+    usernameSelector = document.getElementById('usernameSelector');
+    passwordSelector = document.getElementById('passwordSelector');
+    submitSelector = document.getElementById('submitSelector');
+    
     console.log('DOM elements initialized');
     console.log('startBtn:', startBtn);
     console.log('stopBtn:', stopBtn);
@@ -244,6 +275,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (error) {
                 console.error('Failed to open directory picker:', error);
                 addLog('Failed to open directory picker', 'error');
+            }
+        });
+    }
+    
+    // Auth checkbox toggle
+    if (requiresAuthCheckbox && authFields) {
+        requiresAuthCheckbox.addEventListener('change', () => {
+            if (requiresAuthCheckbox.checked) {
+                authFields.style.display = 'block';
+                addLog('Authentication enabled', 'info');
+            } else {
+                authFields.style.display = 'none';
+                addLog('Authentication disabled', 'info');
             }
         });
     }

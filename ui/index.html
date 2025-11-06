@@ -76,6 +76,73 @@
                     </label>
                 </div>
 
+                <!-- Authentication Section -->
+                <div class="auth-section">
+                    <div class="auth-header">
+                        <label>
+                            <input type="checkbox" id="requiresAuth" />
+                            <span>🔐 Site Requires Authentication</span>
+                        </label>
+                    </div>
+                    <div id="authFields" class="auth-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="authUrl">Login Page URL</label>
+                            <input 
+                                type="text" 
+                                id="authUrl" 
+                                placeholder="https://example.com/login"
+                            />
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="username">Username/Email</label>
+                                <input 
+                                    type="text" 
+                                    id="username" 
+                                    placeholder="user@example.com"
+                                    autocomplete="username"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input 
+                                    type="password" 
+                                    id="password" 
+                                    placeholder="••••••••"
+                                    autocomplete="current-password"
+                                />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="usernameSelector">Username Field Selector (CSS)</label>
+                            <input 
+                                type="text" 
+                                id="usernameSelector" 
+                                placeholder="#username or input[name='email']"
+                                value="input[type='email'], input[type='text'][name*='user'], input[name='username'], #username"
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label for="passwordSelector">Password Field Selector (CSS)</label>
+                            <input 
+                                type="text" 
+                                id="passwordSelector" 
+                                placeholder="#password or input[name='password']"
+                                value="input[type='password'], #password"
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label for="submitSelector">Submit Button Selector (CSS)</label>
+                            <input 
+                                type="text" 
+                                id="submitSelector" 
+                                placeholder="button[type='submit'] or #login-button"
+                                value="button[type='submit'], input[type='submit'], button:contains('Login'), button:contains('Sign in')"
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <div class="button-group">
                     <button id="startBtn" class="btn btn-primary">
                         ▶️ Start Recording

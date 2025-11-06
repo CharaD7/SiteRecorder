@@ -116,6 +116,52 @@ main {
     cursor: pointer;
 }
 
+.auth-section {
+    background: rgba(100, 181, 246, 0.1);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.auth-header {
+    margin-bottom: 15px;
+}
+
+.auth-header label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.auth-header input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.auth-fields {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.auth-fields .form-group {
+    margin-bottom: 15px;
+}
+
+.auth-fields label {
+    font-size: 0.9rem;
+    color: rgba(224, 224, 224, 0.8);
+}
+
+.auth-fields input {
+    font-size: 0.95rem;
+}
+
 .button-group {
     display: flex;
     gap: 15px;

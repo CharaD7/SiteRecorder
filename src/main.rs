@@ -21,6 +21,13 @@ struct RecordingSettings {
     delay_ms: u64,
     headless: bool,
     output_dir: String,
+    requires_auth: bool,
+    auth_url: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+    username_selector: Option<String>,
+    password_selector: Option<String>,
+    submit_selector: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +167,43 @@ async fn run_recording(
         },
     };
 
+    // Handle authentication if required
+    if settings.requires_auth {
+        if let Some(auth_url) = &settings.auth_url {
+            info!("Navigating to login page: {}", auth_url);
+            
+            match browser.navigate(&tab, auth_url, &nav_options) {
+                Ok(_) => {
+                    info!("Login page loaded, attempting authentication...");
+                    
+                    // Fill in credentials
+                    if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+                        &settings.username,
+                        &settings.password,
+                        &settings.username_selector,
+                        &settings.password_selector,
+                        &settings.submit_selector,
+                    ) {
+                        match perform_login(&tab, username, password, username_sel, password_sel, submit_sel) {
+                            Ok(_) => {
+                                info!("Login successful!");
+                                notifier.notify_info("Authentication", "Login successful")?;
+                                sleep(Duration::from_millis(3000)).await; // Wait for redirect
+                            }
+                            Err(e) => {
+                                warn!("Login failed: {}", e);
+                                notifier.notify_error("Authentication", &format!("Login failed: {}", e))?;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to navigate to login page: {}", e);
+                }
+            }
+        }
+    }
+
     let mut recording_data = Vec::new();
 
     // Main crawling loop
@@ -248,6 +292,80 @@ async fn run_recording(
     let mut status_guard = status.lock().await;
     status_guard.is_running = false;
 
+    Ok(())
+}
+
+fn perform_login(
+    tab: &std::sync::Arc<headless_chrome::Tab>,
+    username: &str,
+    password: &str,
+    username_selector: &str,
+    password_selector: &str,
+    submit_selector: &str,
+) -> Result<()> {
+
+    info!("Filling username field...");
+    // Try multiple selectors for username
+    let username_selectors: Vec<&str> = username_selector.split(',').map(|s| s.trim()).collect();
+    let mut username_filled = false;
+    
+    for selector in username_selectors {
+        if let Ok(element) = tab.find_element(selector) {
+            if element.type_into(username).is_ok() {
+                info!("Username filled using selector: {}", selector);
+                username_filled = true;
+                break;
+            }
+        }
+    }
+    
+    if !username_filled {
+        return Err(anyhow::anyhow!("Could not find username field"));
+    }
+    
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    
+    info!("Filling password field...");
+    // Try multiple selectors for password
+    let password_selectors: Vec<&str> = password_selector.split(',').map(|s| s.trim()).collect();
+    let mut password_filled = false;
+    
+    for selector in password_selectors {
+        if let Ok(element) = tab.find_element(selector) {
+            if element.type_into(password).is_ok() {
+                info!("Password filled using selector: {}", selector);
+                password_filled = true;
+                break;
+            }
+        }
+    }
+    
+    if !password_filled {
+        return Err(anyhow::anyhow!("Could not find password field"));
+    }
+    
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    
+    info!("Clicking submit button...");
+    // Try multiple selectors for submit button
+    let submit_selectors: Vec<&str> = submit_selector.split(',').map(|s| s.trim()).collect();
+    let mut submit_clicked = false;
+    
+    for selector in submit_selectors {
+        if let Ok(element) = tab.find_element(selector) {
+            if element.click().is_ok() {
+                info!("Submit button clicked using selector: {}", selector);
+                submit_clicked = true;
+                break;
+            }
+        }
+    }
+    
+    if !submit_clicked {
+        return Err(anyhow::anyhow!("Could not find submit button"));
+    }
+    
+    info!("Login form submitted");
     Ok(())
 }
 

@@ -4973,6 +4973,7 @@ dependencies = [
  "chrono",
  "crawler",
  "exporter",
+ "headless_chrome",
  "notifier",
  "recorder",
  "serde",
