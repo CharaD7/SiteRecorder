@@ -319,7 +319,7 @@ fn perform_login(
         let mut username_prefilled = false;
         
         for selector in &username_selectors {
-            if let Ok(element) = tab.find_element(selector) {
+            if let Ok(_element) = tab.find_element(selector) {
                 // Try to get the value attribute to check if it's filled
                 if let Ok(js_result) = tab.evaluate(&format!(
                     "document.querySelector('{}')?.value || ''", 
@@ -343,7 +343,7 @@ fn perform_login(
         let mut password_prefilled = false;
         
         for selector in &password_selectors {
-            if let Ok(element) = tab.find_element(selector) {
+            if let Ok(_element) = tab.find_element(selector) {
                 if let Ok(js_result) = tab.evaluate(&format!(
                     "document.querySelector('{}')?.value || ''", 
                     selector.replace("'", "\\'")
