@@ -113,33 +113,10 @@
                                 />
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="usernameSelector">Username Field Selector (CSS)</label>
-                            <input 
-                                type="text" 
-                                id="usernameSelector" 
-                                placeholder="#username or input[name='email']"
-                                value="input[type='email'], input[type='text'][name*='user'], input[name='username'], #username"
-                            />
-                        </div>
-                        <div class="form-group">
-                            <label for="passwordSelector">Password Field Selector (CSS)</label>
-                            <input 
-                                type="text" 
-                                id="passwordSelector" 
-                                placeholder="#password or input[name='password']"
-                                value="input[type='password'], #password"
-                            />
-                        </div>
-                        <div class="form-group">
-                            <label for="submitSelector">Submit Button Selector (CSS)</label>
-                            <input 
-                                type="text" 
-                                id="submitSelector" 
-                                placeholder="button[type='submit'] or #login-button"
-                                value="button[type='submit'], input[type='submit'], button:contains('Login'), button:contains('Sign in')"
-                            />
-                        </div>
+                        <!-- Hidden selector fields with default values -->
+                        <input type="hidden" id="usernameSelector" value="input[type='email'], input[type='text'][name*='user'], input[name='username'], #username" />
+                        <input type="hidden" id="passwordSelector" value="input[type='password'], #password" />
+                        <input type="hidden" id="submitSelector" value="button[type='submit'], input[type='submit'], button:contains('Login'), button:contains('Sign in')" />
                     </div>
                 </div>
 
