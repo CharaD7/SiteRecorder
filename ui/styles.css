@@ -12,6 +12,7 @@
     --text-color: #e0e0e0;
     --border-color: #404040;
     --accent-color: #64B5F6;
+    color-scheme: dark;
 }
 
 /* Light mode colors */
@@ -23,6 +24,7 @@
     --text-color: #212121;
     --border-color: #e0e0e0;
     --accent-color: #2196F3;
+    color-scheme: light;
 }
 
 body {

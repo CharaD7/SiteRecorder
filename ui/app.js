@@ -316,9 +316,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const themeToggle = document.getElementById('themeToggle');
     const themeIcon = document.querySelector('.theme-icon');
     
+    // Function to apply theme
+    function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        document.body.setAttribute('data-theme', theme);
+        
+        // Update color-scheme for native elements (including select dropdowns)
+        if (theme === 'light') {
+            document.documentElement.style.colorScheme = 'light';
+        } else {
+            document.documentElement.style.colorScheme = 'dark';
+        }
+        
+        // Force re-render of select elements
+        const selects = document.querySelectorAll('select');
+        selects.forEach(select => {
+            const value = select.value;
+            select.style.display = 'none';
+            setTimeout(() => {
+                select.style.display = '';
+                select.value = value;
+            }, 0);
+        });
+    }
+    
     // Load saved theme or default to dark
     const savedTheme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    applyTheme(savedTheme);
     themeIcon.textContent = savedTheme === 'dark' ? '🌙' : '☀️';
     
     if (themeToggle) {
@@ -326,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             
-            document.documentElement.setAttribute('data-theme', newTheme);
+            applyTheme(newTheme);
             localStorage.setItem('theme', newTheme);
             themeIcon.textContent = newTheme === 'dark' ? '🌙' : '☀️';
             
