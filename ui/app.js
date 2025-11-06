@@ -284,10 +284,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         requiresAuthCheckbox.addEventListener('change', () => {
             if (requiresAuthCheckbox.checked) {
                 authFields.style.display = 'block';
-                addLog('Authentication enabled', 'info');
+                addLog('Authentication enabled - auto-detection active', 'info');
             } else {
                 authFields.style.display = 'none';
                 addLog('Authentication disabled', 'info');
+            }
+        });
+    }
+    
+    // Advanced auth options toggle
+    const showAdvancedAuth = document.getElementById('showAdvancedAuth');
+    const advancedAuthFields = document.getElementById('advancedAuthFields');
+    
+    if (showAdvancedAuth && advancedAuthFields) {
+        showAdvancedAuth.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (advancedAuthFields.style.display === 'none') {
+                advancedAuthFields.style.display = 'block';
+                showAdvancedAuth.textContent = 'Hide Advanced Options';
+                addLog('Advanced auth options shown', 'info');
+            } else {
+                advancedAuthFields.style.display = 'none';
+                showAdvancedAuth.textContent = 'Show Advanced Options';
+                addLog('Advanced auth options hidden', 'info');
             }
         });
     }

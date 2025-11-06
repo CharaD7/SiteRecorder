@@ -113,10 +113,49 @@
                                 />
                             </div>
                         </div>
-                        <!-- Hidden selector fields with default values -->
-                        <input type="hidden" id="usernameSelector" value="input[type='email'], input[type='text'][name*='user'], input[name='username'], #username" />
-                        <input type="hidden" id="passwordSelector" value="input[type='password'], #password" />
-                        <input type="hidden" id="submitSelector" value="button[type='submit'], input[type='submit'], button:contains('Login'), button:contains('Sign in')" />
+                        
+                        <div class="auth-note">
+                            ℹ️ The app will automatically detect login form fields. 
+                            <a href="#" id="showAdvancedAuth" class="advanced-toggle">Show Advanced Options</a>
+                        </div>
+                        
+                        <!-- Advanced selector fields -->
+                        <div id="advancedAuthFields" style="display: none;">
+                            <div class="advanced-header">
+                                <strong>⚙️ Advanced: Custom CSS Selectors</strong>
+                                <p class="help-text">Only modify if auto-detection fails</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="usernameSelector">Username Field Selector</label>
+                                <input 
+                                    type="text" 
+                                    id="usernameSelector" 
+                                    placeholder="Leave empty for auto-detection"
+                                    value="input[type='email'], input[type='text'][name*='user'], input[name='username'], #username"
+                                />
+                                <small class="field-hint">Tries: email inputs, username fields, #username</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="passwordSelector">Password Field Selector</label>
+                                <input 
+                                    type="text" 
+                                    id="passwordSelector" 
+                                    placeholder="Leave empty for auto-detection"
+                                    value="input[type='password'], #password"
+                                />
+                                <small class="field-hint">Tries: password inputs, #password</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="submitSelector">Submit Button Selector</label>
+                                <input 
+                                    type="text" 
+                                    id="submitSelector" 
+                                    placeholder="Leave empty for auto-detection"
+                                    value="button[type='submit'], input[type='submit'], button:contains('Login'), button:contains('Sign in')"
+                                />
+                                <small class="field-hint">Tries: submit buttons, login/sign-in buttons</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

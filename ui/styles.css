@@ -163,6 +163,53 @@ main {
     font-size: 0.95rem;
 }
 
+.auth-note {
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(100, 181, 246, 0.15);
+    border-left: 3px solid var(--accent-color);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: rgba(224, 224, 224, 0.9);
+}
+
+.advanced-toggle {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+.advanced-toggle:hover {
+    text-decoration: underline;
+}
+
+.advanced-header {
+    margin: 15px 0 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.advanced-header strong {
+    color: var(--accent-color);
+    font-size: 1rem;
+}
+
+.help-text {
+    font-size: 0.85rem;
+    color: rgba(224, 224, 224, 0.6);
+    margin: 5px 0 0;
+}
+
+.field-hint {
+    display: block;
+    font-size: 0.8rem;
+    color: rgba(224, 224, 224, 0.5);
+    margin-top: 5px;
+    font-style: italic;
+}
+
 .button-group {
     display: flex;
     gap: 15px;
