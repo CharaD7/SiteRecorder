@@ -145,7 +145,7 @@ async fn run_recording(
     session_manager.lock().await.create_session(session_id.clone()).await?;
 
     // Start recording
-    recorder.start_recording(session_id.clone()).await?;
+    recorder.start_recording(session_id.clone(), Some(settings.url.clone())).await?;
     notifier.notify_recording_started(&session_id)?;
 
     // Get browser tab

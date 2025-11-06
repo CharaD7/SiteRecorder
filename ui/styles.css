@@ -165,6 +165,17 @@ main {
     background-color: #da190b;
 }
 
+.btn-secondary {
+    background-color: #757575;
+    color: white;
+    padding: 8px 16px;
+    white-space: nowrap;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: #616161;
+}
+
 .status-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

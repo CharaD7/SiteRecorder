@@ -135,6 +135,34 @@ function disableInputs(disabled) {
     headlessCheckbox.disabled = disabled;
 }
 
+// Get default recordings directory based on platform
+async function getDefaultRecordingsDir() {
+    try {
+        // Get user's home directory
+        const homeDir = await window.__TAURI__.path.homeDir();
+        
+        // Get platform
+        const platform = await window.__TAURI__.os.platform();
+        
+        let recordingsDir;
+        if (platform === 'darwin') {
+            // macOS: ~/Movies/SiteRecorder
+            recordingsDir = await window.__TAURI__.path.join(homeDir, 'Movies', 'SiteRecorder');
+        } else if (platform === 'win32') {
+            // Windows: ~/Videos/SiteRecorder
+            recordingsDir = await window.__TAURI__.path.join(homeDir, 'Videos', 'SiteRecorder');
+        } else {
+            // Linux: ~/Videos/SiteRecorder
+            recordingsDir = await window.__TAURI__.path.join(homeDir, 'Videos', 'SiteRecorder');
+        }
+        
+        return recordingsDir;
+    } catch (error) {
+        console.error('Failed to get default directory:', error);
+        return './recordings'; // Fallback
+    }
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM loaded, initializing...');
@@ -184,6 +212,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     
+    // Set default output directory based on platform
+    const defaultDir = await getDefaultRecordingsDir();
+    outputDirInput.value = defaultDir;
+    
     // Attach event listeners after DOM is ready
     startBtn.addEventListener('click', () => {
         console.log('Start button clicked!');
@@ -193,6 +225,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Stop button clicked!');
         stopRecording();
     });
+    
+    // Directory picker button
+    const selectDirBtn = document.getElementById('selectDirBtn');
+    if (selectDirBtn) {
+        selectDirBtn.addEventListener('click', async () => {
+            try {
+                const selected = await window.__TAURI__.dialog.open({
+                    directory: true,
+                    multiple: false,
+                    defaultPath: outputDirInput.value || defaultDir
+                });
+                
+                if (selected) {
+                    outputDirInput.value = selected;
+                    addLog(`Output directory changed to: ${selected}`, 'info');
+                }
+            } catch (error) {
+                console.error('Failed to open directory picker:', error);
+                addLog('Failed to open directory picker', 'error');
+            }
+        });
+    }
     
     console.log('Event listeners attached');
     addLog('SiteRecorder initialized', 'success');

@@ -55,11 +55,18 @@
 
                 <div class="form-group">
                     <label for="outputDir">Output Directory</label>
-                    <input 
-                        type="text" 
-                        id="outputDir" 
-                        value="./recordings"
-                    />
+                    <div style="display: flex; gap: 10px;">
+                        <input 
+                            type="text" 
+                            id="outputDir" 
+                            value=""
+                            readonly
+                            style="flex: 1;"
+                        />
+                        <button id="selectDirBtn" class="btn btn-secondary" type="button">
+                            📁 Browse
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-group checkbox-group">

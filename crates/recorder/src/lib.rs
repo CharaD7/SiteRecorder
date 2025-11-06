@@ -2,13 +2,14 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use std::sync::mpsc;
 use tracing::{error, info, warn};
 use scrap::{Capturer, Display};
+use url::Url;
 
 #[derive(Debug, Error)]
 pub enum RecorderError {
@@ -67,6 +68,7 @@ impl Default for RecordingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingMetadata {
     pub session_id: String,
+    pub url: Option<String>,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
     pub duration_secs: Option<u64>,
@@ -91,7 +93,7 @@ impl Recorder {
         }
     }
 
-    pub async fn start_recording(&self, session_id: String) -> Result<(), RecorderError> {
+    pub async fn start_recording(&self, session_id: String, url: Option<String>) -> Result<(), RecorderError> {
         if self.is_recording.load(Ordering::SeqCst) {
             return Err(RecorderError::StartFailed("Already recording".to_string()));
         }
@@ -105,6 +107,7 @@ impl Recorder {
 
         let metadata = RecordingMetadata {
             session_id: session_id.clone(),
+            url,
             start_time: Utc::now(),
             end_time: None,
             duration_secs: None,
@@ -231,13 +234,34 @@ impl Recorder {
             metadata.end_time = Some(end_time);
             metadata.duration_secs = Some(duration);
 
-            let file_path = metadata.file_path.clone().unwrap_or_else(|| {
+            let frames_dir = metadata.file_path.clone().unwrap_or_else(|| {
                 self.config.output_dir.join(&metadata.session_id)
             });
 
-            info!("Recording stopped. Frames saved to: {:?}", file_path);
+            info!("Recording stopped. Frames saved to: {:?}", frames_dir);
             info!("Duration: {} seconds", duration);
-            Ok(file_path)
+
+            // Generate video from frames
+            let video_name = if let Some(url) = &metadata.url {
+                extract_domain_name(url)
+            } else {
+                metadata.session_id.clone()
+            };
+
+            let video_path = self.config.output_dir.join(format!("{}.mp4", video_name));
+            
+            info!("Converting frames to video: {:?}", video_path);
+            match convert_frames_to_video(&frames_dir, &video_path, self.config.fps) {
+                Ok(_) => {
+                    info!("Video created successfully: {:?}", video_path);
+                    metadata.file_path = Some(video_path.clone());
+                    Ok(video_path)
+                }
+                Err(e) => {
+                    warn!("Failed to create video: {}. Frames are still available at: {:?}", e, frames_dir);
+                    Ok(frames_dir)
+                }
+            }
         } else {
             Err(RecorderError::StopFailed("No recording metadata found".to_string()))
         }
@@ -315,6 +339,63 @@ fn save_frame_as_png(path: &PathBuf, frame: &[u8], width: usize, height: usize) 
     Ok(())
 }
 
+// Extract domain name from URL
+fn extract_domain_name(url_str: &str) -> String {
+    if let Ok(url) = Url::parse(url_str) {
+        if let Some(domain) = url.host_str() {
+            // Remove www. prefix if present
+            let domain = domain.strip_prefix("www.").unwrap_or(domain);
+            // Get the domain without TLD (e.g., github from github.com)
+            let parts: Vec<&str> = domain.split('.').collect();
+            if !parts.is_empty() {
+                return parts[0].to_string();
+            }
+        }
+    }
+    // Fallback to session timestamp
+    format!("recording_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))
+}
+
+// Convert frames to video using FFmpeg
+fn convert_frames_to_video(frames_dir: &PathBuf, output_path: &PathBuf, fps: u32) -> Result<(), RecorderError> {
+    // Check if ffmpeg is available
+    let ffmpeg_check = Command::new("ffmpeg")
+        .arg("-version")
+        .output();
+
+    if ffmpeg_check.is_err() {
+        return Err(RecorderError::EncodingError(
+            "FFmpeg not found. Please install FFmpeg to generate videos. Frames are saved and can be converted manually.".to_string()
+        ));
+    }
+
+    info!("Running FFmpeg to create video...");
+    
+    // Build ffmpeg command
+    let frame_pattern = frames_dir.join("frame_%06d.png");
+    let output = Command::new("ffmpeg")
+        .arg("-framerate")
+        .arg(fps.to_string())
+        .arg("-i")
+        .arg(frame_pattern.to_str().unwrap())
+        .arg("-c:v")
+        .arg("libx264")
+        .arg("-pix_fmt")
+        .arg("yuv420p")
+        .arg("-y") // Overwrite output file
+        .arg(output_path.to_str().unwrap())
+        .output()
+        .map_err(|e| RecorderError::EncodingError(format!("Failed to run FFmpeg: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RecorderError::EncodingError(format!("FFmpeg failed: {}", stderr)));
+    }
+
+    info!("FFmpeg completed successfully");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,7 +412,7 @@ mod tests {
         let config = RecordingConfig::default();
         let recorder = Recorder::new(config);
         
-        recorder.start_recording("test-123".to_string()).await.unwrap();
+        recorder.start_recording("test-123".to_string(), Some("https://example.com".to_string())).await.unwrap();
         assert!(recorder.is_recording());
         
         let file_path = recorder.stop_recording().await.unwrap();
