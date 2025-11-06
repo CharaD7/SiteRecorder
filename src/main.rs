@@ -307,6 +307,89 @@ fn perform_login(
     password_selector: &str,
     submit_selector: &str,
 ) -> Result<()> {
+    // Check if we're on localhost - if so, check for pre-filled fields
+    let current_url = tab.get_url();
+    let is_localhost = current_url.contains("localhost") || current_url.contains("127.0.0.1");
+    
+    if is_localhost {
+        info!("Detected localhost domain, checking for pre-filled form fields...");
+        
+        // Check if username field already has content
+        let username_selectors: Vec<&str> = username_selector.split(',').map(|s| s.trim()).collect();
+        let mut username_prefilled = false;
+        
+        for selector in &username_selectors {
+            if let Ok(element) = tab.find_element(selector) {
+                // Try to get the value attribute to check if it's filled
+                if let Ok(js_result) = tab.evaluate(&format!(
+                    "document.querySelector('{}')?.value || ''", 
+                    selector.replace("'", "\\'")
+                ), false) {
+                    if let Some(value) = js_result.value {
+                        if let Some(s) = value.as_str() {
+                            if !s.trim().is_empty() {
+                                info!("Username field already contains: '{}'", s);
+                                username_prefilled = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check if password field already has content
+        let password_selectors: Vec<&str> = password_selector.split(',').map(|s| s.trim()).collect();
+        let mut password_prefilled = false;
+        
+        for selector in &password_selectors {
+            if let Ok(element) = tab.find_element(selector) {
+                if let Ok(js_result) = tab.evaluate(&format!(
+                    "document.querySelector('{}')?.value || ''", 
+                    selector.replace("'", "\\'")
+                ), false) {
+                    if let Some(value) = js_result.value {
+                        if let Some(s) = value.as_str() {
+                            if !s.trim().is_empty() {
+                                info!("Password field already contains data");
+                                password_prefilled = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if username_prefilled && password_prefilled {
+            info!("Both username and password fields are pre-filled on localhost, skipping form filling...");
+            // Skip to submit button
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            
+            info!("Clicking submit button...");
+            let submit_selectors: Vec<&str> = submit_selector.split(',').map(|s| s.trim()).collect();
+            let mut submit_clicked = false;
+            
+            for selector in submit_selectors {
+                if let Ok(element) = tab.find_element(selector) {
+                    if element.click().is_ok() {
+                        info!("Submit button clicked using selector: {}", selector);
+                        submit_clicked = true;
+                        break;
+                    }
+                }
+            }
+            
+            if !submit_clicked {
+                return Err(anyhow::anyhow!("Could not find submit button"));
+            }
+            
+            info!("Login form submitted with pre-filled data");
+            return Ok(());
+        } else {
+            info!("Fields not pre-filled, proceeding with normal form filling...");
+        }
+    }
 
     info!("Filling username field...");
     // Try multiple selectors for username
