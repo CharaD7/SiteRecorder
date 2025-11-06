@@ -8,8 +8,8 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
-use scrap::{Capturer, Display};
 use url::Url;
+use headless_chrome::Tab;
 
 #[derive(Debug, Error)]
 pub enum RecorderError {
@@ -81,6 +81,7 @@ pub struct Recorder {
     is_recording: Arc<AtomicBool>,
     metadata: Arc<RwLock<Option<RecordingMetadata>>>,
     stop_tx: Arc<RwLock<Option<std::sync::mpsc::Sender<()>>>>,
+    browser_tab: Arc<RwLock<Option<Arc<Tab>>>>,
 }
 
 impl Recorder {
@@ -90,7 +91,13 @@ impl Recorder {
             is_recording: Arc::new(AtomicBool::new(false)),
             metadata: Arc::new(RwLock::new(None)),
             stop_tx: Arc::new(RwLock::new(None)),
+            browser_tab: Arc::new(RwLock::new(None)),
         }
+    }
+    
+    pub async fn set_browser_tab(&self, tab: Arc<Tab>) {
+        let mut tab_guard = self.browser_tab.write().await;
+        *tab_guard = Some(tab);
     }
 
     pub async fn start_recording(&self, session_id: String, url: Option<String>) -> Result<(), RecorderError> {
@@ -129,78 +136,60 @@ impl Recorder {
         let is_recording = self.is_recording.clone();
         let fps = self.config.fps;
         let output_dir_clone = output_dir.clone();
+        let browser_tab = self.browser_tab.clone();
 
-        std::thread::spawn(move || {
-            info!("Screen capture thread started");
-            
-            let display = match Display::primary() {
-                Ok(d) => d,
-                Err(e) => {
-                    error!("Failed to get primary display: {}", e);
-                    return;
-                }
-            };
+        tokio::spawn(async move {
+            info!("Browser screenshot capture started");
 
-            let mut capturer = match Capturer::new(display) {
-                Ok(c) => c,
-                Err(e) => {
-                    error!("Failed to create capturer: {}", e);
-                    return;
-                }
-            };
-
-            let width = capturer.width();
-            let height = capturer.height();
-            info!("Capturing screen: {}x{}", width, height);
-
-            let frame_duration = std::time::Duration::from_millis(1000 / fps as u64);
+            let frame_duration = tokio::time::Duration::from_millis(1000 / fps as u64);
             let mut frame_count = 0u64;
-            let mut last_frame_time = std::time::Instant::now();
 
             loop {
                 // Check if we should stop
-                if !is_recording.load(Ordering::SeqCst) || stop_rx.try_recv().is_ok() {
+                if !is_recording.load(Ordering::SeqCst) {
                     info!("Received stop signal, ending capture");
                     break;
                 }
 
-                // Throttle frame capture to desired FPS
-                if last_frame_time.elapsed() < frame_duration {
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                    continue;
-                }
-
-                match capturer.frame() {
-                    Ok(frame) => {
-                        last_frame_time = std::time::Instant::now();
-                        let filename = format!("frame_{:06}.png", frame_count);
-                        let filepath = output_dir_clone.join(filename);
-                        
-                        // Convert BGRA to RGBA and save
-                        if let Err(e) = save_frame_as_png(&filepath, &frame, width, height) {
-                            warn!("Failed to save frame {}: {}", frame_count, e);
-                        } else {
-                            frame_count += 1;
-                            if frame_count % (fps as u64 * 10) == 0 {
-                                info!("Captured {} frames", frame_count);
+                // Get browser tab
+                let tab_guard = browser_tab.read().await;
+                if let Some(ref tab) = *tab_guard {
+                    // Capture screenshot from browser tab
+                    match tab.capture_screenshot(headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption::Png, None, None, true) {
+                        Ok(screenshot_data) => {
+                            let filename = format!("frame_{:06}.png", frame_count);
+                            let filepath = output_dir_clone.join(filename);
+                            
+                            // Save screenshot
+                            if let Err(e) = std::fs::write(&filepath, &screenshot_data) {
+                                warn!("Failed to save screenshot {}: {}", frame_count, e);
+                            } else {
+                                frame_count += 1;
+                                if frame_count % (fps as u64 * 10) == 0 {
+                                    info!("Captured {} screenshots", frame_count);
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        // Frame not ready yet or other error
-                        let err_str = format!("{:?}", e);
-                        if err_str.contains("WouldBlock") {
-                            std::thread::sleep(std::time::Duration::from_millis(10));
-                            continue;
-                        } else {
-                            error!("Capture error: {:?}", e);
-                            break;
+                        Err(e) => {
+                            warn!("Failed to capture screenshot: {}", e);
                         }
                     }
+                } else {
+                    warn!("No browser tab set for recording");
+                }
+                drop(tab_guard);
+
+                // Wait for next frame
+                tokio::time::sleep(frame_duration).await;
+
+                // Check stop signal
+                if stop_rx.try_recv().is_ok() {
+                    info!("Received stop signal, ending capture");
+                    break;
                 }
             }
 
-            info!("Screen capture thread stopped. Captured {} frames total", frame_count);
+            info!("Browser screenshot capture stopped. Captured {} frames total", frame_count);
         });
         
         info!("Recording started successfully");
@@ -314,29 +303,6 @@ impl Default for Recorder {
     fn default() -> Self {
         Self::new(RecordingConfig::default())
     }
-}
-
-// Helper function to save frame as PNG
-fn save_frame_as_png(path: &PathBuf, frame: &[u8], width: usize, height: usize) -> Result<(), RecorderError> {
-    // Convert BGRA to RGBA
-    let mut rgba = Vec::with_capacity(frame.len());
-    for pixel in frame.chunks_exact(4) {
-        rgba.push(pixel[2]); // R
-        rgba.push(pixel[1]); // G  
-        rgba.push(pixel[0]); // B
-        rgba.push(pixel[3]); // A
-    }
-
-    // Save as PNG using image crate
-    image::save_buffer(
-        path,
-        &rgba,
-        width as u32,
-        height as u32,
-        image::ColorType::Rgba8,
-    ).map_err(|e| RecorderError::RecordingError(format!("Failed to save PNG: {}", e)))?;
-
-    Ok(())
 }
 
 // Extract domain name from URL

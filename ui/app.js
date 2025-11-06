@@ -65,6 +65,7 @@ async function startRecording() {
         delay_ms: parseInt(delayInput.value),
         headless: headlessCheckbox.checked,
         output_dir: outputDirInput.value.trim(),
+        fps: parseInt(document.getElementById('fps').value),
         requires_auth: requiresAuthCheckbox.checked,
         auth_url: requiresAuthCheckbox.checked ? authUrl.value.trim() : null,
         username: requiresAuthCheckbox.checked ? username.value.trim() : null,

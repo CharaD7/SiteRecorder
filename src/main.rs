@@ -21,6 +21,7 @@ struct RecordingSettings {
     delay_ms: u64,
     headless: bool,
     output_dir: String,
+    fps: Option<u32>,
     requires_auth: bool,
     auth_url: Option<String>,
     username: Option<String>,
@@ -136,7 +137,7 @@ async fn run_recording(
     let recording_config = RecordingConfig {
         output_dir: std::path::PathBuf::from(&settings.output_dir),
         format: VideoFormat::Mp4,
-        fps: 30,
+        fps: settings.fps.unwrap_or(30), // Default to 30 FPS if not specified
         quality: 80,
         audio_enabled: false,
     };
@@ -157,6 +158,9 @@ async fn run_recording(
 
     // Get browser tab
     let tab = browser.get_tab()?;
+    
+    // Set browser tab for recording
+    recorder.set_browser_tab(tab.clone()).await;
 
     let nav_options = NavigationOptions {
         timeout_ms: 30000,
