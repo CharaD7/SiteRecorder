@@ -14,6 +14,17 @@
     --accent-color: #64B5F6;
 }
 
+/* Light mode colors */
+[data-theme="light"] {
+    --primary-color: #4CAF50;
+    --danger-color: #f44336;
+    --bg-color: #f5f5f5;
+    --panel-bg: #ffffff;
+    --text-color: #212121;
+    --border-color: #e0e0e0;
+    --accent-color: #2196F3;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--bg-color);
@@ -31,22 +42,51 @@ body {
 }
 
 header {
-    text-align: center;
     margin-bottom: 30px;
     padding: 20px;
     background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
     border-radius: 10px;
 }
 
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 header h1 {
     font-size: 2.5rem;
     margin-bottom: 10px;
     color: white;
+    text-align: left;
 }
 
 header p {
     font-size: 1.1rem;
     color: rgba(255, 255, 255, 0.9);
+    text-align: left;
+}
+
+.theme-toggle {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(20deg);
+}
+
+.theme-icon {
+    font-size: 1.5rem;
 }
 
 main {

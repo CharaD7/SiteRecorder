@@ -53,14 +53,26 @@
     "updater": {
       "active": false
     },
+    "systemTray": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false,
+      "title": "SiteRecorder"
+    },
     "windows": [
       {
         "fullscreen": false,
-        "height": 700,
+        "height": 750,
         "resizable": true,
         "title": "SiteRecorder",
-        "width": 900,
-        "center": true
+        "width": 950,
+        "center": true,
+        "minHeight": 600,
+        "minWidth": 800,
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true,
+        "decorations": true
       }
     ]
   }

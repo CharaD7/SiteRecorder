@@ -25,6 +25,7 @@ pub struct NotificationConfig {
     pub app_name: String,
     pub icon: Option<String>,
     pub timeout_ms: i32,
+    pub sound_enabled: bool,
 }
 
 impl Default for NotificationConfig {
@@ -33,6 +34,7 @@ impl Default for NotificationConfig {
             app_name: "SiteRecorder".to_string(),
             icon: None,
             timeout_ms: 5000,
+            sound_enabled: true,
         }
     }
 }
@@ -59,6 +61,11 @@ impl Notifier {
 
             if let Some(icon) = &self.config.icon {
                 notification.icon(icon);
+            }
+            
+            // Add sound if enabled
+            if self.config.sound_enabled {
+                notification.sound_name("message-new-instant");
             }
 
             notification
