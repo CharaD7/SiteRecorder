@@ -50,7 +50,7 @@ pub enum Commands {
         url: String,
 
         /// Maximum number of pages to visit
-        #[arg(short, long, default_value = "50")]
+        #[arg(short = 'n', long, default_value = "50")]
         max_pages: usize,
 
         /// Delay between page visits in milliseconds
