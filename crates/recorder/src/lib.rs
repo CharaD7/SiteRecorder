@@ -483,15 +483,28 @@ impl Recorder {
         let meta = self.metadata.read().await;
         if let Some(metadata) = meta.as_ref() {
             let frames_dir = self.config.output_dir.join(&metadata.session_id);
-            let video_path = metadata.file_path.clone().unwrap();
+            
+            // Create a SEPARATE video path for browser screenshots (don't overwrite screen recording!)
+            let video_name = if let Some(ref url_str) = metadata.url {
+                extract_domain_name(url_str)
+            } else {
+                metadata.session_id.clone()
+            };
+            
+            let screenshot_video_path = self.config.output_dir.join(format!(
+                "{}_screenshots_{}.{}",
+                video_name,
+                chrono::Utc::now().format("%Y%m%d_%H%M%S"),
+                self.config.format.extension()
+            ));
 
-            info!("Converting frames to video: {:?}", video_path);
-            match convert_frames_to_video(&frames_dir, &video_path, self.config.fps) {
+            info!("Converting frames to video: {:?}", screenshot_video_path);
+            match convert_frames_to_video(&frames_dir, &screenshot_video_path, self.config.fps) {
                 Ok(_) => {
-                    info!("Video created successfully: {:?}", video_path);
+                    info!("Screenshot video created successfully: {:?}", screenshot_video_path);
                 }
                 Err(e) => {
-                    warn!("Failed to create video: {}. Frames available at: {:?}", e, frames_dir);
+                    warn!("Failed to create screenshot video: {}. Frames available at: {:?}", e, frames_dir);
                 }
             }
         }
@@ -598,10 +611,16 @@ fn convert_frames_to_video(frames_dir: &PathBuf, output_path: &PathBuf, fps: u32
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(RecorderError::EncodingError(format!("FFmpeg failed: {}", stderr)));
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        error!("FFmpeg stderr: {}", stderr);
+        error!("FFmpeg stdout: {}", stdout);
+        return Err(RecorderError::EncodingError(format!(
+            "FFmpeg failed with exit code: {}. Check if frames exist in the directory.", 
+            output.status
+        )));
     }
 
-    info!("FFmpeg completed successfully");
+    info!("FFmpeg frame-to-video conversion completed successfully");
     Ok(())
 }
 
