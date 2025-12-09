@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -45,12 +45,22 @@ impl VideoFormat {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RecordingMode {
+    Screen,      // Record the actual screen only
+    Browser,     // Record browser screenshots only
+    Both,        // Record both screen and browser screenshots simultaneously
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingConfig {
     pub output_dir: PathBuf,
     pub format: VideoFormat,
     pub fps: u32,
     pub quality: u32,
     pub audio_enabled: bool,
+    pub mode: RecordingMode,
+    pub screen_width: Option<u32>,
+    pub screen_height: Option<u32>,
 }
 
 impl Default for RecordingConfig {
@@ -61,6 +71,9 @@ impl Default for RecordingConfig {
             fps: 30,
             quality: 80,
             audio_enabled: false,
+            mode: RecordingMode::Both,  // Default to both screen and browser recording
+            screen_width: Some(1920),
+            screen_height: Some(1080),
         }
     }
 }
@@ -82,6 +95,7 @@ pub struct Recorder {
     metadata: Arc<RwLock<Option<RecordingMetadata>>>,
     stop_tx: Arc<RwLock<Option<std::sync::mpsc::Sender<()>>>>,
     browser_tab: Arc<RwLock<Option<Arc<Tab>>>>,
+    ffmpeg_process: Arc<RwLock<Option<Child>>>,
 }
 
 impl Recorder {
@@ -92,6 +106,7 @@ impl Recorder {
             metadata: Arc::new(RwLock::new(None)),
             stop_tx: Arc::new(RwLock::new(None)),
             browser_tab: Arc::new(RwLock::new(None)),
+            ffmpeg_process: Arc::new(RwLock::new(None)),
         }
     }
     
@@ -105,20 +120,32 @@ impl Recorder {
             return Err(RecorderError::StartFailed("Already recording".to_string()));
         }
 
-        info!("Starting recording for session: {}", session_id);
+        info!("Starting recording for session: {} (mode: {:?})", session_id, self.config.mode);
 
         // Create output directory
-        let output_dir = self.config.output_dir.join(&session_id);
-        std::fs::create_dir_all(&output_dir)
+        std::fs::create_dir_all(&self.config.output_dir)
             .map_err(|e| RecorderError::StartFailed(format!("Failed to create output directory: {}", e)))?;
+
+        let video_name = if let Some(ref url_str) = url {
+            extract_domain_name(url_str)
+        } else {
+            session_id.clone()
+        };
+
+        let output_path = self.config.output_dir.join(format!(
+            "{}_{}.{}",
+            video_name,
+            chrono::Utc::now().format("%Y%m%d_%H%M%S"),
+            self.config.format.extension()
+        ));
 
         let metadata = RecordingMetadata {
             session_id: session_id.clone(),
-            url,
+            url: url.clone(),
             start_time: Utc::now(),
             end_time: None,
             duration_secs: None,
-            file_path: Some(output_dir.clone()),
+            file_path: Some(output_path.clone()),
             format: self.config.format.clone(),
         };
 
@@ -127,7 +154,116 @@ impl Recorder {
 
         self.is_recording.store(true, Ordering::SeqCst);
 
-        // Start capture thread
+        match self.config.mode {
+            RecordingMode::Screen => {
+                self.start_screen_recording(&output_path).await?;
+            }
+            RecordingMode::Browser => {
+                self.start_browser_recording(&session_id).await?;
+            }
+            RecordingMode::Both => {
+                // Start both screen recording and browser screenshots
+                self.start_screen_recording(&output_path).await?;
+                self.start_browser_recording(&session_id).await?;
+                info!("Started both screen recording and browser screenshot capture");
+            }
+        }
+        
+        info!("Recording started successfully: {:?}", output_path);
+        Ok(())
+    }
+
+    async fn start_screen_recording(&self, output_path: &PathBuf) -> Result<(), RecorderError> {
+        info!("Starting screen recording with FFmpeg");
+
+        // Check if ffmpeg is available
+        let ffmpeg_check = Command::new("ffmpeg").arg("-version").output();
+        if ffmpeg_check.is_err() {
+            return Err(RecorderError::StartFailed(
+                "FFmpeg not found. Please install FFmpeg for screen recording.".to_string()
+            ));
+        }
+
+        // Build platform-specific FFmpeg command
+        let mut cmd = Command::new("ffmpeg");
+        
+        #[cfg(target_os = "linux")]
+        {
+            // Use x11grab for Linux (like Kazam)
+            let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+            cmd.arg("-f").arg("x11grab")
+               .arg("-framerate").arg(self.config.fps.to_string())
+               .arg("-video_size").arg(format!("{}x{}", 
+                   self.config.screen_width.unwrap_or(1920),
+                   self.config.screen_height.unwrap_or(1080)))
+               .arg("-i").arg(display);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // Use avfoundation for macOS
+            cmd.arg("-f").arg("avfoundation")
+               .arg("-framerate").arg(self.config.fps.to_string())
+               .arg("-i").arg("1"); // Screen capture device
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // Use gdigrab for Windows
+            cmd.arg("-f").arg("gdigrab")
+               .arg("-framerate").arg(self.config.fps.to_string())
+               .arg("-i").arg("desktop");
+        }
+
+        // Add audio if enabled
+        if self.config.audio_enabled {
+            #[cfg(target_os = "linux")]
+            {
+                cmd.arg("-f").arg("pulse").arg("-i").arg("default");
+            }
+            #[cfg(target_os = "macos")]
+            {
+                cmd.arg("-f").arg("avfoundation").arg("-i").arg(":0");
+            }
+            #[cfg(target_os = "windows")]
+            {
+                cmd.arg("-f").arg("dshow").arg("-i").arg("audio=\"Microphone\"");
+            }
+        }
+
+        // Output settings
+        cmd.arg("-c:v").arg("libx264")
+           .arg("-preset").arg("ultrafast")
+           .arg("-crf").arg(format!("{}", 51 - (self.config.quality * 51 / 100)))
+           .arg("-pix_fmt").arg("yuv420p");
+
+        if self.config.audio_enabled {
+            cmd.arg("-c:a").arg("aac");
+        }
+
+        cmd.arg("-y") // Overwrite output file
+           .arg(output_path.to_str().unwrap())
+           .stdin(Stdio::piped())
+           .stdout(Stdio::null())
+           .stderr(Stdio::null());
+
+        info!("Launching FFmpeg process...");
+        let child = cmd.spawn()
+            .map_err(|e| RecorderError::StartFailed(format!("Failed to start FFmpeg: {}", e)))?;
+
+        let mut ffmpeg_guard = self.ffmpeg_process.write().await;
+        *ffmpeg_guard = Some(child);
+
+        Ok(())
+    }
+
+    async fn start_browser_recording(&self, session_id: &str) -> Result<(), RecorderError> {
+        info!("Starting browser screenshot capture");
+
+        let output_dir = self.config.output_dir.join(session_id);
+        std::fs::create_dir_all(&output_dir)
+            .map_err(|e| RecorderError::StartFailed(format!("Failed to create output directory: {}", e)))?;
+
         let (stop_tx, stop_rx) = std::sync::mpsc::channel();
         let mut stop_tx_guard = self.stop_tx.write().await;
         *stop_tx_guard = Some(stop_tx);
@@ -139,28 +275,21 @@ impl Recorder {
         let browser_tab = self.browser_tab.clone();
 
         tokio::spawn(async move {
-            info!("Browser screenshot capture started");
-
             let frame_duration = tokio::time::Duration::from_millis(1000 / fps as u64);
             let mut frame_count = 0u64;
 
             loop {
-                // Check if we should stop
                 if !is_recording.load(Ordering::SeqCst) {
-                    info!("Received stop signal, ending capture");
                     break;
                 }
 
-                // Get browser tab
                 let tab_guard = browser_tab.read().await;
                 if let Some(ref tab) = *tab_guard {
-                    // Capture screenshot from browser tab
                     match tab.capture_screenshot(headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption::Png, None, None, true) {
                         Ok(screenshot_data) => {
                             let filename = format!("frame_{:06}.png", frame_count);
                             let filepath = output_dir_clone.join(filename);
                             
-                            // Save screenshot
                             if let Err(e) = std::fs::write(&filepath, &screenshot_data) {
                                 warn!("Failed to save screenshot {}: {}", frame_count, e);
                             } else {
@@ -179,20 +308,16 @@ impl Recorder {
                 }
                 drop(tab_guard);
 
-                // Wait for next frame
                 tokio::time::sleep(frame_duration).await;
 
-                // Check stop signal
                 if stop_rx.try_recv().is_ok() {
-                    info!("Received stop signal, ending capture");
                     break;
                 }
             }
 
-            info!("Browser screenshot capture stopped. Captured {} frames total", frame_count);
+            info!("Browser screenshot capture stopped. Captured {} frames", frame_count);
         });
-        
-        info!("Recording started successfully");
+
         Ok(())
     }
 
@@ -203,17 +328,22 @@ impl Recorder {
 
         info!("Stopping recording");
         
-        // Send stop signal to capture thread
-        let mut stop_tx_guard = self.stop_tx.write().await;
-        if let Some(tx) = stop_tx_guard.take() {
-            let _ = tx.send(());
-        }
-        drop(stop_tx_guard);
-
         self.is_recording.store(false, Ordering::SeqCst);
 
-        // Give capture thread time to finish
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        match self.config.mode {
+            RecordingMode::Screen => {
+                self.stop_screen_recording().await?;
+            }
+            RecordingMode::Browser => {
+                self.stop_browser_recording().await?;
+            }
+            RecordingMode::Both => {
+                // Stop both recordings
+                self.stop_screen_recording().await?;
+                self.stop_browser_recording().await?;
+                info!("Stopped both screen recording and browser screenshot capture");
+            }
+        }
 
         let mut meta = self.metadata.write().await;
         if let Some(metadata) = meta.as_mut() {
@@ -223,37 +353,72 @@ impl Recorder {
             metadata.end_time = Some(end_time);
             metadata.duration_secs = Some(duration);
 
-            let frames_dir = metadata.file_path.clone().unwrap_or_else(|| {
-                self.config.output_dir.join(&metadata.session_id)
-            });
-
-            info!("Recording stopped. Frames saved to: {:?}", frames_dir);
-            info!("Duration: {} seconds", duration);
-
-            // Generate video from frames
-            let video_name = if let Some(url) = &metadata.url {
-                extract_domain_name(url)
-            } else {
-                metadata.session_id.clone()
-            };
-
-            let video_path = self.config.output_dir.join(format!("{}.mp4", video_name));
+            info!("Recording stopped. Duration: {} seconds", duration);
             
+            let output_path = metadata.file_path.clone()
+                .ok_or_else(|| RecorderError::StopFailed("No output path found".to_string()))?;
+            
+            Ok(output_path)
+        } else {
+            Err(RecorderError::StopFailed("No recording metadata found".to_string()))
+        }
+    }
+
+    async fn stop_screen_recording(&self) -> Result<(), RecorderError> {
+        info!("Stopping FFmpeg screen recording");
+
+        let mut ffmpeg_guard = self.ffmpeg_process.write().await;
+        if let Some(mut child) = ffmpeg_guard.take() {
+            // Send 'q' to stdin to gracefully stop FFmpeg
+            if let Some(ref mut stdin) = child.stdin {
+                use std::io::Write;
+                let _ = stdin.write_all(b"q");
+                let _ = stdin.flush();
+            }
+
+            // Give FFmpeg time to finalize the video
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            // Force kill if still running
+            let _ = child.kill();
+            let _ = child.wait();
+            
+            info!("FFmpeg process stopped");
+        }
+
+        Ok(())
+    }
+
+    async fn stop_browser_recording(&self) -> Result<(), RecorderError> {
+        info!("Stopping browser screenshot capture");
+
+        // Send stop signal
+        let mut stop_tx_guard = self.stop_tx.write().await;
+        if let Some(tx) = stop_tx_guard.take() {
+            let _ = tx.send(());
+        }
+        drop(stop_tx_guard);
+
+        // Give capture thread time to finish
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+        let meta = self.metadata.read().await;
+        if let Some(metadata) = meta.as_ref() {
+            let frames_dir = self.config.output_dir.join(&metadata.session_id);
+            let video_path = metadata.file_path.clone().unwrap();
+
             info!("Converting frames to video: {:?}", video_path);
             match convert_frames_to_video(&frames_dir, &video_path, self.config.fps) {
                 Ok(_) => {
                     info!("Video created successfully: {:?}", video_path);
-                    metadata.file_path = Some(video_path.clone());
-                    Ok(video_path)
                 }
                 Err(e) => {
-                    warn!("Failed to create video: {}. Frames are still available at: {:?}", e, frames_dir);
-                    Ok(frames_dir)
+                    warn!("Failed to create video: {}. Frames available at: {:?}", e, frames_dir);
                 }
             }
-        } else {
-            Err(RecorderError::StopFailed("No recording metadata found".to_string()))
         }
+
+        Ok(())
     }
 
     pub fn is_recording(&self) -> bool {

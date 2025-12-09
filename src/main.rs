@@ -140,6 +140,9 @@ async fn run_recording(
         fps: settings.fps.unwrap_or(30), // Default to 30 FPS if not specified
         quality: 80,
         audio_enabled: false,
+        mode: recorder::RecordingMode::Both, // Record both screen AND browser screenshots
+        screen_width: Some(1920),
+        screen_height: Some(1080),
     };
     let recorder = Recorder::new(recording_config);
 

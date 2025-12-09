@@ -14,7 +14,9 @@ A cross-platform desktop application built in Rust that automates full-site trav
 
 ### Core Functionality
 - 🌐 **Automated Site Traversal**: Intelligently crawls and visits all internal pages of a website
-- 🎥 **Screen Recording**: Records browser activity during the entire crawling session
+- 🎥 **Dual Recording Mode**: Records both the actual screen (like OBS/Kazam) AND browser screenshots simultaneously
+- 📹 **Real Screen Recording**: Uses FFmpeg for professional screen capture with audio support
+- 📸 **Browser Screenshots**: Captures high-quality screenshots from the browser during crawling
 - 🔐 **Session Management**: Handles login flows and stores session cookies securely
 - 📊 **Data Export**: Exports crawl data in JSON, CSV, and HTML formats
 - 🔔 **Desktop Notifications**: Alerts you when crawling completes or errors occur
@@ -57,10 +59,15 @@ SiteRecorder/
 - Supports configurable depth limits
 
 #### Recorder Module
-- Captures screen activity during crawling
+- **Three Recording Modes**:
+  - `Screen`: Real-time screen recording using FFmpeg (like OBS/Kazam)
+  - `Browser`: Browser screenshot capture from headless Chrome
+  - `Both`: Simultaneous screen recording AND browser screenshots (default)
+- Platform-specific screen capture (x11grab for Linux, avfoundation for macOS, gdigrab for Windows)
 - Supports multiple video formats (MP4, WebM, AVI, MKV)
-- Continues recording even when screen is locked
+- Optional audio recording support
 - Configurable FPS and quality settings
+- Automatic video encoding and frame-to-video conversion
 
 #### Session Module
 - Manages authentication and cookies
@@ -195,10 +202,15 @@ recordings/
 - **Ignore Query Params**: Optional query parameter filtering
 
 ### Recorder Settings
+- **Mode**: Recording mode selection
+  - `Screen`: Real screen recording only (uses FFmpeg)
+  - `Browser`: Browser screenshots only
+  - `Both`: Simultaneous screen + browser recording (default)
 - **Format**: MP4, WebM, AVI, MKV
 - **FPS**: Frames per second (default: 30)
 - **Quality**: Video quality 0-100 (default: 80)
-- **Audio**: Enable/disable audio recording
+- **Audio**: Enable/disable audio recording (screen mode only)
+- **Screen Size**: Configurable screen dimensions (default: 1920x1080)
 
 ## Development
 
@@ -288,17 +300,19 @@ sudo usermod -a -G video $USER
 
 ## Roadmap
 
+- [x] Real-time screen recording (FFmpeg-based)
+- [x] Screenshot capture (browser-based)
+- [x] Dual recording mode (screen + screenshots)
 - [ ] CLI argument parsing (clap)
 - [ ] GUI using Tauri
 - [ ] Headless CLI mode
 - [ ] Sitemap ingestion
 - [ ] Custom login script support
 - [ ] Proxy support
-- [ ] Screenshot capture
 - [ ] PDF export
-- [ ] Real-time screen recording (not placeholder)
 - [ ] Multi-threaded crawling
 - [ ] Resume interrupted sessions
+- [ ] Region-specific screen recording (select area)
 
 ## Contributing
 
