@@ -162,9 +162,17 @@ impl Recorder {
                 self.start_browser_recording(&session_id).await?;
             }
             RecordingMode::Both => {
-                // Start both screen recording and browser screenshots
+                // Start screen recording first
+                info!("Starting screen recording (Both mode)...");
                 self.start_screen_recording(&output_path).await?;
+                
+                // Give FFmpeg time to initialize before starting browser screenshots
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                
+                // Then start browser screenshots
+                info!("Starting browser screenshot capture (Both mode)...");
                 self.start_browser_recording(&session_id).await?;
+                
                 info!("Started both screen recording and browser screenshot capture");
             }
         }
@@ -244,12 +252,36 @@ impl Recorder {
         cmd.arg("-y") // Overwrite output file
            .arg(output_path.to_str().unwrap())
            .stdin(Stdio::piped())
-           .stdout(Stdio::null())
-           .stderr(Stdio::null());
+           .stdout(Stdio::piped())
+           .stderr(Stdio::piped());
 
-        info!("Launching FFmpeg process...");
-        let child = cmd.spawn()
+        info!("Launching FFmpeg process for: {:?}", output_path);
+        info!("FFmpeg command: {:?}", cmd);
+        
+        let mut child = cmd.spawn()
             .map_err(|e| RecorderError::StartFailed(format!("Failed to start FFmpeg: {}", e)))?;
+
+        // Verify FFmpeg started
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // FFmpeg exited immediately - there's an error
+                let mut stderr = String::new();
+                if let Some(mut stderr_handle) = child.stderr.take() {
+                    use std::io::Read;
+                    let _ = stderr_handle.read_to_string(&mut stderr);
+                }
+                return Err(RecorderError::StartFailed(format!(
+                    "FFmpeg failed to start: {}. Stderr: {}", status, stderr
+                )));
+            }
+            Ok(None) => {
+                info!("FFmpeg process started successfully");
+            }
+            Err(e) => {
+                error!("Error checking FFmpeg status: {}", e);
+            }
+        }
 
         let mut ffmpeg_guard = self.ffmpeg_process.write().await;
         *ffmpeg_guard = Some(child);
@@ -328,6 +360,16 @@ impl Recorder {
 
         info!("Stopping recording");
         
+        // Check minimum recording duration for screen recording
+        let meta = self.metadata.read().await;
+        if let Some(metadata) = meta.as_ref() {
+            let duration = (Utc::now() - metadata.start_time).num_seconds();
+            if duration < 2 && matches!(self.config.mode, RecordingMode::Screen | RecordingMode::Both) {
+                warn!("Recording duration is very short ({}s), video may not be properly encoded", duration);
+            }
+        }
+        drop(meta);
+        
         self.is_recording.store(false, Ordering::SeqCst);
 
         match self.config.mode {
@@ -369,21 +411,57 @@ impl Recorder {
 
         let mut ffmpeg_guard = self.ffmpeg_process.write().await;
         if let Some(mut child) = ffmpeg_guard.take() {
+            info!("Sending quit signal to FFmpeg...");
+            
             // Send 'q' to stdin to gracefully stop FFmpeg
             if let Some(ref mut stdin) = child.stdin {
                 use std::io::Write;
-                let _ = stdin.write_all(b"q");
-                let _ = stdin.flush();
+                match stdin.write_all(b"q") {
+                    Ok(_) => {
+                        if let Err(e) = stdin.flush() {
+                            warn!("Failed to flush stdin: {}", e);
+                        } else {
+                            info!("Sent 'q' command to FFmpeg");
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to write to FFmpeg stdin: {}", e);
+                    }
+                }
+                // Drop stdin to close the pipe
+                drop(child.stdin.take());
             }
 
             // Give FFmpeg time to finalize the video
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            info!("Waiting for FFmpeg to finalize video...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
-            // Force kill if still running
-            let _ = child.kill();
-            let _ = child.wait();
+            // Check if process exited
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    info!("FFmpeg exited with status: {}", status);
+                }
+                Ok(None) => {
+                    warn!("FFmpeg still running, sending SIGTERM...");
+                    // Force kill if still running
+                    if let Err(e) = child.kill() {
+                        error!("Failed to kill FFmpeg: {}", e);
+                    }
+                    
+                    // Wait for process to exit
+                    match child.wait() {
+                        Ok(status) => info!("FFmpeg terminated with status: {}", status),
+                        Err(e) => error!("Error waiting for FFmpeg: {}", e),
+                    }
+                }
+                Err(e) => {
+                    error!("Error checking FFmpeg status: {}", e);
+                }
+            }
             
             info!("FFmpeg process stopped");
+        } else {
+            warn!("No FFmpeg process to stop");
         }
 
         Ok(())

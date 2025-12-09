@@ -100,6 +100,9 @@ impl Browser {
 
         std::thread::sleep(Duration::from_millis(1000));
 
+        // Check for and close any modal dialogs
+        self.close_modals(tab)?;
+
         match &options.scroll_behavior {
             ScrollBehavior::None => {}
             ScrollBehavior::ToBottom => {
@@ -111,6 +114,123 @@ impl Browser {
         }
 
         debug!("Navigation complete");
+        Ok(())
+    }
+
+    pub fn close_modals(&self, tab: &Arc<Tab>) -> Result<(), BrowserError> {
+        debug!("Checking for modal dialogs...");
+        
+        let modal_script = r#"
+        (function() {
+            let modalsClosed = 0;
+            
+            // Common modal close button selectors
+            const closeSelectors = [
+                'button[aria-label*="close" i]',
+                'button[class*="close" i]',
+                'button[class*="dismiss" i]',
+                '[class*="modal"] button[class*="close"]',
+                '[class*="dialog"] button[class*="close"]',
+                '[role="dialog"] button[aria-label*="close" i]',
+                '.modal-close',
+                '.close-modal',
+                '.modal-dismiss',
+                '.close-button',
+                '[data-dismiss="modal"]',
+                'button.close',
+                'a.close',
+                '[aria-label="Close"]',
+                'button[title*="close" i]',
+                'button svg[class*="close"]',
+                'button svg[class*="x"]'
+            ];
+            
+            // Try to click close buttons
+            for (const selector of closeSelectors) {
+                const closeButtons = document.querySelectorAll(selector);
+                closeButtons.forEach(btn => {
+                    if (btn && btn.offsetParent !== null) { // Check if visible
+                        try {
+                            btn.click();
+                            modalsClosed++;
+                        } catch (e) {
+                            console.log('Failed to click close button:', e);
+                        }
+                    }
+                });
+            }
+            
+            // Press Escape key (closes many modals)
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'Escape',
+                code: 'Escape',
+                keyCode: 27,
+                which: 27,
+                bubbles: true,
+                cancelable: true
+            }));
+            
+            // Hide common modal containers
+            const modalContainerSelectors = [
+                '[class*="modal"][style*="display: block"]',
+                '[class*="modal"][class*="show"]',
+                '[class*="modal"][class*="active"]',
+                '[class*="popup"][style*="display: block"]',
+                '[role="dialog"][aria-modal="true"]',
+                '[class*="overlay"][style*="display: block"]',
+                '.modal.show',
+                '.modal.active',
+                '.modal.in'
+            ];
+            
+            for (const selector of modalContainerSelectors) {
+                const modals = document.querySelectorAll(selector);
+                modals.forEach(modal => {
+                    if (modal) {
+                        modal.style.display = 'none';
+                        modal.style.visibility = 'hidden';
+                        modal.setAttribute('aria-hidden', 'true');
+                        modalsClosed++;
+                    }
+                });
+            }
+            
+            // Remove backdrop overlays
+            const backdrops = document.querySelectorAll('.modal-backdrop, [class*="backdrop"], [class*="overlay"]');
+            backdrops.forEach(backdrop => {
+                if (backdrop && backdrop.offsetParent !== null) {
+                    backdrop.remove();
+                    modalsClosed++;
+                }
+            });
+            
+            // Re-enable body scrolling (often disabled by modals)
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
+            
+            return modalsClosed;
+        })();
+        "#;
+
+        match tab.evaluate(modal_script, false) {
+            Ok(result) => {
+                if let Some(count) = result.value {
+                    if let Some(num) = count.as_i64() {
+                        if num > 0 {
+                            info!("Closed {} modal dialog(s)", num);
+                            // Wait a bit after closing modals
+                            std::thread::sleep(Duration::from_millis(500));
+                        } else {
+                            debug!("No modals found");
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Modal check failed (non-critical): {}", e);
+            }
+        }
+
         Ok(())
     }
 
