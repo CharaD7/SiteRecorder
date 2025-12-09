@@ -7,6 +7,7 @@ let startBtn, stopBtn, recordingState, sessionId, currentUrl;
 let pagesVisited, pagesDiscovered, progressBar, logContainer;
 let requiresAuthCheckbox, authFields, authUrl, username, password;
 let usernameSelector, passwordSelector, submitSelector;
+let recordingModeSelect, enableAudioCheckbox, screenWidthInput, screenHeightInput;
 
 let statusInterval = null;
 
@@ -72,7 +73,11 @@ async function startRecording() {
         password: requiresAuthCheckbox.checked ? password.value : null,
         username_selector: requiresAuthCheckbox.checked ? usernameSelector.value.trim() : null,
         password_selector: requiresAuthCheckbox.checked ? passwordSelector.value.trim() : null,
-        submit_selector: requiresAuthCheckbox.checked ? submitSelector.value.trim() : null
+        submit_selector: requiresAuthCheckbox.checked ? submitSelector.value.trim() : null,
+        recording_mode: recordingModeSelect.value,
+        enable_audio: enableAudioCheckbox.checked,
+        screen_width: parseInt(screenWidthInput.value),
+        screen_height: parseInt(screenHeightInput.value)
     };
     
     console.log('Settings:', settings);
@@ -234,6 +239,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     passwordSelector = document.getElementById('passwordSelector');
     submitSelector = document.getElementById('submitSelector');
     
+    // Initialize recording mode elements
+    recordingModeSelect = document.getElementById('recordingMode');
+    enableAudioCheckbox = document.getElementById('enableAudio');
+    screenWidthInput = document.getElementById('screenWidth');
+    screenHeightInput = document.getElementById('screenHeight');
+    
     console.log('DOM elements initialized');
     console.log('startBtn:', startBtn);
     console.log('stopBtn:', stopBtn);
@@ -290,6 +301,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                 authFields.style.display = 'none';
                 addLog('Authentication disabled', 'info');
             }
+        });
+    }
+    
+    // Recording mode change handler
+    if (recordingModeSelect) {
+        recordingModeSelect.addEventListener('change', () => {
+            const mode = recordingModeSelect.value;
+            let description = '';
+            
+            if (mode === 'screen') {
+                description = 'Screen recording only - Real-time capture like OBS/Kazam';
+                enableAudioCheckbox.disabled = false;
+            } else if (mode === 'browser') {
+                description = 'Browser screenshots only - Lower resource usage';
+                enableAudioCheckbox.disabled = true;
+                enableAudioCheckbox.checked = false;
+            } else { // both
+                description = 'Both modes - Complete session coverage (recommended)';
+                enableAudioCheckbox.disabled = false;
+            }
+            
+            addLog(`Recording mode: ${description}`, 'info');
         });
     }
     

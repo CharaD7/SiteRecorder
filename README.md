@@ -134,31 +134,70 @@ cargo build --release
 
 ## Usage
 
-### Basic Usage
+### Using the GUI
+
+1. Launch SiteRecorder
+2. Configure your recording settings:
+   - Enter the website URL
+   - Choose recording mode (Screen/Browser/Both)
+   - Set FPS, screen dimensions, and audio options
+   - Configure max pages and delay
+3. (Optional) Enable authentication for login-protected sites
+4. Click "▶️ Start Recording"
+5. Monitor progress in the status panel
+6. Click "⏹️ Stop Recording" when done
+
+### Recording Mode Selection
+
+Choose one of three recording modes based on your needs:
+
+**🎬 Both (Default - Recommended)**
+- Records screen AND browser screenshots simultaneously
+- Complete session coverage
+- Best for documentation and QA
+
+**🖥️ Screen Only**
+- Real-time screen capture like OBS/Kazam
+- Supports audio recording
+- Best for demonstration videos
+
+**📸 Screenshots Only**
+- Browser screenshot capture
+- Lower resource usage
+- Best for headless crawling
+
+### Command Line Usage
 
 ```bash
-# Run with default settings (example.com)
+# Run with default settings
 cargo run
 
-# Crawl a specific website
-cargo run -- https://yoursite.com
-
-# Or use the compiled binary
-./target/release/site-recorder https://yoursite.com
+# Build and run release version
+cargo build --release
+./target/release/site-recorder
 ```
 
-### Advanced Configuration
+### Configuration Options
 
-The application can be configured through the code or by modifying the `AppConfig` struct:
+#### Recording Settings
+- **Mode**: `screen`, `browser`, or `both` (default: both)
+- **FPS**: 15-60 frames per second (default: 30)
+- **Quality**: Video quality 0-100 (default: 80)
+- **Audio**: Enable/disable audio recording (default: false)
+- **Screen Size**: Resolution for screen capture (default: 1920x1080)
 
-```rust
-let config = AppConfig {
-    base_url: "https://example.com".to_string(),
-    max_pages: Some(100),                  // Maximum pages to visit
-    delay_between_pages_ms: 2000,          // Delay between page visits
-    output_dir: "./recordings".to_string(), // Output directory
-};
-```
+#### Crawl Settings
+- **Max Pages**: Limit number of pages to visit (default: 50)
+- **Delay**: Milliseconds between page visits (default: 2000)
+- **Headless**: Run browser without UI (default: false)
+- **Output Dir**: Where to save recordings
+
+#### Authentication
+For login-protected sites:
+- Enable authentication checkbox
+- Provide login URL, username, and password
+- Auto-detection of login forms
+- Custom CSS selectors for advanced cases
 
 ### Environment Variables
 
@@ -167,25 +206,50 @@ let config = AppConfig {
 export RUST_LOG=info
 
 # Run with debug logging
-RUST_LOG=debug cargo run -- https://example.com
+RUST_LOG=debug cargo run
+
+# Set custom display for Linux screen recording
+export DISPLAY=:0
 ```
 
 ## Output
 
-SiteRecorder generates the following outputs:
+SiteRecorder generates different outputs based on the recording mode:
 
-1. **Video Recording**: `recording_<session_id>_<timestamp>_<duration>.mp4`
-2. **Crawl Data**: `<session_id>_data.json`
-3. **Session Logs**: Console output with detailed progress
-
-### Example Output Structure
-
+### Both Mode (Default)
 ```
 recordings/
-├── recording_session_20240101_120000_145.mp4
-├── session_20240101_120000_data.json
-└── session_20240101_120000_data.html
+├── example_20241209_150000.mp4       # Screen recording
+├── session_abc123/                   # Browser screenshots folder
+│   ├── frame_000001.png
+│   ├── frame_000002.png
+│   └── ...
+├── example_screenshots.mp4           # Video from browser frames
+└── session_abc123_data.json          # Crawl metadata
 ```
+
+### Screen Mode Only
+```
+recordings/
+├── example_20241209_150000.mp4       # Screen recording
+└── session_abc123_data.json          # Crawl metadata
+```
+
+### Browser Mode Only
+```
+recordings/
+├── session_abc123/                   # Browser screenshots folder
+│   ├── frame_000001.png
+│   ├── frame_000002.png
+│   └── ...
+├── example_screenshots.mp4           # Video from frames
+└── session_abc123_data.json          # Crawl metadata
+```
+
+### File Naming Convention
+- Screen recordings: `{domain}_{timestamp}.mp4`
+- Screenshot folders: `session_{session_id}/`
+- Data exports: `{session_id}_data.{json,csv,html}`
 
 ## Configuration Options
 
@@ -244,6 +308,48 @@ Each module follows a consistent pattern:
 
 ## Troubleshooting
 
+### Screen Recording Issues
+
+**Problem**: Screen recording not working or black screen
+
+**Linux:**
+```bash
+# Check FFmpeg support for x11grab
+ffmpeg -formats | grep x11grab
+
+# Verify DISPLAY variable
+echo $DISPLAY
+
+# If empty, set it
+export DISPLAY=:0
+```
+
+**macOS:**
+- System Preferences → Security & Privacy → Screen Recording
+- Grant permission to SiteRecorder
+
+**Windows:**
+- Ensure FFmpeg is installed and in PATH
+- Run `ffmpeg -version` to verify
+
+### Audio Recording Issues
+
+**Problem**: Audio not being recorded
+
+**Solutions:**
+1. Ensure recording mode is "Screen" or "Both" (not "Browser")
+2. Enable audio checkbox in settings
+3. Check system audio permissions
+
+**Linux:**
+```bash
+# Check PulseAudio
+pactl list sources short
+
+# Test audio recording
+ffmpeg -f pulse -i default test.wav
+```
+
 ### Browser Launch Issues
 
 **Problem**: Browser fails to launch
@@ -274,6 +380,27 @@ sudo usermod -a -G video $USER
 
 # Logout and login again
 ```
+
+### High CPU/Memory Usage
+
+**Solutions:**
+1. Lower FPS to 15-24
+2. Use "Screenshots Only" mode for lower CPU usage
+3. Use "Screen Only" mode for lower memory usage
+4. Reduce screen resolution
+5. Increase delay between pages
+6. Limit max pages
+
+### Out of Disk Space
+
+**Problem**: Recording stops due to insufficient disk space
+
+**Solutions:**
+1. Choose a different output directory with more space
+2. Lower FPS to reduce file size
+3. Use "Screen Only" mode (more space-efficient)
+4. Clean up old recordings
+5. Enable video compression
 
 ### Notification Issues
 

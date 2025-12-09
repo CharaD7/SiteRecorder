@@ -29,6 +29,10 @@ struct RecordingSettings {
     username_selector: Option<String>,
     password_selector: Option<String>,
     submit_selector: Option<String>,
+    recording_mode: Option<String>, // "screen", "browser", or "both"
+    enable_audio: Option<bool>,
+    screen_width: Option<u32>,
+    screen_height: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,15 +138,23 @@ async fn run_recording(
     let crawl_config = CrawlConfig::new(&settings.url)?;
     let mut crawler = Crawler::new(crawl_config);
 
+    // Parse recording mode from settings
+    let recording_mode = match settings.recording_mode.as_deref() {
+        Some("screen") => recorder::RecordingMode::Screen,
+        Some("browser") => recorder::RecordingMode::Browser,
+        Some("both") => recorder::RecordingMode::Both,
+        _ => recorder::RecordingMode::Both, // Default to Both
+    };
+
     let recording_config = RecordingConfig {
         output_dir: std::path::PathBuf::from(&settings.output_dir),
         format: VideoFormat::Mp4,
-        fps: settings.fps.unwrap_or(30), // Default to 30 FPS if not specified
+        fps: settings.fps.unwrap_or(30),
         quality: 80,
-        audio_enabled: false,
-        mode: recorder::RecordingMode::Both, // Record both screen AND browser screenshots
-        screen_width: Some(1920),
-        screen_height: Some(1080),
+        audio_enabled: settings.enable_audio.unwrap_or(false),
+        mode: recording_mode,
+        screen_width: settings.screen_width.or(Some(1920)),
+        screen_height: settings.screen_height.or(Some(1080)),
     };
     let recorder = Recorder::new(recording_config);
 

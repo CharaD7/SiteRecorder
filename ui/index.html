@@ -70,6 +70,54 @@
                     </div>
                 </div>
 
+                <!-- Recording Mode Selection -->
+                <div class="form-group">
+                    <label for="recordingMode">Recording Mode</label>
+                    <select id="recordingMode" class="themed-select">
+                        <option value="both" selected>📹 Both (Screen + Screenshots) - Recommended</option>
+                        <option value="screen">🖥️ Screen Only (Like OBS/Kazam)</option>
+                        <option value="browser">📸 Screenshots Only (Browser)</option>
+                    </select>
+                    <small class="field-hint">
+                        <strong>Both:</strong> Records screen + browser screenshots | 
+                        <strong>Screen:</strong> Real-time screen capture | 
+                        <strong>Screenshots:</strong> Browser-only captures
+                    </small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="screenWidth">Screen Width</label>
+                        <input 
+                            type="number" 
+                            id="screenWidth" 
+                            value="1920"
+                            min="640"
+                            max="3840"
+                            step="80"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="screenHeight">Screen Height</label>
+                        <input 
+                            type="number" 
+                            id="screenHeight" 
+                            value="1080"
+                            min="480"
+                            max="2160"
+                            step="60"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="enableAudio" />
+                        <span>🎤 Enable Audio Recording (Screen mode only)</span>
+                    </label>
+                </div>
+
                 <div class="form-group">
                     <label for="outputDir">Output Directory</label>
                     <div style="display: flex; gap: 10px;">
