@@ -518,6 +518,10 @@ fn perform_login(
 }
 
 fn setup_tracing(verbose: bool, quiet: bool) {
+    setup_tracing_with_file(verbose, quiet, None);
+}
+
+fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::path::PathBuf>) {
     let log_level = if verbose {
         tracing::Level::DEBUG
     } else if quiet {
@@ -526,9 +530,27 @@ fn setup_tracing(verbose: bool, quiet: bool) {
         tracing::Level::INFO
     };
     
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
-        .init();
+    if let Some(log_path) = log_file {
+        // Log to file for daemon mode
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .expect("Failed to open log file");
+        
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
+            .with_writer(std::sync::Mutex::new(file))
+            .with_ansi(false)
+            .init();
+        
+        info!("Logging to file: {:?}", log_path);
+    } else {
+        // Log to stdout
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
+            .init();
+    }
 }
 
 fn dispatch_command(command: Option<Commands>) -> Result<()> {
@@ -630,12 +652,15 @@ fn run_gui_mode() {
 
 // CLI Mode Implementation
 fn run_cli_mode(args: CrawlArgs) -> Result<()> {
-    info!("Starting CLI crawl of: {}", args.url);
-    
     let settings = RecordingSettings::from_crawl_args(args);
     
     // Initialize daemon mode if requested
     let daemon_manager = if settings.daemon {
+        // Set up file logging before daemonizing
+        if let Some(ref log_file) = settings.log_file {
+            setup_tracing_with_file(false, false, Some(log_file.clone()));
+        }
+        
         info!("Initializing daemon mode");
         
         // Daemonize the process
@@ -651,6 +676,8 @@ fn run_cli_mode(args: CrawlArgs) -> Result<()> {
     } else {
         None
     };
+    
+    info!("Starting CLI crawl of: {}", settings.url);
     
     let runtime = tokio::runtime::Runtime::new()?;
     
