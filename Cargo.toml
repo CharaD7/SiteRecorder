@@ -29,6 +29,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
 headless_chrome = "1.0"
+clap = { version = "4.4", features = ["derive", "env"] }
 
 # Workspace crates
 browser = { path = "crates/browser" }
