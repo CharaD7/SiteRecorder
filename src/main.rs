@@ -17,6 +17,9 @@ use session::SessionManager;
 mod cli;
 use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};
 
+mod daemon;
+use daemon::DaemonManager;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RecordingSettings {
     url: String,
