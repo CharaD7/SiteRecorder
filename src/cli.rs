@@ -12,11 +12,11 @@ pub struct Cli {
     pub command: Option<Commands>,
 
     /// Enable verbose logging
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, conflicts_with = "quiet")]
     pub verbose: bool,
 
     /// Quiet mode (minimal output)
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
     pub quiet: bool,
 }
 
