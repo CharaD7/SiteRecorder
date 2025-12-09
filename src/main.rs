@@ -20,6 +20,9 @@ use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};
 mod daemon;
 use daemon::DaemonManager;
 
+mod progress;
+use progress::CrawlProgress;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RecordingSettings {
     url: String,
@@ -727,6 +730,10 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     let nav_options = NavigationOptions::default();
     let mut pages_visited = 0;
     
+    // Initialize progress bar (disabled in daemon mode)
+    let show_progress = settings.progress && !settings.daemon;
+    let progress = CrawlProgress::new(settings.max_pages as u64, show_progress);
+    
     while pages_visited < settings.max_pages {
         // Check for shutdown signal in daemon mode
         if let Some(manager) = daemon_manager {
@@ -737,6 +744,7 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
         }
         
         if let Some(url) = crawler.get_next_url() {
+            progress.set_message(format!("Crawling: {}", url));
             info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
             
             match browser.navigate(&tab, &url, &nav_options) {
@@ -751,6 +759,7 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
                     
                     crawler.mark_visited(&url);
                     pages_visited += 1;
+                    progress.inc();
                     
                     // Delay between pages
                     tokio::time::sleep(tokio::time::Duration::from_millis(settings.delay_ms)).await;
@@ -765,6 +774,8 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
             break;
         }
     }
+    
+    progress.finish();
     
     info!("Stopping recording...");
     let video_path = recorder.stop_recording().await?;
