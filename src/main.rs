@@ -39,6 +39,10 @@ struct RecordingSettings {
     enable_audio: Option<bool>,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
+    daemon: bool,
+    progress: bool,
+    log_file: Option<std::path::PathBuf>,
+    pid_file: Option<std::path::PathBuf>,
 }
 
 impl RecordingSettings {
@@ -66,6 +70,10 @@ impl RecordingSettings {
             enable_audio: Some(args.audio),
             screen_width: Some(args.screen_width),
             screen_height: Some(args.screen_height),
+            daemon: args.daemon,
+            progress: args.progress,
+            log_file: args.log_file,
+            pid_file: args.pid_file,
         }
     }
 }
