@@ -629,19 +629,38 @@ fn run_gui_mode() {
 fn run_cli_mode(args: CrawlArgs) -> Result<()> {
     info!("Starting CLI crawl of: {}", args.url);
     
+    let settings = RecordingSettings::from_crawl_args(args);
+    
+    // Initialize daemon mode if requested
+    let daemon_manager = if settings.daemon {
+        info!("Initializing daemon mode");
+        
+        // Daemonize the process
+        #[cfg(unix)]
+        if let Err(e) = daemon::daemonize() {
+            error!("Failed to daemonize: {}", e);
+            return Err(e);
+        }
+        
+        let manager = DaemonManager::new(settings.pid_file.clone());
+        manager.initialize()?;
+        Some(manager)
+    } else {
+        None
+    };
+    
     let runtime = tokio::runtime::Runtime::new()?;
     
-    runtime.block_on(async {
-        let settings = RecordingSettings::from_crawl_args(args);
-        
+    let result = runtime.block_on(async {
         info!("Configuration:");
         info!("  URL: {}", settings.url);
         info!("  Max pages: {}", settings.max_pages);
         info!("  Output: {}", settings.output_dir);
         info!("  Recording mode: {:?}", settings.recording_mode);
         info!("  Headless: {}", settings.headless);
+        info!("  Daemon: {}", settings.daemon);
         
-        match run_recording_cli(settings).await {
+        match run_recording_cli(settings, daemon_manager.as_ref()).await {
             Ok(session_id) => {
                 info!("✓ Recording completed successfully!");
                 info!("Session ID: {}", session_id);
@@ -652,7 +671,10 @@ fn run_cli_mode(args: CrawlArgs) -> Result<()> {
                 Err(e)
             }
         }
-    })
+    });
+    
+    // Daemon manager will cleanup on drop
+    result
 }
 
 fn recording_mode_from_settings(settings: &RecordingSettings) -> recorder::RecordingMode {
@@ -676,7 +698,7 @@ fn build_recording_config(settings: &RecordingSettings) -> RecordingConfig {
     }
 }
 
-async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
+async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&DaemonManager>) -> Result<String> {
     // Create session ID
     let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
     
@@ -706,6 +728,14 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
     let mut pages_visited = 0;
     
     while pages_visited < settings.max_pages {
+        // Check for shutdown signal in daemon mode
+        if let Some(manager) = daemon_manager {
+            if manager.should_stop() {
+                info!("Shutdown signal received, stopping crawl gracefully");
+                break;
+            }
+        }
+        
         if let Some(url) = crawler.get_next_url() {
             info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
             
