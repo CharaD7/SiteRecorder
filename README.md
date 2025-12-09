@@ -116,7 +116,7 @@ SiteRecorder/
 
 ```bash
 # Clone the repository
-git clone https://github.com/CharaD7/SiteRecorder.git
+git clone https://github.com/CharaTech/SiteRecorder.git
 cd SiteRecorder
 
 # Build the project
@@ -315,7 +315,7 @@ MIT License - see LICENSE file for details
 
 ## Authors
 
-SiteRecorder Team
+CharaTech - https://github.com/CharaTech
 
 ## Acknowledgments
 
@@ -327,5 +327,5 @@ SiteRecorder Team
 ## Support
 
 For issues and questions:
-- GitHub Issues: [Create an issue](https://github.com/yourusername/SiteRecorder/issues)
-- Documentation: [Wiki](https://github.com/yourusername/SiteRecorder/wiki)
+- GitHub Issues: [Create an issue](https://github.com/CharaTech/SiteRecorder/issues)
+- Documentation: [Wiki](https://github.com/CharaTech/SiteRecorder/wiki)

@@ -13,7 +13,7 @@ resolver = "2"
 name = "site-recorder"
 version = "0.1.0"
 edition = "2021"
-authors = ["SiteRecorder Team"]
+authors = ["CharaTech <https://github.com/CharaTech>"]
 description = "Cross-platform desktop application for automated site traversal and browser activity recording"
 license = "MIT"
 

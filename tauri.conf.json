@@ -17,7 +17,7 @@
     "bundle": {
       "active": true,
       "category": "DeveloperTool",
-      "copyright": "",
+      "copyright": "Copyright (c) 2025 CharaTech",
       "deb": {
         "depends": []
       },
@@ -29,7 +29,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.siterecorder.app",
+      "identifier": "com.charatech.siterecorder",
       "longDescription": "",
       "macOS": {
         "entitlements": null,
