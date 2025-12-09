@@ -20,6 +20,24 @@ pub struct Cli {
     pub quiet: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct CrawlArgs {
+    pub url: String,
+    pub max_pages: usize,
+    pub delay: u64,
+    pub output: PathBuf,
+    pub recording_mode: RecordingModeArg,
+    pub fps: u32,
+    pub audio: bool,
+    pub headless: bool,
+    pub screen_width: u32,
+    pub screen_height: u32,
+    pub auth_url: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub sitemap: Option<String>,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Start recording with GUI (default)
@@ -97,6 +115,45 @@ pub enum Commands {
         #[arg(short, long, default_value = "./recordings")]
         output: PathBuf,
     },
+}
+
+impl Commands {
+    pub fn to_crawl_args(&self) -> Option<CrawlArgs> {
+        match self {
+            Commands::Crawl {
+                url,
+                max_pages,
+                delay,
+                output,
+                recording_mode,
+                fps,
+                audio,
+                headless,
+                screen_width,
+                screen_height,
+                auth_url,
+                username,
+                password,
+                sitemap,
+            } => Some(CrawlArgs {
+                url: url.clone(),
+                max_pages: *max_pages,
+                delay: *delay,
+                output: output.clone(),
+                recording_mode: recording_mode.clone(),
+                fps: *fps,
+                audio: *audio,
+                headless: *headless,
+                screen_width: *screen_width,
+                screen_height: *screen_height,
+                auth_url: auth_url.clone(),
+                username: username.clone(),
+                password: password.clone(),
+                sitemap: sitemap.clone(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, ValueEnum)]
