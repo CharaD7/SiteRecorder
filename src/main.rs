@@ -769,8 +769,7 @@ fn list_sessions(output: &std::path::Path) {
                     if let Ok(modified) = metadata.modified() {
                         if let Ok(datetime) = modified.duration_since(std::time::UNIX_EPOCH) {
                             let secs = datetime.as_secs();
-                            let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(secs as i64, 0);
-                            if let Some(dt) = dt {
+                            if let Some(dt) = chrono::DateTime::<chrono::Utc>::from_timestamp_opt(secs as i64, 0) {
                                 println!("  {} - {}", name, dt.format("%Y-%m-%d %H:%M:%S"));
                             } else {
                                 println!("  {}", name);
