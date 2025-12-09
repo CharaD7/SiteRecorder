@@ -14,6 +14,9 @@ use notifier::{Notifier, NotificationConfig};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
 use session::SessionManager;
 
+mod cli;
+use cli::{Cli, Commands, RecordingModeArg};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RecordingSettings {
     url: String,
@@ -472,11 +475,50 @@ fn perform_login(
 }
 
 fn main() {
-    // Initialize tracing
+    // Parse CLI arguments
+    let cli = Cli::parse_args();
+    
+    // Initialize tracing based on verbosity
+    let log_level = if cli.verbose {
+        tracing::Level::DEBUG
+    } else if cli.quiet {
+        tracing::Level::WARN
+    } else {
+        tracing::Level::INFO
+    };
+    
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+        .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
         .init();
 
+    // Handle CLI commands or start GUI
+    match cli.command {
+        Some(Commands::Crawl { .. }) => {
+            // Run CLI mode
+            info!("Starting in CLI mode");
+            if let Err(e) = run_cli_mode(cli) {
+                error!("CLI mode failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Resume { session_id }) => {
+            info!("Resuming session: {}", session_id);
+            if let Err(e) = resume_session(&session_id) {
+                error!("Failed to resume session: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::List { output }) => {
+            list_sessions(&output);
+        }
+        Some(Commands::Gui) | None => {
+            // Start GUI mode (default)
+            run_gui_mode();
+        }
+    }
+}
+
+fn run_gui_mode() {
     info!("SiteRecorder GUI starting...");
 
     let app_state = AppState {
@@ -539,4 +581,213 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// CLI Mode Implementation
+fn run_cli_mode(cli: Cli) -> Result<()> {
+    if let Some(Commands::Crawl {
+        url,
+        max_pages,
+        delay,
+        output,
+        recording_mode,
+        fps,
+        audio,
+        headless,
+        screen_width,
+        screen_height,
+        auth_url,
+        username,
+        password,
+        sitemap: _,
+    }) = cli.command {
+        info!("Starting CLI crawl of: {}", url);
+        
+        // Create runtime for async operations
+        let runtime = tokio::runtime::Runtime::new()?;
+        
+        runtime.block_on(async {
+            // Convert CLI args to recording settings
+            let settings = RecordingSettings {
+                url: url.clone(),
+                max_pages,
+                delay_ms: delay,
+                headless,
+                output_dir: output.to_string_lossy().to_string(),
+                fps: Some(fps),
+                requires_auth: auth_url.is_some(),
+                auth_url,
+                username,
+                password,
+                username_selector: None,
+                password_selector: None,
+                submit_selector: None,
+                recording_mode: Some(match recording_mode {
+                    RecordingModeArg::Screen => "screen".to_string(),
+                    RecordingModeArg::Browser => "browser".to_string(),
+                    RecordingModeArg::Both => "both".to_string(),
+                }),
+                enable_audio: Some(audio),
+                screen_width: Some(screen_width),
+                screen_height: Some(screen_height),
+            };
+            
+            info!("Configuration:");
+            info!("  URL: {}", settings.url);
+            info!("  Max pages: {}", settings.max_pages);
+            info!("  Output: {}", settings.output_dir);
+            info!("  Recording mode: {:?}", settings.recording_mode);
+            info!("  Headless: {}", settings.headless);
+            
+            // Run the recording
+            match run_recording_cli(settings).await {
+                Ok(session_id) => {
+                    info!("✓ Recording completed successfully!");
+                    info!("Session ID: {}", session_id);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("✗ Recording failed: {}", e);
+                    Err(e)
+                }
+            }
+        })
+    } else {
+        Ok(())
+    }
+}
+
+async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
+    // This is a simplified version of the GUI recording logic
+    // Create session ID
+    let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    
+    info!("Initializing browser...");
+    let browser = if settings.headless {
+        Browser::new_headless()?
+    } else {
+        Browser::new()?
+    };
+    
+    info!("Setting up crawler...");
+    let crawl_config = CrawlConfig::new(&settings.url)?;
+    let mut crawler = Crawler::new(crawl_config);
+    
+    // Parse recording mode
+    let recording_mode = match settings.recording_mode.as_deref() {
+        Some("screen") => recorder::RecordingMode::Screen,
+        Some("browser") => recorder::RecordingMode::Browser,
+        Some("both") => recorder::RecordingMode::Both,
+        _ => recorder::RecordingMode::Both,
+    };
+    
+    info!("Configuring recorder...");
+    let recording_config = RecordingConfig {
+        output_dir: std::path::PathBuf::from(&settings.output_dir),
+        format: VideoFormat::Mp4,
+        fps: settings.fps.unwrap_or(30),
+        quality: 80,
+        audio_enabled: settings.enable_audio.unwrap_or(false),
+        mode: recording_mode,
+        screen_width: settings.screen_width.or(Some(1920)),
+        screen_height: settings.screen_height.or(Some(1080)),
+    };
+    let recorder = Recorder::new(recording_config);
+    
+    let tab = browser.get_tab()?;
+    recorder.set_browser_tab(tab.clone()).await;
+    
+    info!("Starting recording...");
+    recorder.start_recording(session_id.clone(), Some(settings.url.clone())).await?;
+    
+    info!("Beginning crawl...");
+    let nav_options = NavigationOptions::default();
+    let mut pages_visited = 0;
+    
+    while pages_visited < settings.max_pages {
+        if let Some(url) = crawler.get_next_url() {
+            info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
+            
+            match browser.navigate(&tab, &url, &nav_options) {
+                Ok(_) => {
+                    // Get page content and discover links
+                    if let Ok(content) = browser.get_page_content(&tab) {
+                        if let Ok(links) = crawler.extract_links_from_html(&content, &url) {
+                            info!("  Found {} links", links.len());
+                            crawler.add_discovered_links(links);
+                        }
+                    }
+                    
+                    crawler.mark_visited(&url);
+                    pages_visited += 1;
+                    
+                    // Delay between pages
+                    tokio::time::sleep(tokio::time::Duration::from_millis(settings.delay_ms)).await;
+                }
+                Err(e) => {
+                    warn!("  Failed to navigate: {}", e);
+                    crawler.mark_visited(&url);
+                }
+            }
+        } else {
+            info!("No more URLs to crawl");
+            break;
+        }
+    }
+    
+    info!("Stopping recording...");
+    let video_path = recorder.stop_recording().await?;
+    
+    info!("Recording saved to: {:?}", video_path);
+    info!("Total pages visited: {}", pages_visited);
+    
+    Ok(session_id)
+}
+
+fn resume_session(session_id: &str) -> Result<()> {
+    info!("Resume functionality not yet implemented");
+    info!("Session ID: {}", session_id);
+    warn!("This feature is coming soon!");
+    Ok(())
+}
+
+fn list_sessions(output: &std::path::Path) {
+    info!("Listing sessions in: {:?}", output);
+    
+    if let Ok(entries) = std::fs::read_dir(output) {
+        let mut count = 0;
+        println!("\n📁 Recording Sessions:");
+        println!("─────────────────────────────────────────────────────");
+        
+        for entry in entries.flatten() {
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_dir() {
+                    count += 1;
+                    let path = entry.path();
+                    let name = path.file_name().unwrap().to_string_lossy();
+                    
+                    if let Ok(modified) = metadata.modified() {
+                        if let Ok(datetime) = modified.duration_since(std::time::UNIX_EPOCH) {
+                            let secs = datetime.as_secs();
+                            let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(secs as i64, 0);
+                            if let Some(dt) = dt {
+                                println!("  {} - {}", name, dt.format("%Y-%m-%d %H:%M:%S"));
+                            } else {
+                                println!("  {}", name);
+                            }
+                        } else {
+                            println!("  {}", name);
+                        }
+                    } else {
+                        println!("  {}", name);
+                    }
+                }
+            }
+        }
+        
+        println!("─────────────────────────────────────────────────────");
+        println!("Total sessions: {}\n", count);
+    } else {
+        warn!("Could not read directory: {:?}", output);
+    }
 }
