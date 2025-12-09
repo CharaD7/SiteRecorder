@@ -39,18 +39,19 @@ struct RecordingSettings {
 }
 
 impl RecordingSettings {
-    pub fn from_crawl_args(args: &CrawlArgs) -> Self {
+    pub fn from_crawl_args(args: CrawlArgs) -> Self {
+        let auth_url = args.auth_url.clone();
         RecordingSettings {
-            url: args.url.clone(),
+            url: args.url,
             max_pages: args.max_pages,
             delay_ms: args.delay,
             headless: args.headless,
             output_dir: args.output.to_string_lossy().to_string(),
             fps: Some(args.fps),
-            requires_auth: args.auth_url.is_some(),
-            auth_url: args.auth_url.clone(),
-            username: args.username.clone(),
-            password: args.password.clone(),
+            requires_auth: auth_url.is_some(),
+            auth_url,
+            username: args.username,
+            password: args.password,
             username_selector: None,
             password_selector: None,
             submit_selector: None,
@@ -518,15 +519,10 @@ fn setup_tracing(verbose: bool, quiet: bool) {
 
 fn dispatch_command(command: Option<Commands>) -> Result<()> {
     match command {
-        Some(Commands::Crawl { .. }) => {
-            // Extract CrawlArgs from command
-            if let Some(Commands::Crawl { .. }) = command {
-                if let Some(args) = command.as_ref().and_then(|c| c.to_crawl_args()) {
-                    info!("Starting in CLI mode");
-                    return run_cli_mode(args);
-                }
-            }
-            Err(anyhow::anyhow!("Failed to extract crawl arguments"))
+        Some(cmd @ Commands::Crawl { .. }) => {
+            info!("Starting in CLI mode");
+            let args = cmd.into_crawl_args();
+            run_cli_mode(args)
         }
         Some(Commands::Resume { session_id }) => {
             info!("Resuming session: {}", session_id);
@@ -625,7 +621,7 @@ fn run_cli_mode(args: CrawlArgs) -> Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     
     runtime.block_on(async {
-        let settings = RecordingSettings::from_crawl_args(&args);
+        let settings = RecordingSettings::from_crawl_args(args);
         
         info!("Configuration:");
         info!("  URL: {}", settings.url);

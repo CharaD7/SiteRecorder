@@ -118,7 +118,8 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub fn to_crawl_args(&self) -> Option<CrawlArgs> {
+    /// Convert Crawl command into CrawlArgs by consuming self
+    pub fn into_crawl_args(self) -> CrawlArgs {
         match self {
             Commands::Crawl {
                 url,
@@ -135,23 +136,23 @@ impl Commands {
                 username,
                 password,
                 sitemap,
-            } => Some(CrawlArgs {
-                url: url.clone(),
-                max_pages: *max_pages,
-                delay: *delay,
-                output: output.clone(),
-                recording_mode: recording_mode.clone(),
-                fps: *fps,
-                audio: *audio,
-                headless: *headless,
-                screen_width: *screen_width,
-                screen_height: *screen_height,
-                auth_url: auth_url.clone(),
-                username: username.clone(),
-                password: password.clone(),
-                sitemap: sitemap.clone(),
-            }),
-            _ => None,
+            } => CrawlArgs {
+                url,
+                max_pages,
+                delay,
+                output,
+                recording_mode,
+                fps,
+                audio,
+                headless,
+                screen_width,
+                screen_height,
+                auth_url,
+                username,
+                password,
+                sitemap,
+            },
+            _ => panic!("into_crawl_args called on non-Crawl command"),
         }
     }
 }
