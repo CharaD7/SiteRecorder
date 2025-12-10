@@ -38,40 +38,7 @@ impl DaemonManager {
     /// Set up signal handlers for graceful shutdown
     fn setup_signal_handlers(&self) -> Result<()> {
         let should_stop = self.should_stop.clone();
-
-        // Handle SIGTERM and SIGINT
-        #[cfg(unix)]
-        {
-            use signal_hook::consts::{SIGINT, SIGTERM};
-            use signal_hook::iterator::Signals;
-
-            let mut signals = Signals::new(&[SIGTERM, SIGINT])?;
-            
-            std::thread::spawn(move || {
-                for sig in signals.forever() {
-                    match sig {
-                        SIGTERM | SIGINT => {
-                            info!("Received shutdown signal ({}), initiating graceful shutdown", sig);
-                            should_stop.store(true, Ordering::SeqCst);
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-            });
-        }
-
-        #[cfg(windows)]
-        {
-            // Windows signal handling
-            let should_stop = should_stop.clone();
-            ctrlc::set_handler(move || {
-                info!("Received Ctrl+C, initiating graceful shutdown");
-                should_stop.store(true, Ordering::SeqCst);
-            })?;
-        }
-
-        Ok(())
+        setup_platform_signal_handlers(should_stop)
     }
 
     /// Check if shutdown was requested
@@ -79,9 +46,11 @@ impl DaemonManager {
         self.should_stop.load(Ordering::SeqCst)
     }
 
-    /// Get a clone of the shutdown flag
-    pub fn get_shutdown_flag(&self) -> Arc<AtomicBool> {
-        self.should_stop.clone()
+    /// Wait for shutdown signal
+    pub fn wait_for_shutdown(&self) {
+        while !self.should_stop() {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
     }
 
     /// Clean up daemon resources
@@ -105,59 +74,110 @@ impl Drop for DaemonManager {
     }
 }
 
+#[cfg(unix)]
+fn setup_platform_signal_handlers(should_stop: Arc<AtomicBool>) -> Result<()> {
+    use signal_hook::consts::{SIGINT, SIGTERM};
+    use signal_hook::iterator::Signals;
+
+    let mut signals = Signals::new(&[SIGTERM, SIGINT])?;
+    std::thread::spawn(move || {
+        for sig in signals.forever() {
+            if sig == SIGTERM || sig == SIGINT {
+                info!(
+                    "Received shutdown signal ({}), initiating graceful shutdown",
+                    sig
+                );
+                should_stop.store(true, Ordering::SeqCst);
+                break;
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn setup_platform_signal_handlers(should_stop: Arc<AtomicBool>) -> Result<()> {
+    ctrlc::set_handler(move || {
+        info!("Received Ctrl+C, initiating graceful shutdown");
+        should_stop.store(true, Ordering::SeqCst);
+    })?;
+    Ok(())
+}
+
 /// Daemonize the process (Unix-specific)
 #[cfg(unix)]
 pub fn daemonize() -> Result<()> {
-    use std::os::unix::process::CommandExt;
-    use std::process::Command;
-
     info!("Daemonizing process");
+    unsafe { double_fork_and_detach()?; }
+    Ok(())
+}
 
-    // Fork the process
-    unsafe {
-        let pid = libc::fork();
-        
-        if pid < 0 {
-            return Err(anyhow::anyhow!("Fork failed"));
+#[cfg(unix)]
+unsafe fn double_fork_and_detach() -> Result<()> {
+    fork_or_error("fork")?;
+
+    if libc::setsid() < 0 {
+        return Err(anyhow::anyhow!("setsid failed"));
+    }
+
+    fork_or_error("second fork")?;
+    std::env::set_current_dir("/")?;
+
+    redirect_stdio_to_devnull()?;
+    Ok(())
+}
+
+#[cfg(unix)]
+unsafe fn fork_or_error(context: &str) -> Result<()> {
+    let pid = libc::fork();
+    if pid < 0 {
+        return Err(anyhow::anyhow!("{} failed", context));
+    }
+    if pid > 0 {
+        std::process::exit(0);
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+unsafe fn redirect_stdio_to_devnull() -> Result<()> {
+    use std::ffi::CString;
+
+    // Close existing standard file descriptors
+    for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
+        if libc::close(fd) == -1 {
+            error!(
+                "daemonize: failed to close fd {}: {}",
+                fd,
+                std::io::Error::last_os_error()
+            );
         }
-        
-        if pid > 0 {
-            // Parent process exits
-            std::process::exit(0);
-        }
-        
-        // Child process continues
-        
-        // Create new session
-        if libc::setsid() < 0 {
-            return Err(anyhow::anyhow!("setsid failed"));
-        }
-        
-        // Fork again to prevent acquiring a controlling terminal
-        let pid = libc::fork();
-        
-        if pid < 0 {
-            return Err(anyhow::anyhow!("Second fork failed"));
-        }
-        
-        if pid > 0 {
-            // First child exits
-            std::process::exit(0);
-        }
-        
-        // Change working directory to root
-        std::env::set_current_dir("/")?;
-        
-        // Close standard file descriptors
-        libc::close(0); // stdin
-        libc::close(1); // stdout
-        libc::close(2); // stderr
-        
-        // Redirect to /dev/null
-        let devnull = std::ffi::CString::new("/dev/null").unwrap();
-        libc::open(devnull.as_ptr(), libc::O_RDONLY); // stdin
-        libc::open(devnull.as_ptr(), libc::O_WRONLY); // stdout
-        libc::open(devnull.as_ptr(), libc::O_WRONLY); // stderr
+    }
+
+    let dev_null = CString::new("/dev/null")
+        .expect("daemonize: CString::new(\"/dev/null\") should not fail");
+
+    // Open /dev/null for stdin
+    let stdin_fd = libc::open(dev_null.as_ptr(), libc::O_RDONLY);
+    if stdin_fd == -1 {
+        let err = std::io::Error::last_os_error();
+        error!("daemonize: failed to open /dev/null for stdin: {}", err);
+        return Err(err.into());
+    }
+
+    // Duplicate stdin to stdout
+    if libc::dup2(stdin_fd, libc::STDOUT_FILENO) == -1 {
+        let err = std::io::Error::last_os_error();
+        error!("daemonize: failed to dup2 stdin to stdout: {}", err);
+        return Err(err.into());
+    }
+
+    // Duplicate stdin to stderr
+    if libc::dup2(stdin_fd, libc::STDERR_FILENO) == -1 {
+        let err = std::io::Error::last_os_error();
+        error!("daemonize: failed to dup2 stdin to stderr: {}", err);
+        return Err(err.into());
     }
 
     Ok(())
