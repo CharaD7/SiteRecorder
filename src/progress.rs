@@ -1,7 +1,9 @@
 use indicatif::{ProgressBar, ProgressStyle};
+use std::cell::Cell;
 
 pub struct CrawlProgress {
     bar: Option<ProgressBar>,
+    finished: Cell<bool>,
 }
 
 impl CrawlProgress {
@@ -19,7 +21,10 @@ impl CrawlProgress {
             None
         };
 
-        Self { bar }
+        Self { 
+            bar,
+            finished: Cell::new(false),
+        }
     }
 
     pub fn inc(&self) {
@@ -29,6 +34,11 @@ impl CrawlProgress {
     }
 
     pub fn finish(&self) {
+        // If we've already finished once, don't finish again or clear the message later.
+        if self.finished.replace(true) {
+            return;
+        }
+
         if let Some(ref pb) = self.bar {
             pb.finish_with_message("✓ Crawl completed");
         }
@@ -43,8 +53,11 @@ impl CrawlProgress {
 
 impl Drop for CrawlProgress {
     fn drop(&mut self) {
-        if let Some(ref pb) = self.bar {
-            pb.finish_and_clear();
+        // Only auto-clear the progress bar if we haven't explicitly finished it.
+        if !self.finished.get() {
+            if let Some(ref pb) = self.bar {
+                pb.finish_and_clear();
+            }
         }
     }
 }
