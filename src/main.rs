@@ -17,6 +17,12 @@ use session::SessionManager;
 mod cli;
 use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};
 
+mod daemon;
+use daemon::DaemonManager;
+
+mod progress;
+use progress::CrawlProgress;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RecordingSettings {
     url: String,
@@ -36,6 +42,10 @@ struct RecordingSettings {
     enable_audio: Option<bool>,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
+    daemon: bool,
+    progress: bool,
+    log_file: Option<std::path::PathBuf>,
+    pid_file: Option<std::path::PathBuf>,
 }
 
 impl RecordingSettings {
@@ -63,6 +73,10 @@ impl RecordingSettings {
             enable_audio: Some(args.audio),
             screen_width: Some(args.screen_width),
             screen_height: Some(args.screen_height),
+            daemon: args.daemon,
+            progress: args.progress,
+            log_file: args.log_file,
+            pid_file: args.pid_file,
         }
     }
 }
@@ -503,7 +517,11 @@ fn perform_login(
     Ok(())
 }
 
-fn setup_tracing(verbose: bool, quiet: bool) {
+fn setup_tracing(verbose: bool, quiet: bool) -> Result<()> {
+    setup_tracing_with_file(verbose, quiet, None)
+}
+
+fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::path::PathBuf>) -> Result<()> {
     let log_level = if verbose {
         tracing::Level::DEBUG
     } else if quiet {
@@ -512,17 +530,36 @@ fn setup_tracing(verbose: bool, quiet: bool) {
         tracing::Level::INFO
     };
     
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
-        .init();
+    if let Some(log_path) = log_file {
+        // Log to file for daemon mode
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)?;
+        
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
+            .with_writer(std::sync::Mutex::new(file))
+            .with_ansi(false)
+            .init();
+        
+        info!("Logging to file: {:?}", log_path);
+    } else {
+        // Log to stdout
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
+            .init();
+    }
+    
+    Ok(())
 }
 
-fn dispatch_command(command: Option<Commands>) -> Result<()> {
+fn dispatch_command(command: Option<Commands>, verbose: bool, quiet: bool) -> Result<()> {
     match command {
         Some(cmd @ Commands::Crawl { .. }) => {
             info!("Starting in CLI mode");
             let args = cmd.into_crawl_args();
-            run_cli_mode(args)
+            run_cli_mode(args, verbose, quiet)
         }
         Some(Commands::Resume { session_id }) => {
             info!("Resuming session: {}", session_id);
@@ -541,9 +578,13 @@ fn dispatch_command(command: Option<Commands>) -> Result<()> {
 
 fn main() {
     let cli = Cli::parse_args();
-    setup_tracing(cli.verbose, cli.quiet);
     
-    if let Err(e) = dispatch_command(cli.command) {
+    if let Err(e) = setup_tracing(cli.verbose, cli.quiet) {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
+
+    if let Err(e) = dispatch_command(cli.command.clone(), cli.verbose, cli.quiet) {
         error!("Application error: {}", e);
         std::process::exit(1);
     }
@@ -615,22 +656,46 @@ fn run_gui_mode() {
 }
 
 // CLI Mode Implementation
-fn run_cli_mode(args: CrawlArgs) -> Result<()> {
-    info!("Starting CLI crawl of: {}", args.url);
+fn run_cli_mode(args: CrawlArgs, verbose: bool, quiet: bool) -> Result<()> {
+    let settings = RecordingSettings::from_crawl_args(args);
+    
+    // Initialize daemon mode if requested
+    let daemon_manager = if settings.daemon {
+        // Set up file logging before daemonizing
+        if let Some(ref log_file) = settings.log_file {
+            setup_tracing_with_file(verbose, quiet, Some(log_file.clone()))?;
+        }
+        
+        info!("Initializing daemon mode");
+        
+        // Daemonize the process
+        #[cfg(unix)]
+        if let Err(e) = daemon::daemonize() {
+            error!("Failed to daemonize: {}", e);
+            return Err(e);
+        }
+        
+        let manager = DaemonManager::new(settings.pid_file.clone());
+        manager.initialize()?;
+        Some(manager)
+    } else {
+        None
+    };
+    
+    info!("Starting CLI crawl of: {}", settings.url);
     
     let runtime = tokio::runtime::Runtime::new()?;
     
-    runtime.block_on(async {
-        let settings = RecordingSettings::from_crawl_args(args);
-        
+    let result = runtime.block_on(async {
         info!("Configuration:");
         info!("  URL: {}", settings.url);
         info!("  Max pages: {}", settings.max_pages);
         info!("  Output: {}", settings.output_dir);
         info!("  Recording mode: {:?}", settings.recording_mode);
         info!("  Headless: {}", settings.headless);
+        info!("  Daemon: {}", settings.daemon);
         
-        match run_recording_cli(settings).await {
+        match run_recording_cli(settings, daemon_manager.as_ref()).await {
             Ok(session_id) => {
                 info!("✓ Recording completed successfully!");
                 info!("Session ID: {}", session_id);
@@ -641,7 +706,10 @@ fn run_cli_mode(args: CrawlArgs) -> Result<()> {
                 Err(e)
             }
         }
-    })
+    });
+    
+    // Daemon manager will cleanup on drop
+    result
 }
 
 fn recording_mode_from_settings(settings: &RecordingSettings) -> recorder::RecordingMode {
@@ -665,7 +733,7 @@ fn build_recording_config(settings: &RecordingSettings) -> RecordingConfig {
     }
 }
 
-async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
+async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&DaemonManager>) -> Result<String> {
     // Create session ID
     let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
     
@@ -694,8 +762,21 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
     let nav_options = NavigationOptions::default();
     let mut pages_visited = 0;
     
+    // Initialize progress bar (disabled in daemon mode)
+    let show_progress = settings.progress && !settings.daemon;
+    let progress = CrawlProgress::new(settings.max_pages as u64, show_progress);
+    
     while pages_visited < settings.max_pages {
+        // Check for shutdown signal in daemon mode
+        if let Some(manager) = daemon_manager {
+            if manager.should_stop() {
+                info!("Shutdown signal received, stopping crawl gracefully");
+                break;
+            }
+        }
+        
         if let Some(url) = crawler.get_next_url() {
+            progress.set_message(format!("Crawling: {}", url));
             info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
             
             match browser.navigate(&tab, &url, &nav_options) {
@@ -710,6 +791,7 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
                     
                     crawler.mark_visited(&url);
                     pages_visited += 1;
+                    progress.inc();
                     
                     // Delay between pages
                     tokio::time::sleep(tokio::time::Duration::from_millis(settings.delay_ms)).await;
@@ -724,6 +806,8 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
             break;
         }
     }
+    
+    progress.finish();
     
     info!("Stopping recording...");
     let video_path = recorder.stop_recording().await?;

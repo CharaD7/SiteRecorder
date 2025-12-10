@@ -169,12 +169,84 @@ Choose one of three recording modes based on your needs:
 ### Command Line Usage
 
 ```bash
-# Run with default settings
-cargo run
+# Run GUI (default)
+site-recorder
 
-# Build and run release version
-cargo build --release
-./target/release/site-recorder
+# Basic CLI crawl
+site-recorder crawl https://example.com
+
+# Headless crawl with custom settings
+site-recorder crawl https://example.com \
+  --headless \
+  -n 100 \
+  --delay 2000 \
+  -m both
+
+# Run as daemon with logging
+site-recorder crawl https://example.com \
+  --daemon \
+  --headless \
+  --log-file /var/log/siterecorder.log \
+  --pid-file /var/run/siterecorder.pid
+
+# List previous sessions
+site-recorder list --output ./recordings
+
+# Show help
+site-recorder --help
+site-recorder crawl --help
+```
+
+### Daemon Mode (Headless CLI)
+
+Run SiteRecorder as a background daemon for unattended crawling:
+
+**Features:**
+- True Unix daemon (double-fork)
+- Graceful shutdown on SIGTERM/SIGINT
+- PID file management
+- File logging support
+- No terminal attachment
+- Progress bars (disabled in daemon mode)
+
+**Example:**
+```bash
+# Start daemon
+site-recorder crawl https://example.com \
+  --daemon \
+  --headless \
+  --log-file /tmp/siterecorder.log \
+  --pid-file /tmp/siterecorder.pid \
+  -n 500
+
+# Check if running
+ps aux | grep site-recorder
+
+# Stop gracefully
+kill -TERM $(cat /tmp/siterecorder.pid)
+
+# Or force stop
+kill -9 $(cat /tmp/siterecorder.pid)
+
+# Monitor logs
+tail -f /tmp/siterecorder.log
+```
+
+**Systemd Service Example:**
+```ini
+[Unit]
+Description=SiteRecorder Crawling Service
+After=network.target
+
+[Service]
+Type=forking
+User=recorder
+ExecStart=/usr/local/bin/site-recorder crawl https://example.com --daemon --headless --log-file /var/log/siterecorder.log --pid-file /var/run/siterecorder.pid
+PIDFile=/var/run/siterecorder.pid
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 ### Configuration Options
@@ -430,9 +502,9 @@ sudo usermod -a -G video $USER
 - [x] Real-time screen recording (FFmpeg-based)
 - [x] Screenshot capture (browser-based)
 - [x] Dual recording mode (screen + screenshots)
-- [ ] CLI argument parsing (clap)
+- [x] CLI argument parsing (clap)
 - [ ] GUI using Tauri
-- [ ] Headless CLI mode
+- [x] Headless CLI mode
 - [ ] Sitemap ingestion
 - [ ] Custom login script support
 - [ ] Proxy support

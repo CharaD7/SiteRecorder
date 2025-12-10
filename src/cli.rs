@@ -30,6 +30,10 @@ pub struct CrawlArgs {
     pub fps: u32,
     pub audio: bool,
     pub headless: bool,
+    pub daemon: bool,
+    pub progress: bool,
+    pub log_file: Option<PathBuf>,
+    pub pid_file: Option<PathBuf>,
     pub screen_width: u32,
     pub screen_height: u32,
     pub auth_url: Option<String>,
@@ -38,7 +42,7 @@ pub struct CrawlArgs {
     pub sitemap: Option<String>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Start recording with GUI (default)
     Gui,
@@ -76,6 +80,22 @@ pub enum Commands {
         /// Run browser in headless mode
         #[arg(long)]
         headless: bool,
+
+        /// Run as a daemon (background process)
+        #[arg(long)]
+        daemon: bool,
+
+        /// Show progress bar (disabled in daemon mode)
+        #[arg(long, default_value = "true")]
+        progress: bool,
+
+        /// Log file path (for daemon mode)
+        #[arg(long)]
+        log_file: Option<PathBuf>,
+
+        /// PID file path (for daemon mode)
+        #[arg(long)]
+        pid_file: Option<PathBuf>,
 
         /// Screen width for recording
         #[arg(long, default_value = "1920")]
@@ -130,6 +150,10 @@ impl Commands {
                 fps,
                 audio,
                 headless,
+                daemon,
+                progress,
+                log_file,
+                pid_file,
                 screen_width,
                 screen_height,
                 auth_url,
@@ -145,6 +169,10 @@ impl Commands {
                 fps,
                 audio,
                 headless,
+                daemon,
+                progress,
+                log_file,
+                pid_file,
                 screen_width,
                 screen_height,
                 auth_url,
