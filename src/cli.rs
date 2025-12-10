@@ -42,7 +42,7 @@ pub struct CrawlArgs {
     pub sitemap: Option<String>,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Start recording with GUI (default)
     Gui,

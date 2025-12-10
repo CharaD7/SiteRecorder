@@ -517,11 +517,11 @@ fn perform_login(
     Ok(())
 }
 
-fn setup_tracing(verbose: bool, quiet: bool) {
-    setup_tracing_with_file(verbose, quiet, None);
+fn setup_tracing(verbose: bool, quiet: bool) -> Result<()> {
+    setup_tracing_with_file(verbose, quiet, None)
 }
 
-fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::path::PathBuf>) {
+fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::path::PathBuf>) -> Result<()> {
     let log_level = if verbose {
         tracing::Level::DEBUG
     } else if quiet {
@@ -535,8 +535,7 @@ fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::pat
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&log_path)
-            .expect("Failed to open log file");
+            .open(&log_path)?;
         
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
@@ -551,14 +550,16 @@ fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::pat
             .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
             .init();
     }
+    
+    Ok(())
 }
 
-fn dispatch_command(command: Option<Commands>) -> Result<()> {
+fn dispatch_command(command: Option<Commands>, verbose: bool, quiet: bool) -> Result<()> {
     match command {
         Some(cmd @ Commands::Crawl { .. }) => {
             info!("Starting in CLI mode");
             let args = cmd.into_crawl_args();
-            run_cli_mode(args)
+            run_cli_mode(args, verbose, quiet)
         }
         Some(Commands::Resume { session_id }) => {
             info!("Resuming session: {}", session_id);
@@ -577,9 +578,13 @@ fn dispatch_command(command: Option<Commands>) -> Result<()> {
 
 fn main() {
     let cli = Cli::parse_args();
-    setup_tracing(cli.verbose, cli.quiet);
     
-    if let Err(e) = dispatch_command(cli.command) {
+    if let Err(e) = setup_tracing(cli.verbose, cli.quiet) {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
+
+    if let Err(e) = dispatch_command(cli.command.clone(), cli.verbose, cli.quiet) {
         error!("Application error: {}", e);
         std::process::exit(1);
     }
@@ -651,14 +656,14 @@ fn run_gui_mode() {
 }
 
 // CLI Mode Implementation
-fn run_cli_mode(args: CrawlArgs) -> Result<()> {
+fn run_cli_mode(args: CrawlArgs, verbose: bool, quiet: bool) -> Result<()> {
     let settings = RecordingSettings::from_crawl_args(args);
     
     // Initialize daemon mode if requested
     let daemon_manager = if settings.daemon {
         // Set up file logging before daemonizing
         if let Some(ref log_file) = settings.log_file {
-            setup_tracing_with_file(false, false, Some(log_file.clone()));
+            setup_tracing_with_file(verbose, quiet, Some(log_file.clone()))?;
         }
         
         info!("Initializing daemon mode");
