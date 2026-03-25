@@ -26,6 +26,6 @@ core-graphics = "0.23"
 x11 = "2.21"
 
 [features]
-default = ["ffmpeg"]
+default = []
 ffmpeg = ["ffmpeg-next"]
 gst = ["gstreamer", "gstreamer-video"]
