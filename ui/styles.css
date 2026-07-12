@@ -677,9 +677,18 @@ footer {
 
 .sort-group {
     display: inline-flex;
+    align-items: center;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     overflow: hidden;
+}
+
+.sort-label {
+    align-self: center;
+    padding: 0 8px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    opacity: 0.8;
 }
 
 .sort-btn {
