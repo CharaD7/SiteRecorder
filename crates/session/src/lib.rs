@@ -26,6 +26,7 @@ pub struct LoginCredentials {
     pub username_field: String,
     pub password_field: String,
     pub submit_selector: Option<String>,
+    pub login_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

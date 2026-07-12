@@ -14,6 +14,8 @@ pub enum ExportError {
     IoError(#[from] std::io::Error),
     #[error("CSV error: {0}")]
     CsvError(#[from] csv::Error),
+    #[error("PDF error: {0}")]
+    PdfError(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +32,7 @@ pub enum ExportFormat {
     Json,
     Csv,
     Html,
+    Pdf,
 }
 
 pub struct Exporter;
@@ -133,6 +136,75 @@ impl Exporter {
         Ok(())
     }
 
+    pub fn export_to_pdf<P: AsRef<Path>>(
+        &self,
+        data: &[RecordingData],
+        path: P,
+    ) -> Result<(), ExportError> {
+        use printpdf::{PdfDocument, Mm};
+
+        let (doc, page1, layer1) = PdfDocument::new(
+            &format!("SiteRecorder Export - {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")),
+            Mm(210.0),
+            Mm(297.0),
+            "Layer 1",
+        );
+
+        let current_layer = doc.get_page(page1).get_layer(layer1);
+
+        let font = doc.add_builtin_font(printpdf::BuiltinFont::Helvetica).map_err(|e| ExportError::PdfError(e.to_string()))?;
+        current_layer.use_text("SiteRecorder Recording Export", 18.0, Mm(20.0), Mm(260.0), &font);
+
+        current_layer.use_text(&format!("Generated: {}", Utc::now().format("%Y-%m-%d %H:%M:%S")), 10.0, Mm(20.0), Mm(250.0), &font);
+        current_layer.use_text(&format!("Total Records: {}", data.len()), 10.0, Mm(20.0), Mm(244.0), &font);
+
+        let mut y_pos = 230.0;
+
+        current_layer.use_text("Session ID", 9.0, Mm(20.0), Mm(y_pos), &font);
+        current_layer.use_text("Timestamp", 9.0, Mm(60.0), Mm(y_pos), &font);
+        current_layer.use_text("URL", 9.0, Mm(100.0), Mm(y_pos), &font);
+        current_layer.use_text("Action", 9.0, Mm(150.0), Mm(y_pos), &font);
+
+        y_pos -= 6.0;
+
+        for record in data.iter().take(30) {
+            if y_pos < 20.0 {
+                break;
+            }
+
+            let session_display = if record.session_id.len() > 20 {
+                format!("{}...", &record.session_id[..17])
+            } else {
+                record.session_id.clone()
+            };
+
+            let url_display = if record.url.len() > 30 {
+                format!("{}...", &record.url[..27])
+            } else {
+                record.url.clone()
+            };
+
+            current_layer.use_text(&session_display, 8.0, Mm(20.0), Mm(y_pos), &font);
+            current_layer.use_text(&record.timestamp.format("%Y-%m-%d %H:%M").to_string(), 8.0, Mm(60.0), Mm(y_pos), &font);
+            current_layer.use_text(&url_display, 8.0, Mm(100.0), Mm(y_pos), &font);
+            current_layer.use_text(&record.action, 8.0, Mm(150.0), Mm(y_pos), &font);
+
+            y_pos -= 5.0;
+        }
+
+        if data.len() > 30 {
+            y_pos -= 3.0;
+            current_layer.use_text(&format!("... and {} more records", data.len() - 30), 9.0, Mm(20.0), Mm(y_pos), &font);
+        }
+
+        let file = std::fs::File::create(path)
+            .map_err(|e| ExportError::PdfError(e.to_string()))?;
+        doc.save(&mut std::io::BufWriter::new(file))
+            .map_err(|e| ExportError::PdfError(e.to_string()))?;
+
+        Ok(())
+    }
+
     pub fn export<P: AsRef<Path>>(
         &self,
         data: &[RecordingData],
@@ -143,6 +215,7 @@ impl Exporter {
             ExportFormat::Json => self.export_to_json(data, path),
             ExportFormat::Csv => self.export_to_csv(data, path),
             ExportFormat::Html => self.export_to_html(data, path),
+            ExportFormat::Pdf => self.export_to_pdf(data, path),
         }
     }
 }

@@ -25,6 +25,9 @@ pub struct CrawlConfig {
     pub same_domain_only: bool,
     pub ignore_fragments: bool,
     pub ignore_query_params: bool,
+    pub proxy_url: Option<String>,
+    pub sitemap_url: Option<String>,
+    pub concurrency: usize,
 }
 
 impl CrawlConfig {
@@ -38,7 +41,25 @@ impl CrawlConfig {
             same_domain_only: true,
             ignore_fragments: true,
             ignore_query_params: false,
+            proxy_url: None,
+            sitemap_url: None,
+            concurrency: 1,
         })
+    }
+
+    pub fn with_proxy(mut self, proxy_url: &str) -> Self {
+        self.proxy_url = Some(proxy_url.to_string());
+        self
+    }
+
+    pub fn with_sitemap(mut self, sitemap_url: &str) -> Self {
+        self.sitemap_url = Some(sitemap_url.to_string());
+        self
+    }
+
+    pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+        self.concurrency = concurrency.max(1);
+        self
     }
 }
 
@@ -46,17 +67,72 @@ pub struct Crawler {
     config: CrawlConfig,
     visited: HashSet<String>,
     discovered: IndexSet<String>,
+    prefetched: HashSet<String>,
+    client: reqwest::Client,
 }
 
 impl Crawler {
     pub fn new(config: CrawlConfig) -> Self {
         let mut discovered = IndexSet::new();
         discovered.insert(config.base_url.to_string());
-        
+
+        let mut client_builder = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::limited(10));
+
+        if let Some(ref proxy_url) = config.proxy_url {
+            if let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+
+        let client = client_builder.build().expect("Failed to create HTTP client");
+
         Self {
             config,
             visited: HashSet::new(),
             discovered,
+            prefetched: HashSet::new(),
+            client,
+        }
+    }
+
+    pub async fn fetch_page(&self, url: &str) -> Result<String, CrawlerError> {
+        let response = self.client.get(url).send().await?;
+        let body = response.text().await?;
+        Ok(body)
+    }
+
+    pub async fn ingest_sitemap(&mut self) -> Result<usize, CrawlerError> {
+        if let Some(ref sitemap_url) = self.config.sitemap_url.clone() {
+            let body = self.fetch_page(sitemap_url).await?;
+            let document = Html::parse_document(&body);
+            let loc_selector = Selector::parse("url > loc, sitemap > loc")
+                .map_err(|e| CrawlerError::ParseError(e.to_string()))?;
+
+            let mut count = 0;
+            for element in document.select(&loc_selector) {
+                if let Some(text) = element.text().next() {
+                    let url = text.trim().to_string();
+                    if !url.is_empty() && !self.visited.contains(&url) && !self.discovered.contains(&url) {
+                        if self.config.same_domain_only {
+                            if let Ok(parsed) = Url::parse(&url) {
+                                if parsed.domain() == self.config.base_url.domain() {
+                                    self.discovered.insert(url);
+                                    count += 1;
+                                }
+                            }
+                        } else {
+                            self.discovered.insert(url);
+                            count += 1;
+                        }
+                    }
+                }
+            }
+            info!("Ingested {} URLs from sitemap", count);
+            Ok(count)
+        } else {
+            Ok(0)
         }
     }
 
@@ -137,6 +213,36 @@ impl Crawler {
 
     pub fn get_remaining_count(&self) -> usize {
         self.discovered.len() - self.visited.len()
+    }
+
+    /// Returns the next discovered URL that has neither been visited (recorded)
+    /// nor prefetched yet, marking it as prefetched. Used by concurrent
+    /// prefetch workers to expand the crawl frontier in parallel.
+    pub fn next_prefetch_url(&mut self) -> Option<String> {
+        for url in &self.discovered {
+            if !self.visited.contains(url) && !self.prefetched.contains(url) {
+                let next = url.clone();
+                self.prefetched.insert(next.clone());
+                return Some(next);
+            }
+        }
+        None
+    }
+
+    /// Fetch a URL via HTTP and extract its links without mutating crawl state.
+    /// Safe to call concurrently from multiple tasks.
+    pub async fn prefetch_links(&self, url: &str) -> Vec<String> {
+        match self.fetch_page(url).await {
+            Ok(body) => match self.extract_links_from_html(&body, url) {
+                Ok(links) => links,
+                Err(_) => Vec::new(),
+            },
+            Err(_) => Vec::new(),
+        }
+    }
+
+    pub fn get_concurrency(&self) -> usize {
+        self.config.concurrency
     }
 
     pub fn get_all_discovered(&self) -> Vec<String> {

@@ -12,10 +12,17 @@ use crawler::{CrawlConfig, Crawler};
 use exporter::{Exporter, RecordingData};
 use notifier::{Notifier, NotificationConfig};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
+use scanner::{ScanConfig, VulnerabilityScanner, ScanReport};
 use session::SessionManager;
 
 mod cli;
 use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};
+
+mod daemon;
+use daemon::DaemonManager;
+
+mod progress;
+use progress::CrawlProgress;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RecordingSettings {
@@ -36,6 +43,16 @@ struct RecordingSettings {
     enable_audio: Option<bool>,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
+    screen_region: Option<(i32, i32, i32, i32)>,
+    daemon: bool,
+    progress: bool,
+    log_file: Option<std::path::PathBuf>,
+    pid_file: Option<std::path::PathBuf>,
+    proxy: Option<String>,
+    sitemap: Option<String>,
+    scan_url: Option<String>,
+    login_script: Option<String>,
+    concurrency: Option<usize>,
 }
 
 impl RecordingSettings {
@@ -63,6 +80,16 @@ impl RecordingSettings {
             enable_audio: Some(args.audio),
             screen_width: Some(args.screen_width),
             screen_height: Some(args.screen_height),
+            screen_region: args.region,
+            daemon: args.daemon,
+            progress: args.progress,
+            log_file: args.log_file,
+            pid_file: args.pid_file,
+            proxy: args.proxy,
+            sitemap: args.sitemap,
+            scan_url: args.scan_url,
+            login_script: args.login_script,
+            concurrency: Some(args.concurrency),
         }
     }
 }
@@ -91,6 +118,7 @@ impl Default for CrawlStatus {
 struct AppState {
     status: Arc<Mutex<CrawlStatus>>,
     session_manager: Arc<Mutex<SessionManager>>,
+    scan_results: Arc<Mutex<Option<ScanReport>>>,
 }
 
 #[tauri::command]
@@ -150,6 +178,87 @@ async fn get_status(state: State<'_, AppState>) -> Result<CrawlStatus, String> {
     Ok(status.clone())
 }
 
+#[tauri::command]
+async fn run_vulnerability_scan(
+    url: String,
+    output_dir: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ScanReport, String> {
+    info!("Starting vulnerability scan for: {}", url);
+
+    let mut config = ScanConfig::new(&url).map_err(|e| e.to_string())?;
+    if let Some(dir) = output_dir {
+        config = config.with_output_dir(std::path::PathBuf::from(dir));
+    }
+    let mut scanner = VulnerabilityScanner::new(config).map_err(|e| e.to_string())?;
+
+    let report = scanner.run_full_scan().await.map_err(|e| e.to_string())?;
+
+    if let Err(e) = scanner.save_report(&report) {
+        warn!("Could not persist scan report: {}", e);
+    }
+
+    let mut scan_results = state.scan_results.lock().await;
+    *scan_results = Some(report.clone());
+
+    info!("Vulnerability scan completed. Risk score: {:.1}", report.summary.risk_score);
+
+    Ok(report)
+}
+
+#[tauri::command]
+async fn get_scan_results(state: State<'_, AppState>) -> Result<Option<ScanReport>, String> {
+    let scan_results = state.scan_results.lock().await;
+    Ok(scan_results.clone())
+}
+
+#[tauri::command]
+async fn list_vuln_scans(output_dir: String) -> Result<Vec<scanner::ScanMeta>, String> {
+    let dir = std::path::PathBuf::from(output_dir);
+    Ok(VulnerabilityScanner::list_scans(&dir))
+}
+
+#[tauri::command]
+async fn load_vuln_scan(output_dir: String, scan_id: String) -> Result<ScanReport, String> {
+    let path = std::path::PathBuf::from(output_dir)
+        .join("scans")
+        .join(format!("{}.json", scan_id));
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let report: ScanReport = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+    Ok(report)
+}
+
+#[tauri::command]
+async fn export_vuln_scan(
+    output_dir: String,
+    scan_id: String,
+    format: String,
+) -> Result<String, String> {
+    let report = load_vuln_scan(output_dir, scan_id).await?;
+    if format.eq_ignore_ascii_case("csv") {
+        Ok(report.to_csv())
+    } else {
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+async fn save_export(
+    output_dir: String,
+    scan_id: String,
+    format: String,
+    dest_path: String,
+) -> Result<(), String> {
+    let report = load_vuln_scan(output_dir, scan_id).await?;
+    let content = if format.eq_ignore_ascii_case("csv") {
+        report.to_csv()
+    } else {
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+    };
+    std::fs::write(&dest_path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 async fn run_recording(
     settings: RecordingSettings,
     status: Arc<Mutex<CrawlStatus>>,
@@ -168,7 +277,58 @@ async fn run_recording(
     eprintln!("Browser created successfully");
 
     let crawl_config = CrawlConfig::new(&settings.url)?;
-    let mut crawler = Crawler::new(crawl_config);
+    let crawl_config = if let Some(ref proxy) = settings.proxy {
+        crawl_config.with_proxy(proxy)
+    } else {
+        crawl_config
+    };
+    let crawl_config = if let Some(ref sitemap) = settings.sitemap {
+        crawl_config.with_sitemap(sitemap)
+    } else {
+        crawl_config
+    };
+    let crawl_config = crawl_config.with_concurrency(settings.concurrency.unwrap_or(1));
+    let crawler = Arc::new(Mutex::new(Crawler::new(crawl_config)));
+
+    // Ingest sitemap if provided
+    if settings.sitemap.is_some() {
+        if let Ok(count) = crawler.lock().await.ingest_sitemap().await {
+            info!("Ingested {} URLs from sitemap", count);
+        }
+    }
+
+    // Spawn concurrent prefetch workers to expand the crawl frontier in parallel
+    let concurrency = settings.concurrency.unwrap_or(1).max(1);
+    let prefetch_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let mut worker_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+    if concurrency > 1 {
+        for _ in 0..concurrency {
+            let crawler_clone = crawler.clone();
+            let active = prefetch_active.clone();
+            let status_clone = status.clone();
+            worker_handles.push(tokio::spawn(async move {
+                loop {
+                    if !status_clone.lock().await.is_running {
+                        break;
+                    }
+                    let url = { crawler_clone.lock().await.next_prefetch_url() };
+                    match url {
+                        Some(u) => {
+                            let links = crawler_clone.lock().await.prefetch_links(&u).await;
+                            crawler_clone.lock().await.add_discovered_links(links);
+                        }
+                        None => {
+                            if !active.load(std::sync::atomic::Ordering::SeqCst) {
+                                break;
+                            }
+                            sleep(Duration::from_millis(150)).await;
+                        }
+                    }
+                }
+            }));
+        }
+        info!("Started {} concurrent crawl workers", concurrency);
+    }
 
     // Parse recording mode from settings
     let recording_mode = match settings.recording_mode.as_deref() {
@@ -184,11 +344,12 @@ async fn run_recording(
         fps: settings.fps.unwrap_or(30),
         quality: 80,
         audio_enabled: settings.enable_audio.unwrap_or(false),
-        mode: recording_mode,
-        screen_width: settings.screen_width.or(Some(1920)),
-        screen_height: settings.screen_height.or(Some(1080)),
-    };
-    let recorder = Recorder::new(recording_config);
+            mode: recording_mode,
+            screen_width: settings.screen_width.or(Some(1920)),
+            screen_height: settings.screen_height.or(Some(1080)),
+            screen_region: settings.screen_region,
+        };
+        let recorder = Recorder::new(recording_config);
 
     let notifier = Notifier::new(NotificationConfig::default());
     let exporter = Exporter::new();
@@ -226,9 +387,31 @@ async fn run_recording(
             match browser.navigate(&tab, auth_url, &nav_options) {
                 Ok(_) => {
                     info!("Login page loaded, attempting authentication...");
-                    
-                    // Fill in credentials
-                    if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+
+                    if let Some(script) = &settings.login_script {
+                        // Custom login script path
+                        let username = settings.username.clone().unwrap_or_default();
+                        let password = settings.password.clone().unwrap_or_default();
+                        let setup = format!(
+                            "window.__SR_USER = {}; window.__SR_PASS = {};",
+                            js_quote(&username),
+                            js_quote(&password)
+                        );
+                        if let Err(e) = browser.execute_script(&tab, &setup) {
+                            warn!("Failed to inject credentials for login script: {}", e);
+                        }
+                        match browser.execute_script(&tab, script) {
+                            Ok(_) => {
+                                info!("Custom login script executed");
+                                notifier.notify_info("Authentication", "Custom login script executed")?;
+                                sleep(Duration::from_millis(3000)).await; // Wait for redirect
+                            }
+                            Err(e) => {
+                                warn!("Login script failed: {}", e);
+                                notifier.notify_error("Authentication", &format!("Login script failed: {}", e))?;
+                            }
+                        }
+                    } else if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
                         &settings.username,
                         &settings.password,
                         &settings.username_selector,
@@ -258,7 +441,7 @@ async fn run_recording(
     let mut recording_data = Vec::new();
 
     // Main crawling loop
-    while let Some(url) = crawler.get_next_url() {
+    while let Some(url) = crawler.lock().await.get_next_url() {
         // Check if stopped
         {
             let status_guard = status.lock().await;
@@ -302,12 +485,12 @@ async fn run_recording(
 
                 // Extract links
                 if let Ok(content) = browser.get_page_content(&tab) {
-                    if let Ok(links) = crawler.extract_links_from_html(&content, &url) {
+                    if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url) {
                         info!("Found {} links on page", links.len());
-                        crawler.add_discovered_links(links);
+                        crawler.lock().await.add_discovered_links(links);
 
                         let mut status_guard = status.lock().await;
-                        status_guard.pages_discovered = crawler.get_discovered_count();
+                        status_guard.pages_discovered = crawler.lock().await.get_discovered_count();
                     }
                 }
 
@@ -317,6 +500,12 @@ async fn run_recording(
                 warn!("Failed to navigate to {}: {}", url, e);
             }
         }
+    }
+
+    // Stop prefetch workers and wait for them
+    prefetch_active.store(false, std::sync::atomic::Ordering::SeqCst);
+    for handle in worker_handles {
+        let _ = handle.await;
     }
 
     let pages_visited = status.lock().await.pages_visited;
@@ -339,11 +528,36 @@ async fn run_recording(
     info!("Recording saved to: {:?}", video_path);
     info!("Data exported to: {:?}", export_path);
 
+    // Run vulnerability scan if requested
+    if let Some(ref scan_url) = settings.scan_url {
+        info!("Running vulnerability scan on: {}", scan_url);
+        let scan_config = ScanConfig::new(scan_url)?;
+        let mut scanner = VulnerabilityScanner::new(scan_config)?;
+        match scanner.run_full_scan().await {
+            Ok(report) => {
+                let scan_path = std::path::PathBuf::from(&settings.output_dir)
+                    .join(format!("{}_scan.json", session_id));
+                let scan_json = serde_json::to_string_pretty(&report)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize scan: {}", e))?;
+                std::fs::write(&scan_path, scan_json)?;
+                info!("Vulnerability scan completed. Report saved to: {:?}", scan_path);
+                notifier.notify_info("Scan Complete", &format!("Risk score: {:.1}/10", report.summary.risk_score))?;
+            }
+            Err(e) => {
+                warn!("Vulnerability scan failed: {}", e);
+            }
+        }
+    }
+
     // Update final status
     let mut status_guard = status.lock().await;
     status_guard.is_running = false;
 
     Ok(())
+}
+
+fn js_quote(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 fn perform_login(
@@ -503,7 +717,11 @@ fn perform_login(
     Ok(())
 }
 
-fn setup_tracing(verbose: bool, quiet: bool) {
+fn setup_tracing(verbose: bool, quiet: bool) -> Result<()> {
+    setup_tracing_with_file(verbose, quiet, None)
+}
+
+fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::path::PathBuf>) -> Result<()> {
     let log_level = if verbose {
         tracing::Level::DEBUG
     } else if quiet {
@@ -512,17 +730,36 @@ fn setup_tracing(verbose: bool, quiet: bool) {
         tracing::Level::INFO
     };
     
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
-        .init();
+    if let Some(log_path) = log_file {
+        // Log to file for daemon mode
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)?;
+        
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
+            .with_writer(std::sync::Mutex::new(file))
+            .with_ansi(false)
+            .init();
+        
+        info!("Logging to file: {:?}", log_path);
+    } else {
+        // Log to stdout
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
+            .init();
+    }
+    
+    Ok(())
 }
 
-fn dispatch_command(command: Option<Commands>) -> Result<()> {
+fn dispatch_command(command: Option<Commands>, verbose: bool, quiet: bool) -> Result<()> {
     match command {
         Some(cmd @ Commands::Crawl { .. }) => {
             info!("Starting in CLI mode");
             let args = cmd.into_crawl_args();
-            run_cli_mode(args)
+            run_cli_mode(args, verbose, quiet)
         }
         Some(Commands::Resume { session_id }) => {
             info!("Resuming session: {}", session_id);
@@ -531,6 +768,20 @@ fn dispatch_command(command: Option<Commands>) -> Result<()> {
         Some(Commands::List { output }) => {
             list_sessions(&output);
             Ok(())
+        }
+        Some(Commands::Scan {
+            url,
+            output,
+            max_depth,
+            max_pages,
+            list,
+            export_id,
+            format,
+        }) => {
+            let runtime = tokio::runtime::Runtime::new()?;
+            runtime.block_on(async {
+                run_scan_cli(url, &output, max_depth, max_pages, list, export_id, &format).await
+            })
         }
         Some(Commands::Gui) | None => {
             run_gui_mode();
@@ -541,9 +792,13 @@ fn dispatch_command(command: Option<Commands>) -> Result<()> {
 
 fn main() {
     let cli = Cli::parse_args();
-    setup_tracing(cli.verbose, cli.quiet);
     
-    if let Err(e) = dispatch_command(cli.command) {
+    if let Err(e) = setup_tracing(cli.verbose, cli.quiet) {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
+
+    if let Err(e) = dispatch_command(cli.command.clone(), cli.verbose, cli.quiet) {
         error!("Application error: {}", e);
         std::process::exit(1);
     }
@@ -555,6 +810,7 @@ fn run_gui_mode() {
     let app_state = AppState {
         status: Arc::new(Mutex::new(CrawlStatus::default())),
         session_manager: Arc::new(Mutex::new(SessionManager::new())),
+        scan_results: Arc::new(Mutex::new(None)),
     };
 
     use tauri::{CustomMenuItem, SystemTray, SystemTrayMenu, SystemTrayEvent, Manager};
@@ -608,29 +864,59 @@ fn run_gui_mode() {
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,
-            get_status
+            get_status,
+            run_vulnerability_scan,
+            get_scan_results,
+            list_vuln_scans,
+            load_vuln_scan,
+            export_vuln_scan,
+            save_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 // CLI Mode Implementation
-fn run_cli_mode(args: CrawlArgs) -> Result<()> {
-    info!("Starting CLI crawl of: {}", args.url);
+fn run_cli_mode(args: CrawlArgs, verbose: bool, quiet: bool) -> Result<()> {
+    let settings = RecordingSettings::from_crawl_args(args);
+    
+    // Initialize daemon mode if requested
+    let daemon_manager = if settings.daemon {
+        // Set up file logging before daemonizing
+        if let Some(ref log_file) = settings.log_file {
+            setup_tracing_with_file(verbose, quiet, Some(log_file.clone()))?;
+        }
+        
+        info!("Initializing daemon mode");
+        
+        // Daemonize the process
+        #[cfg(unix)]
+        if let Err(e) = daemon::daemonize() {
+            error!("Failed to daemonize: {}", e);
+            return Err(e);
+        }
+        
+        let manager = DaemonManager::new(settings.pid_file.clone());
+        manager.initialize()?;
+        Some(manager)
+    } else {
+        None
+    };
+    
+    info!("Starting CLI crawl of: {}", settings.url);
     
     let runtime = tokio::runtime::Runtime::new()?;
     
-    runtime.block_on(async {
-        let settings = RecordingSettings::from_crawl_args(args);
-        
+    let result = runtime.block_on(async {
         info!("Configuration:");
         info!("  URL: {}", settings.url);
         info!("  Max pages: {}", settings.max_pages);
         info!("  Output: {}", settings.output_dir);
         info!("  Recording mode: {:?}", settings.recording_mode);
         info!("  Headless: {}", settings.headless);
+        info!("  Daemon: {}", settings.daemon);
         
-        match run_recording_cli(settings).await {
+        match run_recording_cli(settings, daemon_manager.as_ref()).await {
             Ok(session_id) => {
                 info!("✓ Recording completed successfully!");
                 info!("Session ID: {}", session_id);
@@ -641,7 +927,10 @@ fn run_cli_mode(args: CrawlArgs) -> Result<()> {
                 Err(e)
             }
         }
-    })
+    });
+    
+    // Daemon manager will cleanup on drop
+    result
 }
 
 fn recording_mode_from_settings(settings: &RecordingSettings) -> recorder::RecordingMode {
@@ -662,10 +951,11 @@ fn build_recording_config(settings: &RecordingSettings) -> RecordingConfig {
         mode: recording_mode_from_settings(settings),
         screen_width: settings.screen_width.or(Some(1920)),
         screen_height: settings.screen_height.or(Some(1080)),
+        screen_region: settings.screen_region,
     }
 }
 
-async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
+async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&DaemonManager>) -> Result<String> {
     // Create session ID
     let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
     
@@ -678,8 +968,55 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
     
     info!("Setting up crawler...");
     let crawl_config = CrawlConfig::new(&settings.url)?;
-    let mut crawler = Crawler::new(crawl_config);
-    
+    let crawl_config = if let Some(ref proxy) = settings.proxy {
+        crawl_config.with_proxy(proxy)
+    } else {
+        crawl_config
+    };
+    let crawl_config = if let Some(ref sitemap) = settings.sitemap {
+        crawl_config.with_sitemap(sitemap)
+    } else {
+        crawl_config
+    };
+    let crawl_config = crawl_config.with_concurrency(settings.concurrency.unwrap_or(1));
+    let crawler = Arc::new(Mutex::new(Crawler::new(crawl_config)));
+
+    // Ingest sitemap if provided
+    if settings.sitemap.is_some() {
+        if let Ok(count) = crawler.lock().await.ingest_sitemap().await {
+            info!("Ingested {} URLs from sitemap", count);
+        }
+    }
+
+    // Spawn concurrent prefetch workers
+    let concurrency = settings.concurrency.unwrap_or(1).max(1);
+    let prefetch_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let mut worker_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+    if concurrency > 1 {
+        for _ in 0..concurrency {
+            let crawler_clone = crawler.clone();
+            let active = prefetch_active.clone();
+            worker_handles.push(tokio::spawn(async move {
+                loop {
+                    let url = { crawler_clone.lock().await.next_prefetch_url() };
+                    match url {
+                        Some(u) => {
+                            let links = crawler_clone.lock().await.prefetch_links(&u).await;
+                            crawler_clone.lock().await.add_discovered_links(links);
+                        }
+                        None => {
+                            if !active.load(std::sync::atomic::Ordering::SeqCst) {
+                                break;
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+                        }
+                    }
+                }
+            }));
+        }
+        info!("Started {} concurrent crawl workers", concurrency);
+    }
+
     info!("Configuring recorder...");
     let recording_config = build_recording_config(&settings);
     let recorder = Recorder::new(recording_config);
@@ -687,36 +1024,101 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
     let tab = browser.get_tab()?;
     recorder.set_browser_tab(tab.clone()).await;
     
+    let nav_options = NavigationOptions {
+        timeout_ms: 30000,
+        wait_for_idle: true,
+        scroll_behavior: ScrollBehavior::Incremental {
+            steps: 5,
+            delay_ms: 500,
+        },
+    };
+
     info!("Starting recording...");
     recorder.start_recording(session_id.clone(), Some(settings.url.clone())).await?;
     
+    // Handle authentication if required
+    if settings.requires_auth {
+        if let Some(auth_url) = &settings.auth_url {
+            info!("Navigating to login page: {}", auth_url);
+            match browser.navigate(&tab, auth_url, &nav_options) {
+                Ok(_) => {
+                    if let Some(script) = &settings.login_script {
+                        let setup = format!(
+                            "window.__SR_USER = {}; window.__SR_PASS = {};",
+                            js_quote(settings.username.as_deref().unwrap_or("")),
+                            js_quote(settings.password.as_deref().unwrap_or("")),
+                        );
+                        if let Err(e) = browser.execute_script(&tab, &setup) {
+                            warn!("Failed to inject credentials for login script: {}", e);
+                        }
+                        match browser.execute_script(&tab, script) {
+                            Ok(_) => {
+                                info!("Custom login script executed");
+                                sleep(Duration::from_millis(3000)).await;
+                            }
+                            Err(e) => warn!("Login script failed: {}", e),
+                        }
+                    } else if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+                        &settings.username,
+                        &settings.password,
+                        &settings.username_selector,
+                        &settings.password_selector,
+                        &settings.submit_selector,
+                    ) {
+                        match perform_login(&tab, username, password, username_sel, password_sel, submit_sel) {
+                            Ok(_) => {
+                                info!("Login successful!");
+                                sleep(Duration::from_millis(3000)).await;
+                            }
+                            Err(e) => warn!("Login failed: {}", e),
+                        }
+                    }
+                }
+                Err(e) => warn!("Failed to navigate to login page: {}", e),
+            }
+        }
+    }
+
     info!("Beginning crawl...");
-    let nav_options = NavigationOptions::default();
     let mut pages_visited = 0;
     
+    // Initialize progress bar (disabled in daemon mode)
+    let show_progress = settings.progress && !settings.daemon;
+    let progress = CrawlProgress::new(settings.max_pages as u64, show_progress);
+    
     while pages_visited < settings.max_pages {
-        if let Some(url) = crawler.get_next_url() {
+        // Check for shutdown signal in daemon mode
+        if let Some(manager) = daemon_manager {
+            if manager.should_stop() {
+                info!("Shutdown signal received, stopping crawl gracefully");
+                break;
+            }
+        }
+        
+        if let Some(url) = crawler.lock().await.get_next_url() {
+            progress.set_message(format!("Crawling: {}", url));
             info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
             
             match browser.navigate(&tab, &url, &nav_options) {
                 Ok(_) => {
                     // Get page content and discover links
                     if let Ok(content) = browser.get_page_content(&tab) {
-                        if let Ok(links) = crawler.extract_links_from_html(&content, &url) {
+                        if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url) {
                             info!("  Found {} links", links.len());
-                            crawler.add_discovered_links(links);
+                            crawler.lock().await.add_discovered_links(links);
                         }
                     }
                     
-                    crawler.mark_visited(&url);
+                    crawler.lock().await.mark_visited(&url);
                     pages_visited += 1;
+                    progress.inc();
                     
                     // Delay between pages
                     tokio::time::sleep(tokio::time::Duration::from_millis(settings.delay_ms)).await;
                 }
                 Err(e) => {
                     warn!("  Failed to navigate: {}", e);
-                    crawler.mark_visited(&url);
+                    crawler.lock().await.mark_visited(&url);
                 }
             }
         } else {
@@ -725,19 +1127,97 @@ async fn run_recording_cli(settings: RecordingSettings) -> Result<String> {
         }
     }
     
+    prefetch_active.store(false, std::sync::atomic::Ordering::SeqCst);
+    for handle in worker_handles {
+        let _ = handle.await;
+    }
+
+    progress.finish();
+    
     info!("Stopping recording...");
     let video_path = recorder.stop_recording().await?;
     
     info!("Recording saved to: {:?}", video_path);
     info!("Total pages visited: {}", pages_visited);
-    
+
+    // Run vulnerability scan if requested
+    if let Some(ref scan_url) = settings.scan_url {
+        info!("Running vulnerability scan on: {}", scan_url);
+        let scan_config = ScanConfig::new(scan_url)?;
+        let mut scanner = VulnerabilityScanner::new(scan_config)?;
+        match scanner.run_full_scan().await {
+            Ok(report) => {
+                let scan_path = std::path::PathBuf::from(&settings.output_dir)
+                    .join(format!("{}_scan.json", session_id));
+                let scan_json = serde_json::to_string_pretty(&report)?;
+                std::fs::write(&scan_path, scan_json)?;
+                info!("Vulnerability scan completed. Report saved to: {:?}", scan_path);
+                println!("\n🛡️ Vulnerability Scan Results:");
+                println!("─────────────────────────────────────────────────────");
+                println!("  Risk Score: {:.1}/10", report.summary.risk_score);
+                println!("  Total Checks: {}", report.summary.total_checks);
+                println!("  Vulnerabilities: {}", report.summary.vulnerable);
+                println!("  Warnings: {}", report.summary.warnings);
+                println!("  Critical: {}", report.summary.critical_count);
+                println!("  High: {}", report.summary.high_count);
+                println!("  Medium: {}", report.summary.medium_count);
+                println!("  Low: {}", report.summary.low_count);
+                println!("─────────────────────────────────────────────────────");
+            }
+            Err(e) => {
+                warn!("Vulnerability scan failed: {}", e);
+            }
+        }
+    }
+
     Ok(session_id)
 }
 
 fn resume_session(session_id: &str) -> Result<()> {
-    info!("Resume functionality not yet implemented");
-    info!("Session ID: {}", session_id);
-    warn!("This feature is coming soon!");
+    info!("Resuming session: {}", session_id);
+
+    // Look for session data file
+    let session_file = std::path::PathBuf::from("./recordings")
+        .join(format!("{}_data.json", session_id));
+
+    if !session_file.exists() {
+        warn!("Session data file not found: {:?}", session_file);
+        warn!("Available sessions can be listed with: site-recorder list");
+        return Ok(());
+    }
+
+    let session_json = std::fs::read_to_string(&session_file)?;
+    let recording_data: Vec<RecordingData> = serde_json::from_str(&session_json)?;
+
+    println!("\n📋 Session: {}", session_id);
+    println!("─────────────────────────────────────────────────────");
+    println!("  Pages recorded: {}", recording_data.len());
+    if let Some(first) = recording_data.first() {
+        println!("  Start time: {}", first.timestamp.format("%Y-%m-%d %H:%M:%S"));
+        println!("  Base URL: {}", first.url);
+    }
+    if let Some(last) = recording_data.last() {
+        println!("  End time: {}", last.timestamp.format("%Y-%m-%d %H:%M:%S"));
+    }
+    println!("─────────────────────────────────────────────────────");
+
+    // Check for associated video files
+    let recordings_dir = std::path::PathBuf::from("./recordings");
+    if let Ok(entries) = std::fs::read_dir(&recordings_dir) {
+        let mut video_count = 0;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.contains(session_id) && (name.ends_with(".mp4") || name.ends_with(".webm")) {
+                video_count += 1;
+                println!("  📹 Video: {}", name);
+            }
+        }
+        if video_count == 0 {
+            println!("  No associated video files found");
+        }
+    }
+
+    println!("\n✅ Session resume complete. Data loaded successfully.");
     Ok(())
 }
 
@@ -785,4 +1265,82 @@ fn list_sessions(output: &std::path::Path) {
     
     println!("─────────────────────────────────────────────────────");
     println!("Total sessions: {}\n", count);
+}
+
+// Standalone vulnerability scanner CLI
+async fn run_scan_cli(
+    url: Option<String>,
+    output: &std::path::Path,
+    max_depth: usize,
+    max_pages: usize,
+    list: bool,
+    export_id: Option<String>,
+    format: &str,
+) -> Result<()> {
+    if list {
+        let scans = VulnerabilityScanner::list_scans(output);
+        println!("\n📚 Saved Scans:");
+        println!("─────────────────────────────────────────────────────");
+        if scans.is_empty() {
+            println!("  No saved scans in {:?}", output);
+        }
+        for s in &scans {
+            println!(
+                "  {} | {} | risk {:.1} | {} vuln / {} warn",
+                s.scan_id, s.target_url, s.risk_score, s.vulnerable, s.warnings
+            );
+        }
+        println!("─────────────────────────────────────────────────────");
+        println!("Total: {}\n", scans.len());
+        return Ok(());
+    }
+
+    if let Some(id) = export_id {
+        let path = output.join("scans").join(format!("{}.json", id));
+        let data = std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", path.display(), e))?;
+        let report: ScanReport = serde_json::from_str(&data)
+            .map_err(|e| anyhow::anyhow!("Invalid scan file: {}", e))?;
+        let (content, ext) = if format.eq_ignore_ascii_case("csv") {
+            (report.to_csv(), "csv")
+        } else {
+            (serde_json::to_string_pretty(&report)?, "json")
+        };
+        let dest = format!("{}.{}", id, ext);
+        std::fs::write(&dest, content)?;
+        println!("Exported {} to {}", id, dest);
+        return Ok(());
+    }
+
+    let url = url.ok_or_else(|| anyhow::anyhow!(
+        "Provide --url to scan, or use --list / --export-id"
+    ))?;
+
+    let mut config = ScanConfig::new(&url)?;
+    config.max_depth = max_depth;
+    config.max_pages = max_pages;
+    config.output_dir = Some(output.to_path_buf());
+
+    let mut scanner = VulnerabilityScanner::new(config)?;
+    println!("Scanning {} (depth={}, max_pages={})...", url, max_depth, max_pages);
+    let report = scanner.run_full_scan().await?;
+    let _ = scanner.save_report(&report);
+
+    println!("\n🛡️ Vulnerability Scan Results:");
+    println!("─────────────────────────────────────────────────────");
+    println!("  Target:        {}", report.url);
+    println!("  Scan ID:       {}", report.scan_id);
+    println!("  Risk Score:    {:.1}/10", report.summary.risk_score);
+    println!("  Total Checks:  {}", report.summary.total_checks);
+    println!("  Vulnerable:    {}", report.summary.vulnerable);
+    println!("  Warnings:      {}", report.summary.warnings);
+    println!("  Critical:      {}", report.summary.critical_count);
+    println!("  High:          {}", report.summary.high_count);
+    println!("  Medium:        {}", report.summary.medium_count);
+    println!("  Low:           {}", report.summary.low_count);
+    println!("─────────────────────────────────────────────────────");
+    let saved = output.join("scans").join(format!("{}.json", report.scan_id));
+    println!("Report saved to: {}\n", saved.display());
+
+    Ok(())
 }

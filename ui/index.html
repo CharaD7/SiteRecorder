@@ -21,8 +21,15 @@
         </header>
 
         <main>
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="settings">Recording</button>
+                <button class="tab-btn" data-tab="vulnerabilities">Vulnerabilities</button>
+                <button class="tab-btn" data-tab="results">Results</button>
+            </div>
+
             <!-- Settings Panel -->
-            <section class="panel settings-panel">
+            <section class="panel settings-panel tab-content active" id="tab-settings">
                 <h2>Recording Settings</h2>
                 
                 <div class="form-group">
@@ -110,6 +117,43 @@
                         />
                     </div>
                 </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="concurrency">Crawl Workers</label>
+                        <input 
+                            type="number" 
+                            id="concurrency" 
+                            value="1"
+                            min="1"
+                            max="32"
+                        />
+                        <small class="field-hint">Concurrent workers for parallel link discovery (&gt;1 speeds up crawling)</small>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="regionX">Region X</label>
+                        <input type="number" id="regionX" value="0" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regionY">Region Y</label>
+                        <input type="number" id="regionY" value="0" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regionW">Region Width</label>
+                        <input type="number" id="regionW" value="0" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regionH">Region Height</label>
+                        <input type="number" id="regionH" value="0" min="0" />
+                    </div>
+                </div>
+                <small class="field-hint">
+                    Set Width &amp; Height &gt; 0 to record a specific screen area
+                    (Linux/X11 uses native capture; macOS/Windows crop).
+                </small>
 
                 <div class="form-group checkbox-group">
                     <label>
@@ -221,6 +265,31 @@
                                 <small class="field-hint">Tries: submit buttons, login/sign-in buttons</small>
                             </div>
                         </div>
+
+                        <div class="auth-divider"></div>
+
+                        <!-- Custom Login Script -->
+                        <div class="form-group">
+                            <strong>📜 Custom Login Script (JavaScript)</strong>
+                            <p class="help-text">
+                                Advanced: run a custom JS snippet in the login page context.
+                                Credentials are injected as <code>window.__SR_USER</code> and
+                                <code>window.__SR_PASS</code>. When a script is provided, the
+                                automatic form-fill is skipped in favour of your script.
+                            </p>
+                            <input
+                                type="file"
+                                id="loginScriptFile"
+                                accept=".js,.mjs,.txt,application/javascript,text/plain"
+                                style="margin-bottom: 8px;"
+                            />
+                            <textarea
+                                id="loginScript"
+                                rows="8"
+                                class="themed-textarea"
+                                placeholder="// Example:&#10;document.querySelector('#user').value = window.__SR_USER;&#10;document.querySelector('#pass').value = window.__SR_PASS;&#10;document.querySelector('#login-form').submit();"
+                            ></textarea>
+                        </div>
                     </div>
                 </div>
 
@@ -234,8 +303,132 @@
                 </div>
             </section>
 
-            <!-- Status Panel -->
-            <section class="panel status-panel">
+            <!-- Vulnerabilities Panel -->
+            <section class="panel vuln-panel tab-content" id="tab-vulnerabilities" style="display: none;">
+                <h2>🛡️ Security Vulnerability Scanner</h2>
+                
+                <div class="vuln-controls">
+                    <div class="form-group">
+                        <label for="scanUrl">Target URL to Scan</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input 
+                                type="text" 
+                                id="scanUrl" 
+                                placeholder="https://example.com"
+                                style="flex: 1;"
+                            />
+                            <button id="startScanBtn" class="btn btn-primary">
+                                🔍 Start Scan
+                            </button>
+                            <button id="stopScanBtn" class="btn btn-danger" disabled>
+                                ⏹️ Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attention banner for vulnerabilities / sensitive data -->
+                <div id="scanAlert" class="scan-alert" style="display: none;"></div>
+
+                <!-- Scan Summary -->
+                <div id="scanSummary" class="scan-summary" style="display: none;">
+                    <div class="summary-header">
+                        <h3>Scan Results</h3>
+                        <div class="risk-score-container">
+                            <span class="risk-label">Risk Score:</span>
+                            <span id="riskScore" class="risk-score">0.0</span>
+                            <span class="risk-max">/10</span>
+                        </div>
+                    </div>
+                    <div class="summary-grid">
+                        <div class="summary-item critical">
+                            <span class="summary-count" id="criticalCount">0</span>
+                            <span class="summary-label">Critical</span>
+                        </div>
+                        <div class="summary-item high">
+                            <span class="summary-count" id="highCount">0</span>
+                            <span class="summary-label">High</span>
+                        </div>
+                        <div class="summary-item medium">
+                            <span class="summary-count" id="mediumCount">0</span>
+                            <span class="summary-label">Medium</span>
+                        </div>
+                        <div class="summary-item low">
+                            <span class="summary-count" id="lowCount">0</span>
+                            <span class="summary-label">Low</span>
+                        </div>
+                        <div class="summary-item info">
+                            <span class="summary-count" id="infoCount">0</span>
+                            <span class="summary-label">Info</span>
+                        </div>
+                    </div>
+                    <div class="summary-bar">
+                        <div id="criticalBar" class="bar-segment critical"></div>
+                        <div id="highBar" class="bar-segment high"></div>
+                        <div id="mediumBar" class="bar-segment medium"></div>
+                        <div id="lowBar" class="bar-segment low"></div>
+                        <div id="infoBar" class="bar-segment info"></div>
+                    </div>
+                    <div class="summary-stats">
+                        <span>Total Checks: <strong id="totalChecks">0</strong></span>
+                        <span>Vulnerable: <strong id="vulnerableCount">0</strong></span>
+                        <span>Warnings: <strong id="warningCount">0</strong></span>
+                        <span>Scan Duration: <strong id="scanDuration">0ms</strong></span>
+                    </div>
+                </div>
+
+                <!-- Vulnerability Details List -->
+                <div id="vulnResults" class="vuln-results" style="display: none;">
+                    <div class="vuln-results-header">
+                        <h3>Detailed Findings</h3>
+                        <div class="vuln-filters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="vulnerable">Vulnerable</button>
+                            <button class="filter-btn filter-sensitive" data-filter="sensitive">🔒 Sensitive</button>
+                            <button class="filter-btn" data-filter="warning">Warning</button>
+                            <button class="filter-btn" data-filter="not-vulnerable">Passed</button>
+                        </div>
+                        <div class="vuln-actions">
+                            <label class="fp-toggle">
+                                <input type="checkbox" id="hideFp" />
+                                <span>Hide marked false positives</span>
+                            </label>
+                            <button id="exportJsonBtn" class="btn btn-secondary" type="button">⬇ JSON</button>
+                            <button id="exportCsvBtn" class="btn btn-secondary" type="button">⬇ CSV</button>
+                        </div>
+                    </div>
+                    <div id="vulnList" class="vuln-list"></div>
+                </div>
+
+                <!-- Scan History -->
+                <div class="scan-history">
+                    <div class="scan-history-header">
+                        <h3>📚 Scan History</h3>
+                        <button id="refreshHistoryBtn" class="btn btn-secondary" type="button">🔄 Refresh</button>
+                    </div>
+                    <div class="scan-history-controls">
+                        <input type="text" id="historySearch" class="history-search"
+                               placeholder="Search by target URL or scan id..." style="flex: 1;" />
+                        <select id="historySort" class="themed-select">
+                            <option value="time">Newest first</option>
+                            <option value="risk">Highest risk</option>
+                            <option value="target">Target A–Z</option>
+                        </select>
+                    </div>
+                    <div id="scanHistoryList" class="scan-history-list">
+                        <div class="history-empty">No saved scans yet. Run a scan with an Output Directory set.</div>
+                    </div>
+                </div>
+
+                <!-- Scan Progress -->
+                <div id="scanProgress" class="scan-progress" style="display: none;">
+                    <div class="scan-spinner"></div>
+                    <span id="scanStatus">Scanning...</span>
+                </div>
+            </section>
+
+            <!-- Results Panel -->
+            <section class="panel results-panel tab-content" id="tab-results" style="display: none;">
                 <h2>Status</h2>
                 
                 <div class="status-grid">

@@ -6,6 +6,7 @@ members = [
     "crates/session",
     "crates/notifier",
     "crates/exporter",
+    "crates/scanner",
 ]
 resolver = "2"
 
@@ -30,6 +31,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
 headless_chrome = "1.0"
 clap = { version = "4.4", features = ["derive", "env"] }
+signal-hook = "0.3"
+indicatif = "0.17"
+libc = "0.2"
+ctrlc = "3.4"
+printpdf = "0.7"
 
 # Workspace crates
 browser = { path = "crates/browser" }
@@ -38,6 +44,7 @@ recorder = { path = "crates/recorder" }
 session = { path = "crates/session" }
 notifier = { path = "crates/notifier" }
 exporter = { path = "crates/exporter" }
+scanner = { path = "crates/scanner" }
 
 [build-dependencies]
 tauri-build = "1.5"
