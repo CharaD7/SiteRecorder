@@ -181,14 +181,22 @@ async fn get_status(state: State<'_, AppState>) -> Result<CrawlStatus, String> {
 #[tauri::command]
 async fn run_vulnerability_scan(
     url: String,
+    output_dir: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ScanReport, String> {
     info!("Starting vulnerability scan for: {}", url);
 
-    let config = ScanConfig::new(&url).map_err(|e| e.to_string())?;
-    let scanner = VulnerabilityScanner::new(config).map_err(|e| e.to_string())?;
+    let mut config = ScanConfig::new(&url).map_err(|e| e.to_string())?;
+    if let Some(dir) = output_dir {
+        config = config.with_output_dir(std::path::PathBuf::from(dir));
+    }
+    let mut scanner = VulnerabilityScanner::new(config).map_err(|e| e.to_string())?;
 
     let report = scanner.run_full_scan().await.map_err(|e| e.to_string())?;
+
+    if let Err(e) = scanner.save_report(&report) {
+        warn!("Could not persist scan report: {}", e);
+    }
 
     let mut scan_results = state.scan_results.lock().await;
     *scan_results = Some(report.clone());
@@ -202,6 +210,53 @@ async fn run_vulnerability_scan(
 async fn get_scan_results(state: State<'_, AppState>) -> Result<Option<ScanReport>, String> {
     let scan_results = state.scan_results.lock().await;
     Ok(scan_results.clone())
+}
+
+#[tauri::command]
+async fn list_vuln_scans(output_dir: String) -> Result<Vec<scanner::ScanMeta>, String> {
+    let dir = std::path::PathBuf::from(output_dir);
+    Ok(VulnerabilityScanner::list_scans(&dir))
+}
+
+#[tauri::command]
+async fn load_vuln_scan(output_dir: String, scan_id: String) -> Result<ScanReport, String> {
+    let path = std::path::PathBuf::from(output_dir)
+        .join("scans")
+        .join(format!("{}.json", scan_id));
+    let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let report: ScanReport = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+    Ok(report)
+}
+
+#[tauri::command]
+async fn export_vuln_scan(
+    output_dir: String,
+    scan_id: String,
+    format: String,
+) -> Result<String, String> {
+    let report = load_vuln_scan(output_dir, scan_id).await?;
+    if format.eq_ignore_ascii_case("csv") {
+        Ok(report.to_csv())
+    } else {
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+async fn save_export(
+    output_dir: String,
+    scan_id: String,
+    format: String,
+    dest_path: String,
+) -> Result<(), String> {
+    let report = load_vuln_scan(output_dir, scan_id).await?;
+    let content = if format.eq_ignore_ascii_case("csv") {
+        report.to_csv()
+    } else {
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+    };
+    std::fs::write(&dest_path, content).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 async fn run_recording(
@@ -477,7 +532,7 @@ async fn run_recording(
     if let Some(ref scan_url) = settings.scan_url {
         info!("Running vulnerability scan on: {}", scan_url);
         let scan_config = ScanConfig::new(scan_url)?;
-        let scanner = VulnerabilityScanner::new(scan_config)?;
+        let mut scanner = VulnerabilityScanner::new(scan_config)?;
         match scanner.run_full_scan().await {
             Ok(report) => {
                 let scan_path = std::path::PathBuf::from(&settings.output_dir)
@@ -714,6 +769,20 @@ fn dispatch_command(command: Option<Commands>, verbose: bool, quiet: bool) -> Re
             list_sessions(&output);
             Ok(())
         }
+        Some(Commands::Scan {
+            url,
+            output,
+            max_depth,
+            max_pages,
+            list,
+            export_id,
+            format,
+        }) => {
+            let runtime = tokio::runtime::Runtime::new()?;
+            runtime.block_on(async {
+                run_scan_cli(url, &output, max_depth, max_pages, list, export_id, &format).await
+            })
+        }
         Some(Commands::Gui) | None => {
             run_gui_mode();
             Ok(())
@@ -797,7 +866,11 @@ fn run_gui_mode() {
             stop_recording,
             get_status,
             run_vulnerability_scan,
-            get_scan_results
+            get_scan_results,
+            list_vuln_scans,
+            load_vuln_scan,
+            export_vuln_scan,
+            save_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1071,7 +1144,7 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     if let Some(ref scan_url) = settings.scan_url {
         info!("Running vulnerability scan on: {}", scan_url);
         let scan_config = ScanConfig::new(scan_url)?;
-        let scanner = VulnerabilityScanner::new(scan_config)?;
+        let mut scanner = VulnerabilityScanner::new(scan_config)?;
         match scanner.run_full_scan().await {
             Ok(report) => {
                 let scan_path = std::path::PathBuf::from(&settings.output_dir)
@@ -1192,4 +1265,82 @@ fn list_sessions(output: &std::path::Path) {
     
     println!("─────────────────────────────────────────────────────");
     println!("Total sessions: {}\n", count);
+}
+
+// Standalone vulnerability scanner CLI
+async fn run_scan_cli(
+    url: Option<String>,
+    output: &std::path::Path,
+    max_depth: usize,
+    max_pages: usize,
+    list: bool,
+    export_id: Option<String>,
+    format: &str,
+) -> Result<()> {
+    if list {
+        let scans = VulnerabilityScanner::list_scans(output);
+        println!("\n📚 Saved Scans:");
+        println!("─────────────────────────────────────────────────────");
+        if scans.is_empty() {
+            println!("  No saved scans in {:?}", output);
+        }
+        for s in &scans {
+            println!(
+                "  {} | {} | risk {:.1} | {} vuln / {} warn",
+                s.scan_id, s.target_url, s.risk_score, s.vulnerable, s.warnings
+            );
+        }
+        println!("─────────────────────────────────────────────────────");
+        println!("Total: {}\n", scans.len());
+        return Ok(());
+    }
+
+    if let Some(id) = export_id {
+        let path = output.join("scans").join(format!("{}.json", id));
+        let data = std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", path.display(), e))?;
+        let report: ScanReport = serde_json::from_str(&data)
+            .map_err(|e| anyhow::anyhow!("Invalid scan file: {}", e))?;
+        let (content, ext) = if format.eq_ignore_ascii_case("csv") {
+            (report.to_csv(), "csv")
+        } else {
+            (serde_json::to_string_pretty(&report)?, "json")
+        };
+        let dest = format!("{}.{}", id, ext);
+        std::fs::write(&dest, content)?;
+        println!("Exported {} to {}", id, dest);
+        return Ok(());
+    }
+
+    let url = url.ok_or_else(|| anyhow::anyhow!(
+        "Provide --url to scan, or use --list / --export-id"
+    ))?;
+
+    let mut config = ScanConfig::new(&url)?;
+    config.max_depth = max_depth;
+    config.max_pages = max_pages;
+    config.output_dir = Some(output.to_path_buf());
+
+    let mut scanner = VulnerabilityScanner::new(config)?;
+    println!("Scanning {} (depth={}, max_pages={})...", url, max_depth, max_pages);
+    let report = scanner.run_full_scan().await?;
+    let _ = scanner.save_report(&report);
+
+    println!("\n🛡️ Vulnerability Scan Results:");
+    println!("─────────────────────────────────────────────────────");
+    println!("  Target:        {}", report.url);
+    println!("  Scan ID:       {}", report.scan_id);
+    println!("  Risk Score:    {:.1}/10", report.summary.risk_score);
+    println!("  Total Checks:  {}", report.summary.total_checks);
+    println!("  Vulnerable:    {}", report.summary.vulnerable);
+    println!("  Warnings:      {}", report.summary.warnings);
+    println!("  Critical:      {}", report.summary.critical_count);
+    println!("  High:          {}", report.summary.high_count);
+    println!("  Medium:        {}", report.summary.medium_count);
+    println!("  Low:           {}", report.summary.low_count);
+    println!("─────────────────────────────────────────────────────");
+    let saved = output.join("scans").join(format!("{}.json", report.scan_id));
+    println!("Report saved to: {}\n", saved.display());
+
+    Ok(())
 }

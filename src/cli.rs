@@ -160,6 +160,37 @@ pub enum Commands {
         #[arg(short, long, default_value = "./recordings")]
         output: PathBuf,
     },
+
+    /// Run the vulnerability scanner standalone (no recording)
+    Scan {
+        /// Target URL to scan
+        #[arg(short, long)]
+        url: Option<String>,
+
+        /// Output directory for saving scan reports
+        #[arg(short, long, default_value = "./recordings")]
+        output: PathBuf,
+
+        /// Maximum crawl depth when discovering pages
+        #[arg(long, default_value = "3")]
+        max_depth: usize,
+
+        /// Maximum number of pages to discover
+        #[arg(long, default_value = "50")]
+        max_pages: usize,
+
+        /// List saved scans in the output directory
+        #[arg(long)]
+        list: bool,
+
+        /// Export a saved scan by id (use with --format)
+        #[arg(long)]
+        export_id: Option<String>,
+
+        /// Export format: json or csv
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
 }
 
 impl Commands {
