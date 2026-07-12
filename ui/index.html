@@ -408,12 +408,13 @@
                     </div>
                     <div class="scan-history-controls">
                         <input type="text" id="historySearch" class="history-search"
-                               placeholder="Search by target URL or scan id..." style="flex: 1;" />
-                        <select id="historySort" class="themed-select">
-                            <option value="time">Newest first</option>
-                            <option value="risk">Highest risk</option>
-                            <option value="target">Target A–Z</option>
-                        </select>
+                                placeholder="Search by target URL or scan id..." style="flex: 1;" />
+                        <div class="sort-group" id="historySort">
+                            <span class="sort-label">Sort:</span>
+                            <button class="sort-btn active" data-sort="time" type="button">Newest</button>
+                            <button class="sort-btn" data-sort="risk" type="button">Highest risk</button>
+                            <button class="sort-btn" data-sort="target" type="button">Target A–Z</button>
+                        </div>
                     </div>
                     <div id="scanHistoryList" class="scan-history-list">
                         <div class="history-empty">No saved scans yet. Run a scan with an Output Directory set.</div>

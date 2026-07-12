@@ -675,6 +675,41 @@ footer {
     border-color: var(--accent-color);
 }
 
+.sort-group {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.sort-btn {
+    padding: 6px 12px;
+    border: none;
+    border-right: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.sort-btn:last-child {
+    border-right: none;
+}
+
+.sort-btn:hover {
+    background: rgba(100, 181, 246, 0.1);
+}
+
+.sort-btn.active {
+    background: var(--accent-color);
+    color: white;
+}
+
+#refreshHistoryBtn {
+    margin-left: 15px;
+}
+
 .vuln-list {
     max-height: 600px;
     overflow-y: auto;

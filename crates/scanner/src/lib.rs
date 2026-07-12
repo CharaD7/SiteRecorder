@@ -2832,11 +2832,7 @@ impl VulnerabilityScanner {
     async fn scan_cors_misconfig(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
-        let targets = if self.targets.is_empty() {
-            vec![self.config.url.clone()]
-        } else {
-            self.targets.clone()
-        };
+        let targets = vec![self.config.url.clone()];
 
         for url in &targets {
             let probe = self
@@ -2915,11 +2911,7 @@ impl VulnerabilityScanner {
     async fn scan_csp(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
-        let targets = if self.targets.is_empty() {
-            vec![self.config.url.clone()]
-        } else {
-            self.targets.clone()
-        };
+        let targets = vec![self.config.url.clone()];
 
         for url in &targets {
             if let Ok(resp) = self.client.get(url).send().await {
@@ -2988,11 +2980,7 @@ impl VulnerabilityScanner {
     async fn scan_subresource_integrity(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
-        let targets = if self.targets.is_empty() {
-            vec![self.config.url.clone()]
-        } else {
-            self.targets.clone()
-        };
+        let targets = vec![self.config.url.clone()];
         let script_sel = Selector::parse("script[src]").ok();
         let link_sel = Selector::parse("link[rel~=\"stylesheet\"][href]").ok();
 
@@ -3056,11 +3044,7 @@ impl VulnerabilityScanner {
     async fn scan_exposed_files(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
-        let targets = if self.targets.is_empty() {
-            vec![self.config.url.clone()]
-        } else {
-            self.targets.clone()
-        };
+        let targets = vec![self.config.url.clone()];
         let sensitive = [
             ("/.git/HEAD", "ref:", Severity::Critical),
             ("/.env", "APP_", Severity::Critical),
@@ -3128,11 +3112,7 @@ impl VulnerabilityScanner {
     async fn scan_directory_listing(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
-        let targets = if self.targets.is_empty() {
-            vec![self.config.url.clone()]
-        } else {
-            self.targets.clone()
-        };
+        let targets = vec![self.config.url.clone()];
         let dirs = ["/images/", "/css/", "/js/", "/uploads/", "/assets/", "/backup/", "/files/"];
 
         for url in &targets {
