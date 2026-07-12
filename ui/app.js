@@ -599,7 +599,8 @@ async function refreshScanHistory() {
 function renderScanHistory(scans) {
     const listEl = document.getElementById('scanHistoryList');
     const search = (document.getElementById('historySearch').value || '').toLowerCase();
-    const sort = document.getElementById('historySort').value;
+    const activeSort = document.querySelector('#historySort .sort-btn.active');
+    const sort = activeSort ? activeSort.dataset.sort : 'time';
 
     let items = scans.filter(s =>
         !search ||
@@ -989,7 +990,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const historySort = document.getElementById('historySort');
     if (refreshHistoryBtn) refreshHistoryBtn.addEventListener('click', refreshScanHistory);
     if (historySearch) historySearch.addEventListener('input', refreshScanHistory);
-    if (historySort) historySort.addEventListener('change', refreshScanHistory);
+    if (historySort) {
+        historySort.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                historySort.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                refreshScanHistory();
+            });
+        });
+    }
     refreshScanHistory();
     
     console.log('Event listeners attached');
