@@ -24,17 +24,18 @@ A cross-platform desktop application built in Rust that automates full-site trav
 - Navigation Simulation - Simulates real user behavior with back/forward navigation
 
 ### Security Scanner
-- **20-Point Vulnerability Scan** - Comprehensive security analysis of any website
-- **Active Probing** - XSS, SQLi, directory traversal, file inclusion, open redirect and exposed-file checks actively send payloads and verify real responses (no longer passive pattern matching)
+- **30-Point Vulnerability Scan** - Comprehensive security analysis of any website
+- **Active Probing** - XSS, SQLi, directory traversal, file inclusion, open redirect, SSTI, NoSQL, XXE, CRLF, time-based blind injection, and exposed-file checks actively send payloads and verify real responses (no longer passive pattern matching)
+- **Severity Levels** - Every finding is rated on five levels: **Critical**, **High**, **Medium**, **Low**, and **Info**, mapped onto pass/warn/vulnerable status with CWE references
 - **Multi-URL Crawling** - The scanner discovers pages from the seed URL (honoring `max_depth`/`max_pages`) and tests each discovered endpoint, not just the landing page
 - **Accurate TLS Verification** - Certificate validity is verified with a strict (non-lenient) client, so expired/self-signed/untrusted certs are correctly flagged
 - **Detailed Findings** - Each vulnerability includes severity, description, CWE references, and remediation steps
 - **Real-time Risk Scoring** - Weighted risk score from 0-10 based on severity distribution
-- **Scan History & Export** - Reports are saved to `<output_dir>/scans/`, listed in the GUI, and exportable as JSON or CSV; findings can be marked as false positives (persisted per scan)
+- **Scan History & Export** - Reports are saved to `<output_dir>/scans/`, listed in the GUI, and exportable as JSON or CSV; findings can be marked as false positives (persisted per scan), and individual scans can be rescanned or deleted
 - **GUI Integration** - Full vulnerability scanner tab in the desktop application
 - **CLI Support** - Run standalone scans with `site-recorder scan`, or attach a scan to a crawl via `--scan-url`
 
-#### Vulnerability Checks:
+#### Vulnerability Checks (30):
 1. **Security Headers Analysis** - X-Frame-Options, CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 2. **Cross-Site Scripting (XSS) Detection** - Reflected (active payload injection + unencoded reflection), DOM-based, and stored XSS pattern analysis
 3. **SQL Injection Detection** - Active payload injection with SQL error-signature matching, form analysis, URL parameter checks
@@ -55,6 +56,16 @@ A cross-platform desktop application built in Rust that automates full-site trav
 18. **Subresource Integrity** - External scripts/stylesheets loaded without `integrity`
 19. **Exposed Sensitive Files** - Probes `.git/HEAD`, `.env`, `phpinfo.php`, `server-status`, `backup.zip`, etc.
 20. **Directory Listing** - Detects enabled directory indexing on common paths
+21. **HTTP Request Smuggling** - CL/TE and TE.TE desync preconditions (lenient header parsing)
+22. **Web Cache Poisoning** - Unkeyed `X-Forwarded-Host`/`X-Host` reflection enabling cache poisoning
+23. **Server-Side Template Injection (SSTI)** - `{{7*7}}`/`${7*7}` style expression evaluation → RCE
+24. **NoSQL Operator Injection** - `$gt`/`$ne`/`$where` operator auth-bypass probing on JSON login endpoints
+25. **CRLF / HTTP Header Injection** - Carriage-return/line-feed injection into response headers
+26. **WebDAV / Verb Tampering** - PUT/DELETE method abuse enabling arbitrary file write
+27. **GraphQL Abuse** - Introspection disclosure and query-batching (DoS) abuse
+28. **XXE Injection** - XML external entity parsing / entity-resolution abuse
+29. **Host Header Injection** - `Host` header reflection enabling cache/reset poisoning
+30. **Time-based Blind Injection** - SQL/command injection detected via response-time delays
 
 ### Additional Features
 - **Proxy Support** - Route crawling through HTTP/SOCKS proxies
@@ -112,7 +123,7 @@ SiteRecorder/
 - Automatic video encoding and frame-to-video conversion
 
 #### Scanner Module (NEW)
-- 20-point vulnerability scanning engine (active probing)
+- 30-point vulnerability scanning engine (active probing)
 - Multi-URL discovery via crawler (honors max_depth/max_pages)
 - Asynchronous HTTP-based security checks
 - Detailed finding reports with CWE references
@@ -401,7 +412,7 @@ On Linux, SiteRecorder auto-detects the display server:
 
 #### Vulnerability Scanning
 - **Scan URL**: Target URL for security scanning
-- **15 automated checks**: Headers, XSS, SQLi, CSRF, and more
+- **30 automated security checks**: Headers, XSS, SQLi, CSRF, SSTI, NoSQL, XXE, CRLF, smuggling, and more
 - **Risk scoring**: Weighted severity calculation
 - **Detailed reports**: CWE references, remediation steps
 
@@ -490,7 +501,7 @@ recordings/
 - **Screen Size**: Configurable screen dimensions (default: 1920x1080)
 
 ### Scanner Settings
-- **15 automated security checks**
+- **30 automated security checks**
 - **Risk score calculation** (0-10 scale)
 - **Severity levels**: Critical, High, Medium, Low, Info
 - **CWE references** for each finding
@@ -662,7 +673,7 @@ sudo usermod -a -G video $USER
 - [x] Proxy support
 - [x] PDF export
 - [x] Resume interrupted sessions
-- [x] Vulnerability scanner (20-point active security scan with history/export)
+- [x] Vulnerability scanner (30-point active security scan with history/rescan/export)
 - [x] Custom login script support
 - [x] Multi-threaded crawling
 - [x] Region-specific screen recording (select area)
