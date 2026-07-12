@@ -46,13 +46,6 @@ impl DaemonManager {
         self.should_stop.load(Ordering::SeqCst)
     }
 
-    /// Wait for shutdown signal
-    pub fn wait_for_shutdown(&self) {
-        while !self.should_stop() {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-    }
-
     /// Clean up daemon resources
     pub fn cleanup(&self) {
         info!("Cleaning up daemon resources");
