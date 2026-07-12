@@ -27,6 +27,7 @@ pub struct CrawlConfig {
     pub ignore_query_params: bool,
     pub proxy_url: Option<String>,
     pub sitemap_url: Option<String>,
+    pub concurrency: usize,
 }
 
 impl CrawlConfig {
@@ -42,6 +43,7 @@ impl CrawlConfig {
             ignore_query_params: false,
             proxy_url: None,
             sitemap_url: None,
+            concurrency: 1,
         })
     }
 
@@ -54,12 +56,18 @@ impl CrawlConfig {
         self.sitemap_url = Some(sitemap_url.to_string());
         self
     }
+
+    pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+        self.concurrency = concurrency.max(1);
+        self
+    }
 }
 
 pub struct Crawler {
     config: CrawlConfig,
     visited: HashSet<String>,
     discovered: IndexSet<String>,
+    prefetched: HashSet<String>,
     client: reqwest::Client,
 }
 
@@ -84,6 +92,7 @@ impl Crawler {
             config,
             visited: HashSet::new(),
             discovered,
+            prefetched: HashSet::new(),
             client,
         }
     }
@@ -204,6 +213,36 @@ impl Crawler {
 
     pub fn get_remaining_count(&self) -> usize {
         self.discovered.len() - self.visited.len()
+    }
+
+    /// Returns the next discovered URL that has neither been visited (recorded)
+    /// nor prefetched yet, marking it as prefetched. Used by concurrent
+    /// prefetch workers to expand the crawl frontier in parallel.
+    pub fn next_prefetch_url(&mut self) -> Option<String> {
+        for url in &self.discovered {
+            if !self.visited.contains(url) && !self.prefetched.contains(url) {
+                let next = url.clone();
+                self.prefetched.insert(next.clone());
+                return Some(next);
+            }
+        }
+        None
+    }
+
+    /// Fetch a URL via HTTP and extract its links without mutating crawl state.
+    /// Safe to call concurrently from multiple tasks.
+    pub async fn prefetch_links(&self, url: &str) -> Vec<String> {
+        match self.fetch_page(url).await {
+            Ok(body) => match self.extract_links_from_html(&body, url) {
+                Ok(links) => links,
+                Err(_) => Vec::new(),
+            },
+            Err(_) => Vec::new(),
+        }
+    }
+
+    pub fn get_concurrency(&self) -> usize {
+        self.config.concurrency
     }
 
     pub fn get_all_discovered(&self) -> Vec<String> {

@@ -9,6 +9,7 @@ let requiresAuthCheckbox, authFields, authUrl, username, password;
 let usernameSelector, passwordSelector, submitSelector;
 let loginScriptFile, loginScript;
 let recordingModeSelect, enableAudioCheckbox, screenWidthInput, screenHeightInput;
+let concurrencyInput;
 
 let statusInterval = null;
 let scanInterval = null;
@@ -81,6 +82,7 @@ async function startRecording() {
         enable_audio: enableAudioCheckbox.checked,
         screen_width: parseInt(screenWidthInput.value),
         screen_height: parseInt(screenHeightInput.value),
+        concurrency: parseInt(concurrencyInput.value) || 1,
         proxy: null,
         sitemap: null,
         scan_url: null
@@ -501,6 +503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     enableAudioCheckbox = document.getElementById('enableAudio');
     screenWidthInput = document.getElementById('screenWidth');
     screenHeightInput = document.getElementById('screenHeight');
+    concurrencyInput = document.getElementById('concurrency');
     
     console.log('DOM elements initialized');
     

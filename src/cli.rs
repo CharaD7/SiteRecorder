@@ -43,6 +43,7 @@ pub struct CrawlArgs {
     pub proxy: Option<String>,
     pub scan_url: Option<String>,
     pub login_script: Option<String>,
+    pub concurrency: usize,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -135,6 +136,10 @@ pub enum Commands {
         /// Path to a custom login script (JavaScript) executed in the page context
         #[arg(long)]
         login_script: Option<String>,
+
+        /// Number of concurrent crawl workers for parallel link discovery
+        #[arg(short = 'j', long, default_value = "1")]
+        concurrency: usize,
     },
     
     /// Resume an interrupted session
@@ -178,6 +183,7 @@ impl Commands {
                 proxy,
                 scan_url,
                 login_script,
+                concurrency,
             } => {
                 let login_script = login_script
                     .map(|path| {
@@ -206,6 +212,7 @@ impl Commands {
                     proxy,
                     scan_url,
                     login_script,
+                    concurrency,
                 }
             }
             _ => panic!("into_crawl_args called on non-Crawl command"),

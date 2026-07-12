@@ -51,6 +51,7 @@ struct RecordingSettings {
     sitemap: Option<String>,
     scan_url: Option<String>,
     login_script: Option<String>,
+    concurrency: Option<usize>,
 }
 
 impl RecordingSettings {
@@ -86,6 +87,7 @@ impl RecordingSettings {
             sitemap: args.sitemap,
             scan_url: args.scan_url,
             login_script: args.login_script,
+            concurrency: Some(args.concurrency),
         }
     }
 }
@@ -228,13 +230,47 @@ async fn run_recording(
     } else {
         crawl_config
     };
-    let mut crawler = Crawler::new(crawl_config);
+    let crawl_config = crawl_config.with_concurrency(settings.concurrency.unwrap_or(1));
+    let crawler = Arc::new(Mutex::new(Crawler::new(crawl_config)));
 
     // Ingest sitemap if provided
     if settings.sitemap.is_some() {
-        if let Ok(count) = crawler.ingest_sitemap().await {
+        if let Ok(count) = crawler.lock().await.ingest_sitemap().await {
             info!("Ingested {} URLs from sitemap", count);
         }
+    }
+
+    // Spawn concurrent prefetch workers to expand the crawl frontier in parallel
+    let concurrency = settings.concurrency.unwrap_or(1).max(1);
+    let prefetch_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let mut worker_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+    if concurrency > 1 {
+        for _ in 0..concurrency {
+            let crawler_clone = crawler.clone();
+            let active = prefetch_active.clone();
+            let status_clone = status.clone();
+            worker_handles.push(tokio::spawn(async move {
+                loop {
+                    if !status_clone.lock().await.is_running {
+                        break;
+                    }
+                    let url = { crawler_clone.lock().await.next_prefetch_url() };
+                    match url {
+                        Some(u) => {
+                            let links = crawler_clone.lock().await.prefetch_links(&u).await;
+                            crawler_clone.lock().await.add_discovered_links(links);
+                        }
+                        None => {
+                            if !active.load(std::sync::atomic::Ordering::SeqCst) {
+                                break;
+                            }
+                            sleep(Duration::from_millis(150)).await;
+                        }
+                    }
+                }
+            }));
+        }
+        info!("Started {} concurrent crawl workers", concurrency);
     }
 
     // Parse recording mode from settings
@@ -347,7 +383,7 @@ async fn run_recording(
     let mut recording_data = Vec::new();
 
     // Main crawling loop
-    while let Some(url) = crawler.get_next_url() {
+    while let Some(url) = crawler.lock().await.get_next_url() {
         // Check if stopped
         {
             let status_guard = status.lock().await;
@@ -391,12 +427,12 @@ async fn run_recording(
 
                 // Extract links
                 if let Ok(content) = browser.get_page_content(&tab) {
-                    if let Ok(links) = crawler.extract_links_from_html(&content, &url) {
+                    if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url) {
                         info!("Found {} links on page", links.len());
-                        crawler.add_discovered_links(links);
+                        crawler.lock().await.add_discovered_links(links);
 
                         let mut status_guard = status.lock().await;
-                        status_guard.pages_discovered = crawler.get_discovered_count();
+                        status_guard.pages_discovered = crawler.lock().await.get_discovered_count();
                     }
                 }
 
@@ -406,6 +442,12 @@ async fn run_recording(
                 warn!("Failed to navigate to {}: {}", url, e);
             }
         }
+    }
+
+    // Stop prefetch workers and wait for them
+    prefetch_active.store(false, std::sync::atomic::Ordering::SeqCst);
+    for handle in worker_handles {
+        let _ = handle.await;
     }
 
     let pages_visited = status.lock().await.pages_visited;
@@ -859,13 +901,43 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     } else {
         crawl_config
     };
-    let mut crawler = Crawler::new(crawl_config);
+    let crawl_config = crawl_config.with_concurrency(settings.concurrency.unwrap_or(1));
+    let crawler = Arc::new(Mutex::new(Crawler::new(crawl_config)));
 
     // Ingest sitemap if provided
     if settings.sitemap.is_some() {
-        if let Ok(count) = crawler.ingest_sitemap().await {
+        if let Ok(count) = crawler.lock().await.ingest_sitemap().await {
             info!("Ingested {} URLs from sitemap", count);
         }
+    }
+
+    // Spawn concurrent prefetch workers
+    let concurrency = settings.concurrency.unwrap_or(1).max(1);
+    let prefetch_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let mut worker_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+    if concurrency > 1 {
+        for _ in 0..concurrency {
+            let crawler_clone = crawler.clone();
+            let active = prefetch_active.clone();
+            worker_handles.push(tokio::spawn(async move {
+                loop {
+                    let url = { crawler_clone.lock().await.next_prefetch_url() };
+                    match url {
+                        Some(u) => {
+                            let links = crawler_clone.lock().await.prefetch_links(&u).await;
+                            crawler_clone.lock().await.add_discovered_links(links);
+                        }
+                        None => {
+                            if !active.load(std::sync::atomic::Ordering::SeqCst) {
+                                break;
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+                        }
+                    }
+                }
+            }));
+        }
+        info!("Started {} concurrent crawl workers", concurrency);
     }
 
     info!("Configuring recorder...");
@@ -946,7 +1018,7 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
             }
         }
         
-        if let Some(url) = crawler.get_next_url() {
+        if let Some(url) = crawler.lock().await.get_next_url() {
             progress.set_message(format!("Crawling: {}", url));
             info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
             
@@ -954,13 +1026,13 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
                 Ok(_) => {
                     // Get page content and discover links
                     if let Ok(content) = browser.get_page_content(&tab) {
-                        if let Ok(links) = crawler.extract_links_from_html(&content, &url) {
+                        if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url) {
                             info!("  Found {} links", links.len());
-                            crawler.add_discovered_links(links);
+                            crawler.lock().await.add_discovered_links(links);
                         }
                     }
                     
-                    crawler.mark_visited(&url);
+                    crawler.lock().await.mark_visited(&url);
                     pages_visited += 1;
                     progress.inc();
                     
@@ -969,7 +1041,7 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
                 }
                 Err(e) => {
                     warn!("  Failed to navigate: {}", e);
-                    crawler.mark_visited(&url);
+                    crawler.lock().await.mark_visited(&url);
                 }
             }
         } else {
@@ -978,6 +1050,11 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
         }
     }
     
+    prefetch_active.store(false, std::sync::atomic::Ordering::SeqCst);
+    for handle in worker_handles {
+        let _ = handle.await;
+    }
+
     progress.finish();
     
     info!("Stopping recording...");

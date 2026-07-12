@@ -118,6 +118,20 @@
                     </div>
                 </div>
 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="concurrency">Crawl Workers</label>
+                        <input 
+                            type="number" 
+                            id="concurrency" 
+                            value="1"
+                            min="1"
+                            max="32"
+                        />
+                        <small class="field-hint">Concurrent workers for parallel link discovery (&gt;1 speeds up crawling)</small>
+                    </div>
+                </div>
+
                 <div class="form-group checkbox-group">
                     <label>
                         <input type="checkbox" id="enableAudio" />
