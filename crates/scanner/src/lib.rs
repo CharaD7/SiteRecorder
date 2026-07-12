@@ -301,6 +301,16 @@ impl VulnerabilityScanner {
         results.push(self.scan_subresource_integrity().await);
         results.push(self.scan_exposed_files().await);
         results.push(self.scan_directory_listing().await);
+        results.push(self.scan_http_smuggling().await);
+        results.push(self.scan_cache_poisoning().await);
+        results.push(self.scan_ssti().await);
+        results.push(self.scan_nosql_injection().await);
+        results.push(self.scan_crlf_injection().await);
+        results.push(self.scan_webdav_verbs().await);
+        results.push(self.scan_graphql().await);
+        results.push(self.scan_xxe().await);
+        results.push(self.scan_host_header_injection().await);
+        results.push(self.scan_time_based_injection().await);
 
         let summary = self.calculate_summary(&results);
 
@@ -3160,6 +3170,808 @@ impl VulnerabilityScanner {
             check_name: "Directory Listing".to_string(),
             status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
             severity: if has_vuln { Severity::High } else { Severity::Info },
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // ---- Helpers for advanced active probes ----
+
+    /// Resolve the overall check outcome from its findings.
+    fn resolve_outcome(findings: &[VulnerabilityFinding]) -> (ScanStatus, Severity) {
+        let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
+        let has_warn = findings.iter().any(|f| f.status == ScanStatus::Warning);
+        let status = if has_vuln {
+            ScanStatus::Vulnerable
+        } else if has_warn {
+            ScanStatus::Warning
+        } else {
+            ScanStatus::NotVulnerable
+        };
+        let severity = if has_vuln {
+            Severity::Critical
+        } else if has_warn {
+            Severity::High
+        } else {
+            Severity::Info
+        };
+        (status, severity)
+    }
+
+    /// Send an arbitrary HTTP request (method/headers/body) and return
+    /// (status, headers, body) if it completed.
+    async fn send_custom(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        headers: Vec<(&str, &str)>,
+        body: Option<String>,
+    ) -> Option<(reqwest::StatusCode, reqwest::header::HeaderMap, String)> {
+        let mut hm = reqwest::header::HeaderMap::new();
+        for (k, v) in &headers {
+            if let (Ok(n), Ok(val)) = (
+                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                reqwest::header::HeaderValue::from_str(v),
+            ) {
+                hm.append(n, val);
+            }
+        }
+        let mut builder = self.client.request(method, url).headers(hm);
+        if let Some(b) = body {
+            builder = builder.body(b);
+        }
+        match builder.send().await {
+            Ok(r) => {
+                let status = r.status();
+                let h = r.headers().clone();
+                let b = r.text().await.unwrap_or_default();
+                Some((status, h, b))
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// Append a query parameter (preserving existing ones) and return the new URL.
+    fn inject_param(url: &str, param: &str, value: &str) -> Option<String> {
+        let base = Url::parse(url).ok()?;
+        let mut test = base;
+        {
+            let mut q = test.query_pairs_mut();
+            q.append_pair(param, value);
+        }
+        Some(test.to_string())
+    }
+
+    // CHECK 21: HTTP Request Smuggling (CL/TE, TE.TE)
+    async fn scan_http_smuggling(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+
+        // CL/TE ambiguity: a strict parser rejects a request carrying both.
+        if let Some((status, _, _)) = self
+            .send_custom(
+                reqwest::Method::POST,
+                &url,
+                vec![("Content-Length", "0"), ("Transfer-Encoding", "chunked")],
+                Some("0\r\n\r\n".to_string()),
+            )
+            .await
+        {
+            if status.is_success() {
+                findings.push(VulnerabilityFinding {
+                    title: "Potential HTTP Request Smuggling (CL/TE ambiguity)".to_string(),
+                    severity: Severity::High,
+                    status: ScanStatus::Warning,
+                    description: "The server accepted a request with both Content-Length and Transfer-Encoding headers plus a chunked body. This is a precondition for HTTP request smuggling (CL/TE or TE.TE desync) when the host sits behind a proxy/CDN.".to_string(),
+                    details: vec![format!("Status: {}", status)],
+                    remediation: "Reject requests carrying both Content-Length and Transfer-Encoding; normalize headers upstream and ensure front-end/back-end agree on message boundaries.".to_string(),
+                    cwe_id: Some("CWE-444".to_string()),
+                    references: vec!["https://portswigger.net/web-security/request-smuggling".to_string()],
+                });
+            }
+        }
+
+        // TE.TE obfuscation: two conflicting Transfer-Encoding headers.
+        if let Some((status, _, _)) = self
+            .send_custom(
+                reqwest::Method::POST,
+                &url,
+                vec![("Transfer-Encoding", "chunked"), ("Transfer-Encoding", "xchunked")],
+                Some("0\r\n\r\n".to_string()),
+            )
+            .await
+        {
+            if status.is_success() {
+                findings.push(VulnerabilityFinding {
+                    title: "Potential HTTP Request Smuggling (TE.TE obfuscation)".to_string(),
+                    severity: Severity::High,
+                    status: ScanStatus::Warning,
+                    description: "The server accepted two conflicting Transfer-Encoding headers (TE.TE), which can desynchronize front-end/back-end parsing and enable request smuggling.".to_string(),
+                    details: vec![format!("Status: {}", status)],
+                    remediation: "Strip or normalize duplicate/obfuscated Transfer-Encoding headers.".to_string(),
+                    cwe_id: Some("CWE-444".to_string()),
+                    references: vec!["https://portswigger.net/web-security/request-smuggling".to_string()],
+                });
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No CL/TE Smuggling Precondition Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "Ambiguous Content-Length/Transfer-Encoding requests were rejected as expected.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "HTTP Request Smuggling".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 22: Web Cache Poisoning (unkeyed input reflection)
+    async fn scan_cache_poisoning(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+
+        if let Some((_, _, b)) = self
+            .send_custom(
+                reqwest::Method::GET,
+                &url,
+                vec![
+                    ("X-Forwarded-Host", "evil-cache-poison.example"),
+                    ("X-Host", "evil-cache-poison.example"),
+                ],
+                None,
+            )
+            .await
+        {
+            if b.contains("evil-cache-poison.example") {
+                findings.push(VulnerabilityFinding {
+                    title: "Web Cache Poisoning (unkeyed input reflected)".to_string(),
+                    severity: Severity::High,
+                    status: ScanStatus::Warning,
+                    description: "An unkeyed header (X-Forwarded-Host/X-Host) is reflected into the response. If responses are cached, an attacker can poison the cache served to other users (stored XSS, defacement, redirect).".to_string(),
+                    details: vec!["Reflected value: evil-cache-poison.example".to_string()],
+                    remediation: "Do not reflect unkeyed headers, or include them in the cache key; never build absolute URLs from X-Forwarded-Host.".to_string(),
+                    cwe_id: Some("CWE-444".to_string()),
+                    references: vec!["https://portswigger.net/web-security/web-cache-poisoning".to_string()],
+                });
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Cache Poisoning Vector Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "Unkeyed header reflection was not observed.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "Web Cache Poisoning".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 23: Server-Side Template Injection (SSTI)
+    async fn scan_ssti(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+        let baseline = self.fetch_page_content(&url).await.unwrap_or_default();
+        let payloads = [
+            "{{7*7}}",
+            "${{7*7}}",
+            "<%= 7*7 %>",
+            "#{7*7}",
+            "%{{7*7}}",
+            "${7*7}",
+        ];
+
+        let mut points: Vec<String> = Vec::new();
+        if let Ok(base) = Url::parse(&url) {
+            let params = Self::url_params(&base);
+            if params.is_empty() {
+                points.push("q".to_string());
+            } else {
+                points = params.into_iter().map(|(k, _)| k).collect();
+            }
+        }
+
+        'outer: for p in &points {
+            for payload in payloads {
+                if let Some(test) = Self::inject_param(&url, p, payload) {
+                    if let Ok(b) = self.fetch_page_content(&test).await {
+                        if b.contains("49") && !baseline.contains("49") {
+                            findings.push(VulnerabilityFinding {
+                                title: "Server-Side Template Injection (SSTI)".to_string(),
+                                severity: Severity::Critical,
+                                status: ScanStatus::Vulnerable,
+                                description: format!("Template expression '{}' was evaluated server-side (result '49' reflected), indicating SSTI that can lead to remote code execution.", payload),
+                                details: vec![format!("Param: {}", p), format!("Payload: {}", payload)],
+                                remediation: "Never pass user input to template parsers/eval; use sandboxed rendering contexts and strict allow-lists.".to_string(),
+                                cwe_id: Some("CWE-94".to_string()),
+                                references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing_for_Server-side_Template_Injection".to_string()],
+                            });
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No SSTI Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "Template expressions were not evaluated in reflected responses.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "Server-Side Template Injection".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 24: NoSQL Operator Injection
+    async fn scan_nosql_injection(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+        let endpoints = ["/login", "/api/login", "/signin", "/auth", ""];
+
+        let payloads = [
+            r#"{"username":{"$gt":""},"password":{"$gt":""}}"#,
+            r#"{"username":{"$ne":""},"password":{"$ne":""}}"#,
+            r#"{"$where":"1==1"}"#,
+        ];
+
+        'outer: for ep in endpoints {
+            if let Ok(base) = Url::parse(&url) {
+                if let Ok(test) = base.join(ep) {
+                    let t = test.to_string();
+                    let before = self.fetch_page_content(&t).await.unwrap_or_default();
+                    let before_l = before.to_lowercase();
+                    for pl in payloads {
+                        if let Some((_, _, b)) = self
+                            .send_custom(
+                                reqwest::Method::POST,
+                                &t,
+                                vec![("Content-Type", "application/json")],
+                                Some(pl.to_string()),
+                            )
+                            .await
+                        {
+                            let bl = b.to_lowercase();
+                            if bl != before_l
+                                && (bl.contains("token")
+                                    || bl.contains("\"success\"")
+                                    || bl.contains("logged")
+                                    || bl.contains("welcome")
+                                    || bl.contains("authenticated"))
+                            {
+                                findings.push(VulnerabilityFinding {
+                                    title: "Potential NoSQL Injection (operator/auth bypass)".to_string(),
+                                    severity: Severity::High,
+                                    status: ScanStatus::Warning,
+                                    description: "A NoSQL operator payload produced a response that differs from the baseline and suggests successful authentication/state change (e.g., token or success indicator), a classic operator-injection auth bypass.".to_string(),
+                                    details: vec![format!("Endpoint: {}", t), format!("Payload: {}", pl)],
+                                    remediation: "Use strict schema validation and typed queries; reject operators ($gt, $ne, $where) in user-supplied JSON; prefer parameterized queries.".to_string(),
+                                    cwe_id: Some("CWE-943".to_string()),
+                                    references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".to_string()],
+                                });
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No NoSQL Injection Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "NoSQL operator/auth-bypass behavior was not observed on probed endpoints.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "NoSQL Injection".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 25: CRLF / HTTP Header Injection
+    async fn scan_crlf_injection(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+
+        let mut points: Vec<String> = Vec::new();
+        if let Ok(base) = Url::parse(&url) {
+            let params = Self::url_params(&base);
+            if params.is_empty() {
+                points.push("q".to_string());
+            } else {
+                points = params.into_iter().map(|(k, _)| k).collect();
+            }
+        }
+
+        'outer: for p in &points {
+            let sep = if url.contains('?') { "&" } else { "?" };
+            let test = format!("{}{}{}=%0d%0aX-Injected-Header:%20smuggled", url, sep, p);
+            if let Ok(resp) = self.client.get(&test).send().await {
+                if resp.headers().get("x-injected-header").is_some() {
+                    findings.push(VulnerabilityFinding {
+                        title: "CRLF / HTTP Header Injection".to_string(),
+                        severity: Severity::High,
+                        status: ScanStatus::Vulnerable,
+                        description: "A CRLF sequence in a parameter was reflected into response headers, enabling header injection, response splitting, and cache/XSS poisoning.".to_string(),
+                        details: vec![format!("Param: {}", p)],
+                        remediation: "Reject CRLF in user input; use framework APIs that encode headers; validate/normalize parameters.".to_string(),
+                        cwe_id: Some("CWE-93".to_string()),
+                        references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/13-Testing_for_HTTP_Response_Splitting".to_string()],
+                    });
+                    break 'outer;
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No CRLF Injection Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "CRLF sequences in parameters were not reflected into response headers.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "CRLF / Header Injection".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 26: WebDAV / PUT-DELETE Verb Tampering (arbitrary file write)
+    async fn scan_webdav_verbs(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+
+        let allow = if let Some((_, h, _)) = self
+            .send_custom(reqwest::Method::OPTIONS, &url, vec![], None)
+            .await
+        {
+            h.get(reqwest::header::ALLOW)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_string()
+        } else {
+            String::new()
+        };
+        let allow_u = allow.to_uppercase();
+
+        if allow_u.contains("PUT") || allow_u.contains("DELETE") {
+            let fname = format!("scanner_probe_{}.txt", chrono::Utc::now().format("%s"));
+            if let Ok(base) = Url::parse(&url) {
+                if let Ok(u) = base.join(&format!("/{}", fname)) {
+                    let put_url = u.to_string();
+                    if let Some((s, _, _)) = self
+                        .send_custom(
+                            reqwest::Method::PUT,
+                            &put_url,
+                            vec![("Content-Type", "text/plain")],
+                            Some("site-recorder security probe".to_string()),
+                        )
+                        .await
+                    {
+                        if (200..=299).contains(&s.as_u16()) {
+                            findings.push(VulnerabilityFinding {
+                                title: "WebDAV Write Access (PUT enabled)".to_string(),
+                                severity: Severity::High,
+                                status: ScanStatus::Vulnerable,
+                                description: "The server allows PUT to arbitrary paths, enabling attackers to upload files (webshells, defacement) and potentially achieve remote code execution.".to_string(),
+                                details: vec![format!("Writable URL: {}", put_url)],
+                                remediation: "Disable WebDAV/PUT/DELETE unless required; enforce authentication and strict path allow-lists.".to_string(),
+                                cwe_id: Some("CWE-650".to_string()),
+                                references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-Web_Services_Testing/10-Testing_for_Arbitrary_File_Upload".to_string()],
+                            });
+                        }
+                        // Best-effort cleanup of our probe file.
+                        let _ = self
+                            .send_custom(reqwest::Method::DELETE, &put_url, vec![], None)
+                            .await;
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Dangerous HTTP Verbs Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "PUT/DELETE methods were not found enabled on the target.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "WebDAV / Verb Tampering".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 27: GraphQL Introspection & Batching Abuse
+    async fn scan_graphql(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+        let paths = ["/graphql", "/api/graphql", "/graphql/v1", "/api"];
+
+        let mut candidates = vec![url.clone()];
+        if let Ok(base) = Url::parse(&url) {
+            for p in &paths {
+                if let Ok(u) = base.join(p) {
+                    candidates.push(u.to_string());
+                }
+            }
+        }
+
+        let intro = r#"{"query":"{__schema{types{name}}}"}"#;
+        let batch = r#"[{"query":"{__typename}"},{"query":"{__typename}"}]"#;
+
+        'outer: for c in &candidates {
+            if let Some((s, _, b)) = self
+                .send_custom(
+                    reqwest::Method::POST,
+                    c,
+                    vec![("Content-Type", "application/json")],
+                    Some(intro.to_string()),
+                )
+                .await
+            {
+                if s.is_success()
+                    && (b.contains("__schema")
+                        || b.contains("\"types\"")
+                        || b.contains("QueryType")
+                        || b.contains("\"name\""))
+                {
+                    findings.push(VulnerabilityFinding {
+                        title: "GraphQL Introspection Enabled".to_string(),
+                        severity: Severity::Medium,
+                        status: ScanStatus::Warning,
+                        description: "GraphQL introspection is enabled, exposing the full schema (types, fields, queries) to attackers and dramatically aiding exploitation.".to_string(),
+                        details: vec![format!("Endpoint: {}", c)],
+                        remediation: "Disable introspection in production; use a schema allow-list and depth/complexity limits.".to_string(),
+                        cwe_id: Some("CWE-200".to_string()),
+                        references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-Web_Services_Testing/04-Testing_GraphQL".to_string()],
+                    });
+
+                    if let Some((bs, _, bb)) = self
+                        .send_custom(
+                            reqwest::Method::POST,
+                            c,
+                            vec![("Content-Type", "application/json")],
+                            Some(batch.to_string()),
+                        )
+                        .await
+                    {
+                        if bs.is_success() && bb.contains("__typename") {
+                            findings.push(VulnerabilityFinding {
+                                title: "GraphQL Query Batching Enabled (DoS abuse)".to_string(),
+                                severity: Severity::Medium,
+                                status: ScanStatus::Warning,
+                                description: "The endpoint accepts batched queries, which can be abused for brute-force and denial-of-service (costly nested/alias queries).".to_string(),
+                                details: vec![format!("Endpoint: {}", c)],
+                                remediation: "Disable or rate-limit query batching; enforce depth and complexity limits.".to_string(),
+                                cwe_id: Some("CWE-770".to_string()),
+                                references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-Web_Services_Testing/04-Testing_GraphQL".to_string()],
+                            });
+                        }
+                    }
+                    break 'outer;
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Exposed GraphQL Endpoint Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "No GraphQL introspection/batching surface was found on probed paths.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "GraphQL Abuse".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 28: XML External Entity (XXE) Injection
+    async fn scan_xxe(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+        let endpoints = ["", "/api", "/xml", "/upload"];
+
+        let mut candidates = vec![url.clone()];
+        if let Ok(base) = Url::parse(&url) {
+            for e in &endpoints {
+                if let Ok(u) = base.join(e) {
+                    candidates.push(u.to_string());
+                }
+            }
+        }
+
+        let payload =
+            "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe \"XXEMARKER123\">]><foo>&xxe;</foo>"
+                .to_string();
+
+        'outer: for c in &candidates {
+            if let Some((_, _, b)) = self
+                .send_custom(
+                    reqwest::Method::POST,
+                    c,
+                    vec![("Content-Type", "application/xml")],
+                    Some(payload.clone()),
+                )
+                .await
+            {
+                let bl = b.to_lowercase();
+                if b.contains("XXEMARKER123") {
+                    findings.push(VulnerabilityFinding {
+                        title: "XML External Entity (XXE) Injection".to_string(),
+                        severity: Severity::Critical,
+                        status: ScanStatus::Vulnerable,
+                        description: "An externally defined XML entity was parsed and reflected, confirming XXE. This can be leveraged for local file read, SSRF, and (in rare cases) RCE.".to_string(),
+                        details: vec![format!("Endpoint: {}", c)],
+                        remediation: "Disable external entity/DTD processing in the XML parser; use a safe parser configuration and validate input.".to_string(),
+                        cwe_id: Some("CWE-611".to_string()),
+                        references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/xxe".to_string()],
+                    });
+                    break 'outer;
+                } else if bl.contains("entity") || bl.contains("dtd") || bl.contains("xml parsing error") {
+                    findings.push(VulnerabilityFinding {
+                        title: "XML Parsing Attack Surface (XXE possible)".to_string(),
+                        severity: Severity::Medium,
+                        status: ScanStatus::Warning,
+                        description: "The endpoint parses XML and produced a parser/DTD/entity error, indicating XXE attack surface worth hardening.".to_string(),
+                        details: vec![format!("Endpoint: {}", c)],
+                        remediation: "Disable external entity/DTD processing; reject DOCTYPE in untrusted XML.".to_string(),
+                        cwe_id: Some("CWE-611".to_string()),
+                        references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/xxe".to_string()],
+                    });
+                    break 'outer;
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No XXE Surface Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "XML external entity parsing was not observed on probed endpoints.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "XXE Injection".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 29: Host Header Injection (cache/reset poisoning)
+    async fn scan_host_header_injection(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+
+        if let Some((_, _, b)) = self
+            .send_custom(
+                reqwest::Method::GET,
+                &url,
+                vec![("Host", "evil-host-poison.example")],
+                None,
+            )
+            .await
+        {
+            if b.contains("evil-host-poison.example") {
+                findings.push(VulnerabilityFinding {
+                    title: "Host Header Injection".to_string(),
+                    severity: Severity::High,
+                    status: ScanStatus::Vulnerable,
+                    description: "The injected Host header is reflected into the response, enabling web cache poisoning and password-reset poisoning (links/emails pointing to an attacker domain).".to_string(),
+                    details: vec!["Reflected value: evil-host-poison.example".to_string()],
+                    remediation: "Validate the Host header against a strict allow-list; do not generate absolute URLs from client-supplied Host.".to_string(),
+                    cwe_id: Some("CWE-644".to_string()),
+                    references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/16-Testing_for_Host_Header_Injection".to_string()],
+                });
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Host Header Injection Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "The Host header is not reflected into responses.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "Host Header Injection".to_string(),
+            status,
+            severity,
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // CHECK 30: Time-based Blind Injection (SQL/command)
+    async fn scan_time_based_injection(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let url = self.config.url.clone();
+
+        let mut points: Vec<String> = Vec::new();
+        if let Ok(base) = Url::parse(&url) {
+            let params = Self::url_params(&base);
+            if params.is_empty() {
+                points.push("q".to_string());
+            } else {
+                points = params.into_iter().map(|(k, _)| k).collect();
+            }
+        }
+
+        let payloads = [
+            "SLEEP(5)",
+            "pg_sleep(5)",
+            "WAITFOR DELAY '0:0:5'",
+            "' OR SLEEP(5)--",
+            "1 AND SLEEP(5)",
+        ];
+
+        'outer: for p in &points {
+            let baseline = if let Some(t) = Self::inject_param(&url, p, "baseline") {
+                t
+            } else {
+                url.clone()
+            };
+            let t0 = std::time::Instant::now();
+            let _ = self.fetch_page_content(&baseline).await;
+            let base_ms = t0.elapsed().as_millis();
+
+            for pl in payloads {
+                if let Some(test) = Self::inject_param(&url, p, pl) {
+                    let t0 = std::time::Instant::now();
+                    let _ = self.fetch_page_content(&test).await;
+                    let dt = t0.elapsed().as_millis();
+                    if dt.saturating_sub(base_ms) as u64 > 3500 {
+                        findings.push(VulnerabilityFinding {
+                            title: "Time-based Blind Injection".to_string(),
+                            severity: Severity::High,
+                            status: ScanStatus::Vulnerable,
+                            description: format!("A time-delay payload ('{}') caused a ~{}ms response delay versus a {}ms baseline, indicating time-based blind SQL/command injection.", pl, dt, base_ms),
+                            details: vec![format!("Param: {}", p), format!("Payload: {}", pl)],
+                            remediation: "Use parameterized/parameterized queries and avoid concatenating user input into SQL or shell commands; add query timeouts.".to_string(),
+                            cwe_id: Some("CWE-89".to_string()),
+                            references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection".to_string()],
+                        });
+                        break 'outer;
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Time-based Blind Injection Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "No significant response delays were induced by time-delay payloads.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let (status, severity) = Self::resolve_outcome(&findings);
+        ScanResult {
+            check_name: "Time-based Blind Injection".to_string(),
+            status,
+            severity,
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
