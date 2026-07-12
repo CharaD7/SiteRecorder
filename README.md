@@ -246,6 +246,21 @@ site-recorder crawl https://example.com \
   --scan-url https://example.com \
   --headless
 
+# Crawl with a custom login script (JavaScript executed in page context)
+site-recorder crawl https://app.example.com \
+  --auth-url https://app.example.com/login \
+  --username admin@example.com \
+  --password secret \
+  --login-script ./login.js \
+  --headless
+
+# Crawl with parallel link discovery (4 concurrent workers)
+site-recorder crawl https://example.com -j 4 --headless
+
+# Screen recording of a specific region (WxH+X+Y)
+site-recorder crawl https://example.com \
+  -m screen --region 1280x720+100+50
+
 # Run as daemon with logging
 site-recorder crawl https://example.com \
   --daemon \
@@ -324,11 +339,18 @@ WantedBy=multi-user.target
 - **Quality**: Video quality 0-100 (default: 80)
 - **Audio**: Enable/disable audio recording (default: false)
 - **Screen Size**: Resolution for screen capture (default: 1920x1080)
+- **Region**: Capture only a sub-area of the screen as `WxH+X+Y`
+  (e.g. `1280x720+100+50`). On Linux/X11 this uses native
+  `x11grab` offset capture; on macOS/Windows and Wayland a crop
+  filter is applied. Browser-screenshot mode is unaffected.
 
 #### Crawl Settings
 - **Max Pages**: Limit number of pages to visit (default: 50)
 - **Delay**: Milliseconds between page visits (default: 2000)
 - **Headless**: Run browser without UI (default: false)
+- **Concurrency**: Number of parallel link-discovery workers (`-j`, default: 1).
+  Workers fetch and parse pages over HTTP concurrently to expand the
+  crawl frontier faster. The actual recording stays sequential (one tab).
 - **Output Dir**: Where to save recordings
 - **Proxy**: HTTP/SOCKS proxy URL for anonymous crawling
 - **Sitemap**: URL to sitemap.xml for URL discovery
@@ -339,6 +361,18 @@ For login-protected sites:
 - Provide login URL, username, and password
 - Auto-detection of login forms
 - Custom CSS selectors for advanced cases
+- **Custom login script**: Provide a JavaScript snippet (GUI textarea or
+  `--login-script <file>`). It is executed in the login page context after
+  credentials are injected as `window.__SR_USER` and `window.__SR_PASS`.
+  When a script is supplied, the built-in form-fill is skipped in its favor.
+
+#### Wayland Support
+On Linux, SiteRecorder auto-detects the display server:
+- **X11** (default): screen capture via FFmpeg `x11grab`.
+- **Wayland** (`XDG_SESSION_TYPE=wayland` or `WAYLAND_DISPLAY` set):
+  screen capture via FFmpeg `pipewire` (`-f pipewire -i default`).
+  This requires a running `xdg-desktop-portal` and a PipeWire-enabled
+  FFmpeg build. Region selection on Wayland is applied with a crop filter.
 
 #### Vulnerability Scanning
 - **Scan URL**: Target URL for security scanning
@@ -355,8 +389,11 @@ export RUST_LOG=info
 # Run with debug logging
 RUST_LOG=debug cargo run
 
-# Set custom display for Linux screen recording
+# Set custom display for Linux (X11) screen recording
 export DISPLAY=:0
+
+# Force Wayland capture path (PipeWire)
+export XDG_SESSION_TYPE=wayland
 ```
 
 ## Output
@@ -601,10 +638,10 @@ sudo usermod -a -G video $USER
 - [x] PDF export
 - [x] Resume interrupted sessions
 - [x] Vulnerability scanner (15-point security scan)
-- [ ] Custom login script support
-- [ ] Multi-threaded crawling
-- [ ] Region-specific screen recording (select area)
-- [ ] Wayland support
+- [x] Custom login script support
+- [x] Multi-threaded crawling
+- [x] Region-specific screen recording (select area)
+- [x] Wayland support
 
 ## Contributing
 
