@@ -585,6 +585,38 @@ function applyFpFilter() {
 }
 
 // Load and render the scan history from the output directory
+// Promise-based styled confirmation modal (replaces native confirm())
+function showConfirm(message) {
+    return new Promise(resolve => {
+        const modal = document.getElementById('confirmModal');
+        const msg = document.getElementById('confirmMessage');
+        const okBtn = document.getElementById('confirmOk');
+        const cancelBtn = document.getElementById('confirmCancel');
+
+        msg.textContent = message;
+        modal.style.display = 'flex';
+
+        const close = (val) => {
+            modal.style.display = 'none';
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onOverlay);
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const onOk = () => close(true);
+        const onCancel = () => close(false);
+        const onOverlay = (e) => { if (e.target === modal) close(false); };
+        const onKey = (e) => { if (e.key === 'Escape') close(false); };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onOverlay);
+        document.addEventListener('keydown', onKey);
+        cancelBtn.focus();
+    });
+}
+
 async function refreshScanHistory() {
     const listEl = document.getElementById('scanHistoryList');
     if (!listEl) return;
@@ -692,7 +724,7 @@ function renderScanHistory(scans) {
                 addLog('Set an Output Directory to delete saved scans', 'error');
                 return;
             }
-            if (!confirm(`Delete scan ${id}? This cannot be undone.`)) return;
+            if (!(await showConfirm(`Delete scan ${id}? This cannot be undone.`))) return;
             try {
                 await invoke('delete_vuln_scan', { outputDir, scanId: id });
                 try { localStorage.removeItem(`fp_${id}`); } catch (e) {}

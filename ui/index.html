@@ -476,6 +476,21 @@
         </footer>
     </div>
 
+    <!-- Delete confirmation modal -->
+    <div id="confirmModal" class="modal-overlay" style="display: none;">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+            <div class="modal-header">
+                <span class="modal-icon">🗑️</span>
+                <h3 class="modal-title" id="confirmTitle">Delete scan?</h3>
+            </div>
+            <div class="modal-body" id="confirmMessage"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="confirmCancel" type="button">Cancel</button>
+                <button class="btn btn-danger" id="confirmOk" type="button">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
