@@ -441,7 +441,8 @@ function createVulnerabilityItem(result) {
     for (const finding of result.findings) {
         const findingClass = finding.status === 'Vulnerable' ? 'vulnerable' : 
                            finding.status === 'Warning' ? 'warning' : 'safe';
-        const isSensitive = SENSITIVE_RE.test(`${finding.title} ${finding.description} ${finding.cwe_id || ''}`);
+        const isSensitive = finding.status !== 'NotVulnerable' &&
+            SENSITIVE_RE.test(`${finding.title} ${finding.description} ${finding.cwe_id || ''}`);
         if (isSensitive) anySensitive = true;
         const key = fpKey(scanId, finding);
         const isFp = dismissedFindings.has(key);
