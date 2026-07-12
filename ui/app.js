@@ -244,7 +244,7 @@ async function performScan(scanUrl, outputDir) {
     scanStatus.textContent = 'Initializing scanner...';
     
     try {
-        scanStatus.textContent = 'Running security checks (20 checks)...';
+        scanStatus.textContent = 'Running security checks (30 checks)...';
         
         const report = await invoke('run_vulnerability_scan', {
             url: scanUrl,
