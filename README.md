@@ -23,29 +23,38 @@ A cross-platform desktop application built in Rust that automates full-site trav
 - Smart Scrolling - Automatically scrolls pages to trigger lazy-loaded content
 - Navigation Simulation - Simulates real user behavior with back/forward navigation
 
-### Security Scanner (NEW)
-- **15-Point Vulnerability Scan** - Comprehensive security analysis of any website
+### Security Scanner
+- **20-Point Vulnerability Scan** - Comprehensive security analysis of any website
+- **Active Probing** - XSS, SQLi, directory traversal, file inclusion, open redirect and exposed-file checks actively send payloads and verify real responses (no longer passive pattern matching)
+- **Multi-URL Crawling** - The scanner discovers pages from the seed URL (honoring `max_depth`/`max_pages`) and tests each discovered endpoint, not just the landing page
+- **Accurate TLS Verification** - Certificate validity is verified with a strict (non-lenient) client, so expired/self-signed/untrusted certs are correctly flagged
 - **Detailed Findings** - Each vulnerability includes severity, description, CWE references, and remediation steps
 - **Real-time Risk Scoring** - Weighted risk score from 0-10 based on severity distribution
+- **Scan History & Export** - Reports are saved to `<output_dir>/scans/`, listed in the GUI, and exportable as JSON or CSV; findings can be marked as false positives (persisted per scan)
 - **GUI Integration** - Full vulnerability scanner tab in the desktop application
-- **CLI Support** - Run scans via command line with `--scan-url` flag
+- **CLI Support** - Run standalone scans with `site-recorder scan`, or attach a scan to a crawl via `--scan-url`
 
 #### Vulnerability Checks:
 1. **Security Headers Analysis** - X-Frame-Options, CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
-2. **Cross-Site Scripting (XSS) Detection** - Reflected, DOM-based, and stored XSS pattern analysis
-3. **SQL Injection Detection** - SQL error messages, form analysis, URL parameter checks
-4. **Directory Traversal Detection** - Path traversal patterns, directory listing, backup file exposure
-5. **Open Redirect Detection** - URL parameter redirects, meta refresh, JavaScript redirects
+2. **Cross-Site Scripting (XSS) Detection** - Reflected (active payload injection + unencoded reflection), DOM-based, and stored XSS pattern analysis
+3. **SQL Injection Detection** - Active payload injection with SQL error-signature matching, form analysis, URL parameter checks
+4. **Directory Traversal Detection** - Active path-traversal probing plus passive directory-listing/backup exposure checks
+5. **Open Redirect Detection** - Active probing of redirect parameters via the `Location` header
 6. **CSRF Vulnerability Detection** - Form token analysis, SameSite cookie checks
 7. **Clickjacking Detection** - X-Frame-Options and CSP frame-ancestors analysis
 8. **Mixed Content Detection** - HTTP resources on HTTPS pages
 9. **Information Disclosure** - Sensitive data exposure, error messages, generator tags
-10. **SSL/TLS Configuration** - Certificate validity, HSTS enforcement
+10. **SSL/TLS Configuration** - Strict certificate-chain verification, HSTS enforcement
 11. **Cookie Security Analysis** - Secure, HttpOnly, SameSite flag checks
 12. **Server Information Leakage** - Server header, X-Powered-By, technology detection
 13. **Form Security Analysis** - Autocomplete, hidden fields, GET form sensitive data
-14. **File Inclusion Detection** - LFI/RFI patterns, code inclusion indicators
+14. **File Inclusion Detection** - Active LFI/RFI payload probing (e.g. `../../etc/passwd`, `php://filter`) with leakage detection
 15. **Outdated Software Detection** - WordPress, jQuery, Bootstrap, Angular, PHP version checks
+16. **CORS Misconfiguration** - Detects credentialed wildcard/reflected `Access-Control-Allow-Origin`
+17. **Content-Security-Policy** - Missing or weakened CSP (unsafe-inline/unsafe-eval/wildcard)
+18. **Subresource Integrity** - External scripts/stylesheets loaded without `integrity`
+19. **Exposed Sensitive Files** - Probes `.git/HEAD`, `.env`, `phpinfo.php`, `server-status`, `backup.zip`, etc.
+20. **Directory Listing** - Detects enabled directory indexing on common paths
 
 ### Additional Features
 - **Proxy Support** - Route crawling through HTTP/SOCKS proxies
@@ -103,11 +112,12 @@ SiteRecorder/
 - Automatic video encoding and frame-to-video conversion
 
 #### Scanner Module (NEW)
-- 15-point vulnerability scanning engine
+- 20-point vulnerability scanning engine (active probing)
+- Multi-URL discovery via crawler (honors max_depth/max_pages)
 - Asynchronous HTTP-based security checks
 - Detailed finding reports with CWE references
 - Risk score calculation based on severity weighting
-- JSON-serializable scan reports for integration
+- Persisted scan reports (history) with JSON/CSV export
 
 #### Session Module
 - Manages authentication and cookies
@@ -191,11 +201,14 @@ cargo build --release
 ### Vulnerability Scanner (GUI)
 
 1. Click the "Vulnerabilities" tab in the GUI
-2. Enter the target URL to scan
-3. Click "Start Scan"
-4. View the risk score and severity breakdown
-5. Expand individual findings for detailed information
-6. Use filter buttons to show only vulnerable/warning/passed checks
+2. Set an **Output Directory** (on the Recording tab) so scans are saved to history
+3. Enter the target URL to scan
+4. Click "Start Scan" (the seed URL is crawled to discover additional pages, which are all tested)
+5. View the risk score and severity breakdown
+6. Expand individual findings for detailed information
+7. Use filter buttons to show only vulnerable/warning/passed checks
+8. Mark findings as false positives (persisted per scan) and hide them with the toggle
+9. Export the current report as JSON/CSV, or browse **Scan History** to load/export previous scans
 
 ### Recording Mode Selection
 
@@ -271,12 +284,23 @@ site-recorder crawl https://example.com \
 # List previous sessions
 site-recorder list --output ./recordings
 
+# Run the vulnerability scanner standalone
+site-recorder scan --url https://example.com --output ./recordings
+site-recorder scan --url https://example.com --max-depth 4 --max-pages 100
+
+# List saved scans
+site-recorder scan --list --output ./recordings
+
+# Export a saved scan (JSON or CSV)
+site-recorder scan --export-id scan_20241209_150000 --format csv --output ./recordings
+
 # Resume a session
 site-recorder resume session_20241209_150000
 
 # Show help
 site-recorder --help
 site-recorder crawl --help
+site-recorder scan --help
 ```
 
 ### Daemon Mode (Headless CLI)
@@ -637,7 +661,7 @@ sudo usermod -a -G video $USER
 - [x] Proxy support
 - [x] PDF export
 - [x] Resume interrupted sessions
-- [x] Vulnerability scanner (15-point security scan)
+- [x] Vulnerability scanner (20-point active security scan with history/export)
 - [x] Custom login script support
 - [x] Multi-threaded crawling
 - [x] Region-specific screen recording (select area)
