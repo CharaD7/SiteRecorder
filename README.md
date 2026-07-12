@@ -206,9 +206,10 @@ cargo build --release
 4. Click "Start Scan" (the seed URL is crawled to discover additional pages, which are all tested)
 5. View the risk score and severity breakdown
 6. Expand individual findings for detailed information
-7. Use filter buttons to show only vulnerable/warning/passed checks
+7. Use filter buttons to show only vulnerable/warning/passed/sensitive checks
 8. Mark findings as false positives (persisted per scan) and hide them with the toggle
 9. Export the current report as JSON/CSV, or browse **Scan History** to load/export previous scans
+10. **Vulnerabilities and sensitive data are highlighted automatically** — when a scan finds vulnerabilities or leaks of secrets/sensitive data (e.g. `.env`, `.git`, passwords, tokens, API keys), a pulsing red banner appears at the top of the results and those findings get a striped glow plus a 🔒 `SENSITIVE` badge, and are sorted to the top so your attention is drawn to them immediately
 
 ### Recording Mode Selection
 
