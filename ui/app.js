@@ -16,7 +16,7 @@ let statusInterval = null;
 let scanInterval = null;
 
 // Matches findings that expose secrets / sensitive data
-const SENSITIVE_RE = /secret|password|credential|token|api[ _-]?key|private[ _-]?key|\.env|\.git|backup|sensitive|disclos|leak|authorization|aws_|database|db_|connection string|cert|ssh|access[_ ]?key|client[_ ]?secret|private key|passwd/i;
+const SENSITIVE_RE = /secret|password|credential|token|api[ _-]?key|private[ _-]?key|\.env|\.git|backup|sensitive|disclos|leak|authorization|aws_|database|db_|connection string|certificate (expos|leak|disclos|file)|\.(pem|crt|cer|key)|ssh|access[_ ]?key|client[_ ]?secret|private key|passwd/i;
 
 // Add log entry
 function addLog(message, type = 'info') {
