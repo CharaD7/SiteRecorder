@@ -50,6 +50,7 @@ struct RecordingSettings {
     proxy: Option<String>,
     sitemap: Option<String>,
     scan_url: Option<String>,
+    login_script: Option<String>,
 }
 
 impl RecordingSettings {
@@ -84,6 +85,7 @@ impl RecordingSettings {
             proxy: args.proxy,
             sitemap: args.sitemap,
             scan_url: args.scan_url,
+            login_script: args.login_script,
         }
     }
 }
@@ -291,9 +293,31 @@ async fn run_recording(
             match browser.navigate(&tab, auth_url, &nav_options) {
                 Ok(_) => {
                     info!("Login page loaded, attempting authentication...");
-                    
-                    // Fill in credentials
-                    if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+
+                    if let Some(script) = &settings.login_script {
+                        // Custom login script path
+                        let username = settings.username.clone().unwrap_or_default();
+                        let password = settings.password.clone().unwrap_or_default();
+                        let setup = format!(
+                            "window.__SR_USER = {}; window.__SR_PASS = {};",
+                            js_quote(&username),
+                            js_quote(&password)
+                        );
+                        if let Err(e) = browser.execute_script(&tab, &setup) {
+                            warn!("Failed to inject credentials for login script: {}", e);
+                        }
+                        match browser.execute_script(&tab, script) {
+                            Ok(_) => {
+                                info!("Custom login script executed");
+                                notifier.notify_info("Authentication", "Custom login script executed")?;
+                                sleep(Duration::from_millis(3000)).await; // Wait for redirect
+                            }
+                            Err(e) => {
+                                warn!("Login script failed: {}", e);
+                                notifier.notify_error("Authentication", &format!("Login script failed: {}", e))?;
+                            }
+                        }
+                    } else if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
                         &settings.username,
                         &settings.password,
                         &settings.username_selector,
@@ -430,6 +454,10 @@ async fn run_recording(
     status_guard.is_running = false;
 
     Ok(())
+}
+
+fn js_quote(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 fn perform_login(
@@ -847,11 +875,62 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     let tab = browser.get_tab()?;
     recorder.set_browser_tab(tab.clone()).await;
     
+    let nav_options = NavigationOptions {
+        timeout_ms: 30000,
+        wait_for_idle: true,
+        scroll_behavior: ScrollBehavior::Incremental {
+            steps: 5,
+            delay_ms: 500,
+        },
+    };
+
     info!("Starting recording...");
     recorder.start_recording(session_id.clone(), Some(settings.url.clone())).await?;
     
+    // Handle authentication if required
+    if settings.requires_auth {
+        if let Some(auth_url) = &settings.auth_url {
+            info!("Navigating to login page: {}", auth_url);
+            match browser.navigate(&tab, auth_url, &nav_options) {
+                Ok(_) => {
+                    if let Some(script) = &settings.login_script {
+                        let setup = format!(
+                            "window.__SR_USER = {}; window.__SR_PASS = {};",
+                            js_quote(settings.username.as_deref().unwrap_or("")),
+                            js_quote(settings.password.as_deref().unwrap_or("")),
+                        );
+                        if let Err(e) = browser.execute_script(&tab, &setup) {
+                            warn!("Failed to inject credentials for login script: {}", e);
+                        }
+                        match browser.execute_script(&tab, script) {
+                            Ok(_) => {
+                                info!("Custom login script executed");
+                                sleep(Duration::from_millis(3000)).await;
+                            }
+                            Err(e) => warn!("Login script failed: {}", e),
+                        }
+                    } else if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+                        &settings.username,
+                        &settings.password,
+                        &settings.username_selector,
+                        &settings.password_selector,
+                        &settings.submit_selector,
+                    ) {
+                        match perform_login(&tab, username, password, username_sel, password_sel, submit_sel) {
+                            Ok(_) => {
+                                info!("Login successful!");
+                                sleep(Duration::from_millis(3000)).await;
+                            }
+                            Err(e) => warn!("Login failed: {}", e),
+                        }
+                    }
+                }
+                Err(e) => warn!("Failed to navigate to login page: {}", e),
+            }
+        }
+    }
+
     info!("Beginning crawl...");
-    let nav_options = NavigationOptions::default();
     let mut pages_visited = 0;
     
     // Initialize progress bar (disabled in daemon mode)

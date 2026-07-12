@@ -7,6 +7,7 @@ let startBtn, stopBtn, recordingState, sessionId, currentUrl;
 let pagesVisited, pagesDiscovered, progressBar, logContainer;
 let requiresAuthCheckbox, authFields, authUrl, username, password;
 let usernameSelector, passwordSelector, submitSelector;
+let loginScriptFile, loginScript;
 let recordingModeSelect, enableAudioCheckbox, screenWidthInput, screenHeightInput;
 
 let statusInterval = null;
@@ -75,6 +76,7 @@ async function startRecording() {
         username_selector: requiresAuthCheckbox.checked ? usernameSelector.value.trim() : null,
         password_selector: requiresAuthCheckbox.checked ? passwordSelector.value.trim() : null,
         submit_selector: requiresAuthCheckbox.checked ? submitSelector.value.trim() : null,
+        login_script: requiresAuthCheckbox.checked ? (loginScript.value.trim() || null) : null,
         recording_mode: recordingModeSelect.value,
         enable_audio: enableAudioCheckbox.checked,
         screen_width: parseInt(screenWidthInput.value),
@@ -103,8 +105,9 @@ async function startRecording() {
             addLog('Please enter login page URL', 'error');
             return;
         }
-        if (!settings.username || !settings.password) {
-            addLog('Please enter username and password', 'error');
+        const hasScript = !!settings.login_script;
+        if (!hasScript && (!settings.username || !settings.password)) {
+            addLog('Please enter username and password (or a custom login script)', 'error');
             return;
         }
     }
@@ -490,6 +493,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     usernameSelector = document.getElementById('usernameSelector');
     passwordSelector = document.getElementById('passwordSelector');
     submitSelector = document.getElementById('submitSelector');
+    loginScriptFile = document.getElementById('loginScriptFile');
+    loginScript = document.getElementById('loginScript');
     
     // Initialize recording mode elements
     recordingModeSelect = document.getElementById('recordingMode');
@@ -601,6 +606,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 advancedAuthFields.style.display = 'none';
                 showAdvancedAuth.textContent = 'Show Advanced Options';
             }
+        });
+    }
+
+    // Custom login script file loader
+    if (loginScriptFile && loginScript) {
+        loginScriptFile.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                loginScript.value = ev.target.result;
+                addLog(`Loaded login script: ${file.name}`, 'info');
+            };
+            reader.onerror = () => addLog('Failed to read login script file', 'error');
+            reader.readAsText(file);
         });
     }
     

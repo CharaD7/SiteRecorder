@@ -228,6 +228,31 @@
                                 <small class="field-hint">Tries: submit buttons, login/sign-in buttons</small>
                             </div>
                         </div>
+
+                        <div class="auth-divider"></div>
+
+                        <!-- Custom Login Script -->
+                        <div class="form-group">
+                            <strong>📜 Custom Login Script (JavaScript)</strong>
+                            <p class="help-text">
+                                Advanced: run a custom JS snippet in the login page context.
+                                Credentials are injected as <code>window.__SR_USER</code> and
+                                <code>window.__SR_PASS</code>. When a script is provided, the
+                                automatic form-fill is skipped in favour of your script.
+                            </p>
+                            <input
+                                type="file"
+                                id="loginScriptFile"
+                                accept=".js,.mjs,.txt,application/javascript,text/plain"
+                                style="margin-bottom: 8px;"
+                            />
+                            <textarea
+                                id="loginScript"
+                                rows="8"
+                                class="themed-textarea"
+                                placeholder="// Example:&#10;document.querySelector('#user').value = window.__SR_USER;&#10;document.querySelector('#pass').value = window.__SR_PASS;&#10;document.querySelector('#login-form').submit();"
+                            ></textarea>
+                        </div>
                     </div>
                 </div>
 

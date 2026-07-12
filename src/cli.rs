@@ -42,6 +42,7 @@ pub struct CrawlArgs {
     pub sitemap: Option<String>,
     pub proxy: Option<String>,
     pub scan_url: Option<String>,
+    pub login_script: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -130,6 +131,10 @@ pub enum Commands {
         /// Run vulnerability scan on URL after crawl
         #[arg(long)]
         scan_url: Option<String>,
+
+        /// Path to a custom login script (JavaScript) executed in the page context
+        #[arg(long)]
+        login_script: Option<String>,
     },
     
     /// Resume an interrupted session
@@ -172,28 +177,37 @@ impl Commands {
                 sitemap,
                 proxy,
                 scan_url,
-            } => CrawlArgs {
-                url,
-                max_pages,
-                delay,
-                output,
-                recording_mode,
-                fps,
-                audio,
-                headless,
-                daemon,
-                progress,
-                log_file,
-                pid_file,
-                screen_width,
-                screen_height,
-                auth_url,
-                username,
-                password,
-                sitemap,
-                proxy,
-                scan_url,
-            },
+                login_script,
+            } => {
+                let login_script = login_script
+                    .map(|path| {
+                        std::fs::read_to_string(&path)
+                            .unwrap_or_else(|e| panic!("Failed to read login script {}: {}", path, e))
+                    });
+                CrawlArgs {
+                    url,
+                    max_pages,
+                    delay,
+                    output,
+                    recording_mode,
+                    fps,
+                    audio,
+                    headless,
+                    daemon,
+                    progress,
+                    log_file,
+                    pid_file,
+                    screen_width,
+                    screen_height,
+                    auth_url,
+                    username,
+                    password,
+                    sitemap,
+                    proxy,
+                    scan_url,
+                    login_script,
+                }
+            }
             _ => panic!("into_crawl_args called on non-Crawl command"),
         }
     }
