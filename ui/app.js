@@ -545,7 +545,7 @@ function setupFilters() {
                 } else if (filter === 'warning') {
                     item.style.display = item.dataset.status === 'warning' ? '' : 'none';
                 } else if (filter === 'not-vulnerable') {
-                    item.style.display = item.dataset.status === 'not-vulnerable' ? '' : 'none';
+                    item.style.display = item.dataset.status === 'not_vulnerable' ? '' : 'none';
                 }
             });
         });
