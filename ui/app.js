@@ -222,6 +222,11 @@ async function startVulnerabilityScan() {
         return;
     }
     
+    const outputDir = (outputDirInput.value || '').trim();
+    await performScan(scanUrl, outputDir);
+}
+
+async function performScan(scanUrl, outputDir) {
     const startScanBtn = document.getElementById('startScanBtn');
     const stopScanBtn = document.getElementById('stopScanBtn');
     const scanProgress = document.getElementById('scanProgress');
@@ -241,7 +246,6 @@ async function startVulnerabilityScan() {
     try {
         scanStatus.textContent = 'Running security checks (20 checks)...';
         
-        const outputDir = (outputDirInput.value || '').trim();
         const report = await invoke('run_vulnerability_scan', {
             url: scanUrl,
             outputDir: outputDir || null,
@@ -634,9 +638,11 @@ function renderScanHistory(scans) {
                 <span class="warn-pill">${s.warnings} warn</span>
             </div>
             <div class="history-actions">
+                <button class="btn btn-primary rescan-btn" data-url="${escapeHtml(s.target_url)}" type="button">↻ Rescan</button>
                 <button class="btn btn-secondary load-btn" data-id="${escapeHtml(s.scan_id)}" type="button">Load</button>
                 <button class="btn btn-secondary exp-json" data-id="${escapeHtml(s.scan_id)}" type="button">JSON</button>
                 <button class="btn btn-secondary exp-csv" data-id="${escapeHtml(s.scan_id)}" type="button">CSV</button>
+                <button class="btn btn-danger del-btn" data-id="${escapeHtml(s.scan_id)}" type="button">🗑 Delete</button>
             </div>
         </div>
     `).join('');
@@ -663,6 +669,43 @@ function renderScanHistory(scans) {
     });
     listEl.querySelectorAll('.exp-csv').forEach(btn => {
         btn.addEventListener('click', () => downloadScan(btn.dataset.id, 'csv'));
+    });
+    listEl.querySelectorAll('.rescan-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const url = btn.dataset.url;
+            if (!url) return;
+            const outputDir = (outputDirInput.value || '').trim();
+            btn.disabled = true;
+            try {
+                await performScan(url, outputDir);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+    listEl.querySelectorAll('.del-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            const outputDir = (outputDirInput.value || '').trim();
+            if (!outputDir) {
+                addLog('Set an Output Directory to delete saved scans', 'error');
+                return;
+            }
+            if (!confirm(`Delete scan ${id}? This cannot be undone.`)) return;
+            try {
+                await invoke('delete_vuln_scan', { outputDir, scanId: id });
+                try { localStorage.removeItem(`fp_${id}`); } catch (e) {}
+                if (currentReport && currentReport.scan_id === id) {
+                    currentReport = null;
+                    document.getElementById('scanSummary').style.display = 'none';
+                    document.getElementById('vulnResults').style.display = 'none';
+                }
+                addLog(`Deleted scan ${id}`, 'info');
+                refreshScanHistory();
+            } catch (e) {
+                addLog(`Failed to delete scan: ${e}`, 'error');
+            }
+        });
     });
 }
 

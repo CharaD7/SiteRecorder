@@ -229,6 +229,18 @@ async fn load_vuln_scan(output_dir: String, scan_id: String) -> Result<ScanRepor
 }
 
 #[tauri::command]
+async fn delete_vuln_scan(output_dir: String, scan_id: String) -> Result<(), String> {
+    let path = std::path::PathBuf::from(output_dir)
+        .join("scans")
+        .join(format!("{}.json", scan_id));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        info!("Deleted scan report {:?}", path);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn export_vuln_scan(
     output_dir: String,
     scan_id: String,
@@ -869,6 +881,7 @@ fn run_gui_mode() {
             get_scan_results,
             list_vuln_scans,
             load_vuln_scan,
+            delete_vuln_scan,
             export_vuln_scan,
             save_export
         ])
