@@ -35,9 +35,9 @@ body {
 }
 
 .container {
-    max-width: 900px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 30px;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -98,8 +98,8 @@ main {
 .panel {
     background-color: var(--panel-bg);
     border-radius: 8px;
-    padding: 25px;
-    margin-bottom: 20px;
+    padding: 32px;
+    margin-bottom: 28px;
     border: 1px solid var(--border-color);
 }
 
@@ -505,7 +505,7 @@ footer {
 /* ==================== VULNERABILITY SCANNER ==================== */
 
 .vuln-controls {
-    margin-bottom: 20px;
+    margin-bottom: 28px;
 }
 
 .vuln-controls .form-group {
@@ -517,8 +517,8 @@ footer {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
+    padding: 24px;
+    margin-bottom: 24px;
 }
 
 .summary-header {
@@ -558,8 +558,8 @@ footer {
 .summary-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 15px;
-    margin-bottom: 20px;
+    gap: 18px;
+    margin-bottom: 24px;
 }
 
 .summary-item {
