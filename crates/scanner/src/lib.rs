@@ -1,9 +1,8 @@
 use anyhow::Result;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use url::Url;
 
 #[derive(Debug, Error)]
@@ -104,12 +103,58 @@ pub struct ScanSummary {
     pub risk_score: f64,
 }
 
+/// Lightweight metadata for listing saved scans without loading full reports.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanMeta {
+    pub scan_id: String,
+    pub target_url: String,
+    pub timestamp: String,
+    pub risk_score: f64,
+    pub total_checks: usize,
+    pub vulnerable: usize,
+    pub warnings: usize,
+}
+
+impl ScanReport {
+    /// Serialize the full report to CSV (one row per finding).
+    pub fn to_csv(&self) -> String {
+        let mut out = String::new();
+        out.push_str("scan_id,target_url,timestamp,check_name,finding_title,severity,status,cwe,remediation\n");
+        let esc = |s: &str| -> String {
+            if s.contains(',') || s.contains('"') || s.contains('\n') {
+                format!("\"{}\"", s.replace('"', "\"\""))
+            } else {
+                s.to_string()
+            }
+        };
+        for result in &self.results {
+            for f in &result.findings {
+                out.push_str(&format!(
+                    "{},{},{},{},{},{},{},{},{}\n",
+                    esc(&self.scan_id),
+                    esc(&self.url),
+                    esc(&self.timestamp),
+                    esc(&result.check_name),
+                    esc(&f.title),
+                    f.severity,
+                    f.status,
+                    esc(f.cwe_id.as_deref().unwrap_or("")),
+                    esc(&f.remediation),
+                ));
+            }
+        }
+        out
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ScanConfig {
     pub url: String,
     pub timeout_secs: u64,
     pub follow_redirects: bool,
     pub max_depth: usize,
+    pub max_pages: usize,
+    pub output_dir: Option<std::path::PathBuf>,
 }
 
 impl ScanConfig {
@@ -119,14 +164,22 @@ impl ScanConfig {
             url: url.to_string(),
             timeout_secs: 30,
             follow_redirects: true,
-            max_depth: 3,
+            max_depth: 2,
+            max_pages: 25,
+            output_dir: None,
         })
+    }
+
+    pub fn with_output_dir(mut self, dir: std::path::PathBuf) -> Self {
+        self.output_dir = Some(dir);
+        self
     }
 }
 
 pub struct VulnerabilityScanner {
     config: ScanConfig,
     client: reqwest::Client,
+    targets: Vec<String>,
 }
 
 impl VulnerabilityScanner {
@@ -142,14 +195,89 @@ impl VulnerabilityScanner {
             .build()
             .map_err(|e| ScanError::ScanError(e.to_string()))?;
 
-        Ok(Self { config, client })
+        Ok(Self { config, client, targets: Vec::new() })
     }
 
-    pub async fn run_full_scan(&self) -> Result<ScanReport, ScanError> {
+    /// Discover crawlable same-domain URLs (breadth-first) up to max_depth,
+    /// capped at max_pages. The root URL is always included first.
+    async fn discover_targets(&mut self) {
+        let root = self.config.url.clone();
+        let base = match Url::parse(&root) {
+            Ok(u) => u,
+            Err(_) => {
+                self.targets = vec![root];
+                return;
+            }
+        };
+        let base_domain = base.domain().map(|d| d.to_string());
+
+        let mut visited: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        let mut discovered: Vec<String> = vec![root.clone()];
+        visited.insert(root.clone());
+
+        let mut depth = 0usize;
+        let mut idx = 0usize;
+        while depth < self.config.max_depth && visited.len() < self.config.max_pages {
+            let current_batch: Vec<String> = discovered[idx..]
+                .iter()
+                .take(self.config.max_pages.saturating_sub(visited.len()).max(1))
+                .cloned()
+                .collect();
+            if current_batch.is_empty() {
+                break;
+            }
+            idx = discovered.len();
+            depth += 1;
+
+            for url in current_batch {
+                if visited.len() >= self.config.max_pages {
+                    break;
+                }
+                let body = match self.fetch_page_content(&url).await {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
+                let doc = Html::parse_document(&body);
+                let link_sel = match Selector::parse("a[href]") {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                for el in doc.select(&link_sel) {
+                    if let Some(href) = el.value().attr("href") {
+                        if let Ok(abs) = base.join(href) {
+                            let mut abs = abs;
+                            abs.set_fragment(None);
+                            let s = abs.to_string();
+                            if abs.domain() == base_domain.as_deref() && !visited.contains(&s) {
+                                visited.insert(s.clone());
+                                discovered.push(s);
+                                if visited.len() >= self.config.max_pages {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        info!(
+            "Discovered {} target URL(s) for scanning (depth {})",
+            discovered.len(),
+            self.config.max_depth
+        );
+        self.targets = discovered;
+    }
+
+    pub async fn run_full_scan(&mut self) -> Result<ScanReport, ScanError> {
         let scan_id = format!("scan_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
         let timestamp = chrono::Utc::now().to_rfc3339();
 
         info!("Starting full vulnerability scan for: {}", self.config.url);
+
+        self.discover_targets().await;
+        let target_count = self.targets.len();
 
         let mut results = Vec::new();
 
@@ -168,18 +296,81 @@ impl VulnerabilityScanner {
         results.push(self.scan_form_security().await);
         results.push(self.scan_file_inclusion().await);
         results.push(self.scan_outdated_software().await);
+        results.push(self.scan_cors_misconfig().await);
+        results.push(self.scan_csp().await);
+        results.push(self.scan_subresource_integrity().await);
+        results.push(self.scan_exposed_files().await);
+        results.push(self.scan_directory_listing().await);
 
         let summary = self.calculate_summary(&results);
 
-        info!("Scan completed. Risk score: {:.1}/10", summary.risk_score);
+        info!(
+            "Scan completed across {} URL(s). Risk score: {:.1}/10",
+            target_count, summary.risk_score
+        );
 
-        Ok(ScanReport {
+        let report = ScanReport {
             url: self.config.url.clone(),
-            scan_id,
+            scan_id: scan_id.clone(),
             timestamp,
             results,
             summary,
-        })
+        };
+
+        if let Err(e) = self.save_report(&report) {
+            warn!("Failed to persist scan report: {}", e);
+        }
+
+        Ok(report)
+    }
+
+    /// Persist a scan report to `<output_dir>/scans/<scan_id>.json`.
+    pub fn save_report(&self, report: &ScanReport) -> Result<(), ScanError> {
+        let dir = self
+            .config
+            .output_dir
+            .clone()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("scans");
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| ScanError::ScanError(format!("create dir: {}", e)))?;
+        let path = dir.join(format!("{}.json", report.scan_id));
+        let json = serde_json::to_string_pretty(report)
+            .map_err(|e| ScanError::ScanError(e.to_string()))?;
+        std::fs::write(&path, json)
+            .map_err(|e| ScanError::ScanError(format!("write: {}", e)))?;
+        info!("Scan report saved to {:?}", path);
+        Ok(())
+    }
+
+    /// List previously saved scan reports from an output directory.
+    pub fn list_scans(output_dir: &std::path::Path) -> Vec<ScanMeta> {
+        let dir = output_dir.join("scans");
+        let mut metas = Vec::new();
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => return metas,
+        };
+        for entry in entries.flatten() {
+            if entry.path().extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            if let Ok(data) = std::fs::read_to_string(entry.path()) {
+                if let Ok(report) = serde_json::from_str::<ScanReport>(&data) {
+                    metas.push(ScanMeta {
+                        scan_id: report.scan_id,
+                        target_url: report.url,
+                        timestamp: report.timestamp,
+                        risk_score: report.summary.risk_score,
+                        total_checks: report.summary.total_checks,
+                        vulnerable: report.summary.vulnerable,
+                        warnings: report.summary.warnings,
+                    });
+                }
+            }
+        }
+        metas.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        metas
     }
 
     fn calculate_summary(&self, results: &[ScanResult]) -> ScanSummary {
@@ -249,6 +440,55 @@ impl VulnerabilityScanner {
         let response = self.client.get(url).send().await?;
         let body = response.text().await?;
         Ok(body)
+    }
+
+    /// Active probe: inject `value` into the GET parameter `param` of `base`
+    /// (preserving all other parameters) and return the response body, if any.
+    async fn probe_param(&self, base: &Url, param: &str, value: &str) -> Option<String> {
+        let original: Vec<(String, String)> = base
+            .query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        if original.is_empty() {
+            return None;
+        }
+        let mut test = base.clone();
+        {
+            let mut q = test.query_pairs_mut();
+            q.clear();
+            for (k, v) in &original {
+                if k == param {
+                    q.append_pair(k, value);
+                } else {
+                    q.append_pair(k, v);
+                }
+            }
+        }
+        self.fetch_page_content(&test.to_string()).await.ok()
+    }
+
+    /// GET parameters present on a URL (empty if none).
+    fn url_params(base: &Url) -> Vec<(String, String)> {
+        base.query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect()
+    }
+
+    /// Verify the TLS certificate chain is trusted (strict client, no
+    /// invalid-cert tolerance). Returns true only if the handshake succeeds.
+    async fn verify_tls(&self, url: &str) -> bool {
+        let strict = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(self.config.timeout_secs))
+            .redirect(if self.config.follow_redirects {
+                reqwest::redirect::Policy::limited(10)
+            } else {
+                reqwest::redirect::Policy::none()
+            })
+            .build();
+        match strict {
+            Ok(client) => client.get(url).send().await.is_ok(),
+            Err(_) => false,
+        }
     }
 
     // ========================================================================
@@ -550,160 +790,156 @@ impl VulnerabilityScanner {
     async fn scan_xss_vulnerabilities(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
 
-        let xss_payloads = vec![
-            "<script>alert('XSS')</script>",
-            "<img src=x onerror=alert('XSS')>",
-            "<svg onload=alert('XSS')>",
-            "javascript:alert('XSS')",
-            "'-alert('XSS')-'",
-            "\"><script>alert('XSS')</script>",
-            "<body onload=alert('XSS')>",
+        let payloads = vec![
+            "><script>alert(1)</script>",
+            "\"><script>alert(1)</script>",
+            "<img src=x onerror=alert(1)>",
+            "'\"><svg/onload=alert(1)>",
         ];
 
-        match self.fetch_page(&self.config.url).await {
-            Ok((html, _headers)) => {
-                let url = self.config.url.clone();
-                let document = Html::parse_document(&html);
+        let mut reflected_count = 0u32;
+        let mut reflected_samples: Vec<String> = Vec::new();
+        let mut forms_total = 0u32;
+        let mut js_href_total = 0u32;
+        let mut dom_sinks = 0u32;
 
-                // Check forms for XSS vulnerability
-                let form_selector = Selector::parse("form").ok();
-                let input_selector = Selector::parse("input[name]").ok();
-                let action_selector = Selector::parse("[action]").ok();
+        let dom_patterns = [
+            "document.write(",
+            "innerHTML",
+            "outerHTML",
+            "eval(",
+            "setTimeout(",
+            "setInterval(",
+            "document.location",
+            "window.location",
+        ];
 
-                if let Some(selector) = form_selector {
-                    let forms: Vec<_> = document.select(&selector).collect();
-                    if !forms.is_empty() {
-                        findings.push(VulnerabilityFinding {
-                            title: "Forms Detected - Potential XSS Vectors".to_string(),
-                            severity: Severity::Info,
-                            status: ScanStatus::Warning,
-                            description: format!("Found {} form(s) on the page that could potentially be vulnerable to reflected XSS if input is not properly sanitized.", forms.len()),
-                            details: vec![format!("URL: {}", url), format!("Forms found: {}", forms.len())],
-                            remediation: "Ensure all user input is properly sanitized and encoded before rendering. Implement CSP with script-src directive.".to_string(),
-                            cwe_id: Some("CWE-79".to_string()),
-                            references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
-                        });
-                    }
-                }
-
-                // Check for inline event handlers (potential XSS injection points)
-                let event_handlers = vec![
-                    "onerror", "onload", "onclick", "onmouseover", "onfocus",
-                    "onblur", "onsubmit", "onchange", "onkeyup", "onkeydown",
-                ];
-
-                let mut inline_handlers_found = 0;
-                for handler in &event_handlers {
-                    let attr_selector = Selector::parse(&format!("[{}]", handler)).ok();
-                    if let Some(sel) = attr_selector {
-                        let count = document.select(&sel).count();
-                        inline_handlers_found += count;
-                    }
-                }
-
-                if inline_handlers_found > 0 {
-                    findings.push(VulnerabilityFinding {
-                        title: "Inline Event Handlers Detected".to_string(),
-                        severity: Severity::Medium,
-                        status: ScanStatus::Warning,
-                        description: format!("Found {} inline event handler(s) which may be XSS injection vectors.", inline_handlers_found),
-                        details: vec![
-                            format!("Event handlers found: {}", inline_handlers_found),
-                            "Inline event handlers can be exploited if user input is not properly sanitized".to_string(),
-                        ],
-                        remediation: "Replace inline event handlers with addEventListener() calls and validate all user input server-side.".to_string(),
-                        cwe_id: Some("CWE-79".to_string()),
-                        references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
-                    });
-                }
-
-                // Check for JavaScript URLs in href attributes
-                let a_selector = Selector::parse("a[href^='javascript:']").ok();
-                if let Some(sel) = a_selector {
-                    let js_links: Vec<_> = document.select(&sel).collect();
-                    if !js_links.is_empty() {
-                        findings.push(VulnerabilityFinding {
-                            title: "JavaScript URLs in Links".to_string(),
-                            severity: Severity::High,
-                            status: ScanStatus::Vulnerable,
-                            description: format!("Found {} link(s) with javascript: URLs, which is a severe XSS risk.", js_links.len()),
-                            details: vec![
-                                format!("Count: {}", js_links.len()),
-                                "javascript: URLs execute code when clicked".to_string(),
-                            ],
-                            remediation: "Remove all javascript: URLs from href attributes. Use event listeners instead.".to_string(),
-                            cwe_id: Some("CWE-79".to_string()),
-                            references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
-                        });
-                    }
-                }
-
-                // Check for unescaped user input in URL parameters
-                if let Ok(parsed_url) = Url::parse(&url) {
-                    if let Some(query) = parsed_url.query() {
-                        if query.contains('<') || query.contains('>') || query.contains("script") || query.contains("alert") {
-                            findings.push(VulnerabilityFinding {
-                                title: "Potential Reflected XSS in URL Parameters".to_string(),
-                                severity: Severity::Critical,
-                                status: ScanStatus::Vulnerable,
-                                description: "URL parameters appear to contain potential XSS payloads.".to_string(),
-                                details: vec![format!("Query string: {}", query)],
-                                remediation: "Sanitize and encode all URL parameters before rendering in the page.".to_string(),
-                                cwe_id: Some("CWE-79".to_string()),
-                                references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
-                            });
+        for url in &targets {
+            // Active reflected-XSS probe: inject each payload into every GET parameter
+            // and check whether the exact payload is reflected unencoded in the response.
+            if let Ok(parsed) = Url::parse(url) {
+                let original: Vec<(String, String)> = parsed
+                    .query_pairs()
+                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                    .collect();
+                if !original.is_empty() {
+                    for (param, _) in &original {
+                        for p in &payloads {
+                            let mut test = parsed.clone();
+                            {
+                                let mut q = test.query_pairs_mut();
+                                q.clear();
+                                for (k, v) in &original {
+                                    if k == param {
+                                        q.append_pair(k, p);
+                                    } else {
+                                        q.append_pair(k, v);
+                                    }
+                                }
+                            }
+                            if let Ok(body) = self.fetch_page_content(&test.to_string()).await {
+                                if body.contains(p) {
+                                    reflected_count += 1;
+                                    if reflected_samples.len() < 5 {
+                                        reflected_samples.push(format!(
+                                            "Reflected payload in param '{}' of {}",
+                                            param, url
+                                        ));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+            }
 
-                // Check for DOM-based XSS patterns
-                let dom_patterns = vec![
-                    "document.write(",
-                    "innerHTML",
-                    "outerHTML",
-                    "eval(",
-                    "setTimeout(",
-                    "setInterval(",
-                    "document.location",
-                    "window.location",
-                ];
-
-                let mut dom_sinks_found = 0;
-                for pattern in &dom_patterns {
-                    if html.contains(pattern) {
-                        dom_sinks_found += 1;
+            // Passive signals (informational, not proof of exploitability)
+            if let Ok(html) = self.fetch_page_content(url).await {
+                let doc = Html::parse_document(&html);
+                forms_total += doc.select(&Selector::parse("form").unwrap()).count() as u32;
+                js_href_total += doc
+                    .select(&Selector::parse("a[href^='javascript:']").unwrap())
+                    .count() as u32;
+                for pat in &dom_patterns {
+                    if html.contains(pat) {
+                        dom_sinks += 1;
                     }
                 }
+            }
+        }
 
-                if dom_sinks_found > 0 {
-                    findings.push(VulnerabilityFinding {
-                        title: "DOM-based XSS Sinks Detected".to_string(),
-                        severity: Severity::Medium,
-                        status: ScanStatus::Warning,
-                        description: format!("Found {} potentially dangerous DOM manipulation pattern(s) that could lead to DOM-based XSS.", dom_sinks_found),
-                        details: dom_patterns.iter()
-                            .filter(|p| html.contains(*p))
-                            .map(|p| format!("Found: {}", p))
-                            .collect(),
-                        remediation: "Use safe DOM APIs like textContent instead of innerHTML. Sanitize user input before passing to dangerous sinks.".to_string(),
-                        cwe_id: Some("CWE-79".to_string()),
-                        references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
-                    });
-                }
-            }
-            Err(e) => {
-                findings.push(VulnerabilityFinding {
-                    title: "Failed to Fetch Page for XSS Analysis".to_string(),
-                    severity: Severity::Info,
-                    status: ScanStatus::Error,
-                    description: format!("Could not retrieve the page: {}", e),
-                    details: vec![],
-                    remediation: "Ensure the target URL is accessible.".to_string(),
-                    cwe_id: None,
-                    references: vec![],
-                });
-            }
+        if reflected_count > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "Reflected XSS Confirmed".to_string(),
+                severity: Severity::Critical,
+                status: ScanStatus::Vulnerable,
+                description: format!(
+                    "{} reflected-XSS probe(s) returned the injected payload unencoded in the response body, confirming reflected cross-site scripting.",
+                    reflected_count
+                ),
+                details: reflected_samples,
+                remediation:
+                    "HTML-encode and contextually sanitize all reflected output. Enforce a Content-Security-Policy.".to_string(),
+                cwe_id: Some("CWE-79".to_string()),
+                references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
+            });
+        }
+
+        if js_href_total > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "JavaScript URLs in Links".to_string(),
+                severity: Severity::High,
+                status: ScanStatus::Warning,
+                description: format!(
+                    "Found {} link(s) using javascript: URLs across scanned pages; these execute script when activated.",
+                    js_href_total
+                ),
+                details: vec![format!("Total javascript: links: {}", js_href_total)],
+                remediation: "Remove javascript: URLs from href attributes; use addEventListener instead.".to_string(),
+                cwe_id: Some("CWE-79".to_string()),
+                references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
+            });
+        }
+
+        if dom_sinks > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "DOM-based XSS Sinks Detected".to_string(),
+                severity: Severity::Medium,
+                status: ScanStatus::Warning,
+                description: format!(
+                    "Found {} potentially dangerous DOM sink(s) (innerHTML, eval, document.write, etc.) that can lead to DOM-based XSS if fed untrusted input.",
+                    dom_sinks
+                ),
+                details: dom_patterns
+                    .iter()
+                    .map(|p| format!("Monitored sink: {}", p))
+                    .collect(),
+                remediation: "Use safe DOM APIs (textContent) and sanitize untrusted data before sink assignment.".to_string(),
+                cwe_id: Some("CWE-79".to_string()),
+                references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
+            });
+        }
+
+        if reflected_count == 0 && forms_total > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "Forms Present (No Reflected XSS Observed)".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::Warning,
+                description: format!(
+                    "Found {} form(s) across scanned pages. No reflected-XSS was confirmed via GET-parameter probing, but inputs should still be validated server-side.",
+                    forms_total
+                ),
+                details: vec![format!("Forms found: {}", forms_total)],
+                remediation: "Validate and encode all user input server-side regardless of client checks.".to_string(),
+                cwe_id: Some("CWE-79".to_string()),
+                references: vec!["https://owasp.org/www-community/attacks/xss/".to_string()],
+            });
         }
 
         let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
@@ -737,128 +973,110 @@ impl VulnerabilityScanner {
     async fn scan_sql_injection(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
 
-        let sqli_payloads = vec![
-            ("'", "Single quote"),
-            ("' OR '1'='1", "OR tautology"),
-            ("' OR 1=1--", "OR with comment"),
-            ("' UNION SELECT NULL--", "UNION-based"),
-            ("1; SELECT 1--", "Stacked queries"),
-            ("' AND 1=CONVERT(int, (SELECT @@version))--", "Error-based"),
-            ("'; WAITFOR DELAY '0:0:5'--", "Time-based blind"),
+        let sql_errors = [
+            "you have an error in your sql syntax",
+            "warning: mysql",
+            "unclosed quotation mark",
+            "microsoft ole db provider for odbc drivers",
+            "microsoft ole db provider for sql server",
+            "incorrect syntax near",
+            "unterminated string",
+            "ora-00933",
+            "ora-00921",
+            "postgresql",
+            "sqlite3::",
+            "sqlite::",
+            "sql syntax",
+            "syntax error",
+            "mysql_fetch",
+            "pg_query",
+            "pg_exec",
         ];
 
-        match self.fetch_page(&self.config.url).await {
-            Ok((html, _)) => {
-                // Check for SQL error patterns in response
-                let sql_errors = vec![
-                    "you have an error in your sql syntax",
-                    "warning: mysql",
-                    "unclosed quotation mark",
-                    "microsoft ole db provider for odbc drivers",
-                    "microsoft ole db provider for sql server",
-                    "incorrect syntax near",
-                    "unterminated string",
-                    "ora-00933",
-                    "ora-00921",
-                    "postgresql",
-                    "sqlite3::",
-                    "sqlite::",
-                    "sql syntax",
-                    "syntax error",
-                    "mysql_fetch",
-                    "pg_query",
-                    "pg_exec",
-                ];
+        let payloads = ["'", "' OR '1'='1", "' OR 1=1--", "\" OR 1=1--", "1' AND '1'='1"];
 
-                let html_lower = html.to_lowercase();
-                let mut error_patterns_found = Vec::new();
+        let mut confirmed = 0u32;
+        let mut confirmed_samples: Vec<String> = Vec::new();
 
-                for pattern in &sql_errors {
-                    if html_lower.contains(pattern) {
-                        error_patterns_found.push(pattern.to_string());
-                    }
+        for url in &targets {
+            if let Ok(parsed) = Url::parse(url) {
+                let params = Self::url_params(&parsed);
+                if params.is_empty() {
+                    continue;
                 }
-
-                if !error_patterns_found.is_empty() {
-                    findings.push(VulnerabilityFinding {
-                        title: "SQL Error Messages Detected in Response".to_string(),
-                        severity: Severity::High,
-                        status: ScanStatus::Vulnerable,
-                        description: "The page contains SQL error messages which may indicate SQL injection vulnerability or information disclosure.".to_string(),
-                        details: error_patterns_found.iter().map(|e| format!("Pattern found: '{}'", e)).collect(),
-                        remediation: "Use parameterized queries/prepared statements. Disable verbose error messages in production. Implement proper error handling.".to_string(),
-                        cwe_id: Some("CWE-89".to_string()),
-                        references: vec!["https://owasp.org/www-community/attacks/SQL_Injection".to_string()],
-                    });
-                }
-
-                // Check forms for SQL injection risk
-                let document = Html::parse_document(&html);
-                let form_selector = Selector::parse("form").ok();
-                let input_selector = Selector::parse("input[name]").ok();
-
-                if let (Some(fsel), Some(isel)) = (form_selector, input_selector) {
-                    let forms: Vec<_> = document.select(&fsel).collect();
-                    let inputs: Vec<_> = document.select(&isel).collect();
-
-                    if !forms.is_empty() && !inputs.is_empty() {
-                        let form_details: Vec<String> = forms.iter().enumerate().map(|(i, f)| {
-                            let action = f.value().attr("action").unwrap_or("N/A");
-                            let method = f.value().attr("method").unwrap_or("GET");
-                            format!("Form {}: action={}, method={}", i + 1, action, method)
-                        }).collect();
-
-                        let input_details: Vec<String> = inputs.iter().map(|inp| {
-                            let name = inp.value().attr("name").unwrap_or("N/A");
-                            let input_type = inp.value().attr("type").unwrap_or("text");
-                            format!("Input: name={}, type={}", name, input_type)
-                        }).collect();
-
-                        findings.push(VulnerabilityFinding {
-                            title: "Forms with User Input - SQL Injection Risk".to_string(),
-                            severity: Severity::Medium,
-                            status: ScanStatus::Warning,
-                            description: format!("Found {} form(s) with {} input field(s). These could be SQL injection vectors if not properly sanitized.", forms.len(), inputs.len()),
-                            details: {
-                                let mut d = form_details;
-                                d.extend(input_details);
-                                d
-                            },
-                            remediation: "Use parameterized queries (Prepared Statements) for all database interactions. Never concatenate user input into SQL queries. Use an ORM or query builder.".to_string(),
-                            cwe_id: Some("CWE-89".to_string()),
-                            references: vec!["https://owasp.org/www-community/attacks/SQL_Injection".to_string()],
-                        });
-                    }
-                }
-
-                // Check URL parameters
-                if let Ok(parsed_url) = Url::parse(&self.config.url) {
-                    let params: Vec<_> = parsed_url.query_pairs().collect();
-                    if !params.is_empty() {
-                        findings.push(VulnerabilityFinding {
-                            title: "URL Parameters Detected - SQL Injection Risk".to_string(),
-                            severity: Severity::Medium,
-                            status: ScanStatus::Warning,
-                            description: format!("Found {} URL parameter(s) that could be SQL injection vectors.", params.len()),
-                            details: params.iter().map(|(k, v)| format!("Parameter: {} = {}", k, v)).collect(),
-                            remediation: "Validate and sanitize all URL parameters server-side. Use parameterized queries for any database operations.".to_string(),
-                            cwe_id: Some("CWE-89".to_string()),
-                            references: vec!["https://owasp.org/www-community/attacks/SQL_Injection".to_string()],
-                        });
+                for (param, _) in &params {
+                    for p in &payloads {
+                        if let Some(body) = self.probe_param(&parsed, param, p).await {
+                            let lower = body.to_lowercase();
+                            let hit = sql_errors.iter().any(|e| lower.contains(e));
+                            if hit {
+                                confirmed += 1;
+                                if confirmed_samples.len() < 5 {
+                                    confirmed_samples.push(format!(
+                                        "SQL error triggered via param '{}' on {}",
+                                        param, url
+                                    ));
+                                }
+                                break;
+                            }
+                        }
                     }
                 }
             }
-            Err(e) => {
+        }
+
+        if confirmed > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "SQL Injection Confirmed".to_string(),
+                severity: Severity::Critical,
+                status: ScanStatus::Vulnerable,
+                description: format!(
+                    "{} active probe(s) returned database error signatures, confirming SQL injection.",
+                    confirmed
+                ),
+                details: confirmed_samples,
+                remediation:
+                    "Use parameterized queries / prepared statements everywhere. Disable verbose SQL errors in production.".to_string(),
+                cwe_id: Some("CWE-89".to_string()),
+                references: vec!["https://owasp.org/www-community/attacks/SQL_Injection".to_string()],
+            });
+        }
+
+        if confirmed == 0 {
+            let mut params_total = 0u32;
+            let mut forms_total = 0u32;
+            for url in &targets {
+                if let Ok(html) = self.fetch_page_content(url).await {
+                    let doc = Html::parse_document(&html);
+                    forms_total += doc.select(&Selector::parse("form").unwrap()).count() as u32;
+                    if let Ok(parsed) = Url::parse(url) {
+                        params_total += Self::url_params(&parsed).len() as u32;
+                    }
+                }
+            }
+            if params_total > 0 || forms_total > 0 {
                 findings.push(VulnerabilityFinding {
-                    title: "Failed to Fetch Page for SQLi Analysis".to_string(),
-                    severity: Severity::Info,
-                    status: ScanStatus::Error,
-                    description: format!("Could not retrieve the page: {}", e),
-                    details: vec![],
-                    remediation: "Ensure the target URL is accessible.".to_string(),
-                    cwe_id: None,
-                    references: vec![],
+                    title: "Injectable Parameters/Forms Present".to_string(),
+                    severity: Severity::Medium,
+                    status: ScanStatus::Warning,
+                    description: format!(
+                        "Found {} URL parameter(s) and {} form(s) across scanned pages. No SQL error was triggered via probing, but inputs should still be parameterized.",
+                        params_total, forms_total
+                    ),
+                    details: vec![
+                        format!("Params: {}", params_total),
+                        format!("Forms: {}", forms_total),
+                    ],
+                    remediation:
+                        "Validate and parameterize all inputs server-side. Use an ORM or query builder.".to_string(),
+                    cwe_id: Some("CWE-89".to_string()),
+                    references: vec!["https://owasp.org/www-community/attacks/SQL_Injection".to_string()],
                 });
             }
         }
@@ -894,25 +1112,73 @@ impl VulnerabilityScanner {
     async fn scan_directory_traversal(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
 
-        let traversal_payloads = vec![
+        let traversal_payloads = [
             "../../../etc/passwd",
             "..%2f..%2f..%2fetc/passwd",
             "....//....//....//etc/passwd",
             "..\\..\\..\\etc\\passwd",
             "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd",
         ];
-
-        let traversal_signatures = vec![
-            "root:",
-            "daemon:",
-            "bin:",
+        let signatures = [
+            "root:x:0:0:",
+            "daemon:x:",
             "/bin/bash",
             "/bin/sh",
-            "nologin",
+            "[boot loader]",
+            "; for 16-bit app support",
         ];
 
-        // Check if the base URL responds with directory listing indicators
+        // Active path-traversal / LFI probing: inject payloads into every GET
+        // parameter and look for local file content leaking into the response.
+        let mut leaked = 0u32;
+        let mut samples: Vec<String> = Vec::new();
+        for url in &targets {
+            if let Ok(parsed) = Url::parse(url) {
+                let params = Self::url_params(&parsed);
+                if params.is_empty() {
+                    continue;
+                }
+                for (param, _) in &params {
+                    for p in &traversal_payloads {
+                        if let Some(body) = self.probe_param(&parsed, param, p).await {
+                            if signatures.iter().any(|s| body.contains(s)) {
+                                leaked += 1;
+                                if samples.len() < 5 {
+                                    samples.push(format!(
+                                        "Local file disclosed via param '{}' on {}",
+                                        param, url
+                                    ));
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if leaked > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "Local File Disclosure (Path Traversal) Confirmed".to_string(),
+                severity: Severity::Critical,
+                status: ScanStatus::Vulnerable,
+                description: format!(
+                    "{} probe(s) returned local file contents, confirming path traversal / LFI.",
+                    leaked
+                ),
+                details: samples,
+                remediation: "Canonicalize and validate file paths; reject '..' sequences; use an allowlist of base directories.".to_string(),
+                cwe_id: Some("CWE-22".to_string()),
+                references: vec!["https://owasp.org/www-community/attacks/Path_Traversal".to_string()],
+            });
+        }
+
+        // Passive: check if the base URL responds with directory listing indicators
         match self.fetch_page(&self.config.url).await {
             Ok((html, _)) => {
                 let html_lower = html.to_lowercase();
@@ -1006,6 +1272,61 @@ impl VulnerabilityScanner {
             "return_to", "next", "goto", "continue", "dest", "destination",
             "redir", "redirect_uri", "return_url", "checkout_url",
         ];
+
+        // Active open-redirect probe: for each redirect-like parameter, send an
+        // external target and check whether the response Location header follows it.
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+        let evil = "https://evil-example.com/";
+        for url in &targets {
+            if let Ok(parsed) = Url::parse(url) {
+                let params = Self::url_params(&parsed);
+                for (param, _) in &params {
+                    if !redirect_params.iter().any(|p| param.to_lowercase().contains(p)) {
+                        continue;
+                    }
+                    let mut test = parsed.clone();
+                    {
+                        let mut q = test.query_pairs_mut();
+                        q.clear();
+                        for (k, v) in &params {
+                            if k == param {
+                                q.append_pair(k, evil);
+                            } else {
+                                q.append_pair(k, v);
+                            }
+                        }
+                    }
+                    if let Ok(resp) = self.client.get(test.to_string()).send().await {
+                        if let Some(loc) = resp.headers().get("location") {
+                            let loc = loc.to_str().unwrap_or("").to_string();
+                            if loc.starts_with("https://evil-example.com")
+                                || loc.starts_with("//evil-example.com")
+                            {
+                                findings.push(VulnerabilityFinding {
+                                    title: "Open Redirect Confirmed".to_string(),
+                                    severity: Severity::High,
+                                    status: ScanStatus::Vulnerable,
+                                    description: format!(
+                                        "Parameter '{}' forwarded an attacker-controlled URL to an external domain via the Location header.",
+                                        param
+                                    ),
+                                    details: vec![format!("Redirect -> {}", loc)],
+                                    remediation:
+                                        "Whitelist redirect destinations server-side; never trust user-supplied URLs.".to_string(),
+                                    cwe_id: Some("CWE-601".to_string()),
+                                    references: vec!["https://owasp.org/www-community/attacks/Unsafe_Redirects".to_string()],
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Check current URL for redirect parameters
         if let Ok(parsed_url) = Url::parse(&self.config.url) {
@@ -1489,11 +1810,10 @@ impl VulnerabilityScanner {
         let mut findings = Vec::new();
 
         match self.fetch_page(&self.config.url).await {
-            Ok((html, response)) => {
+            Ok((html, _response)) => {
                 let html_lower = html.to_lowercase();
 
                 // Check for email addresses in HTML
-                let email_regex_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}";
                 let document = Html::parse_document(&html);
 
                 // Check for common information disclosure patterns
@@ -1641,20 +1961,34 @@ impl VulnerabilityScanner {
                 Ok((_, headers)) => {
                     let url = self.config.url.clone();
 
-                    // Check certificate validity
-                    findings.push(VulnerabilityFinding {
-                        title: "SSL/TLS Certificate Valid".to_string(),
-                        severity: Severity::Info,
-                        status: ScanStatus::NotVulnerable,
-                        description: "The SSL/TLS certificate is valid and the connection is encrypted.".to_string(),
-                        details: vec![
-                            format!("URL: {}", url),
-                            "Certificate chain verified".to_string(),
-                        ],
-                        remediation: "No action needed. Ensure certificates are renewed before expiration.".to_string(),
-                        cwe_id: Some("CWE-319".to_string()),
-                        references: vec![],
-                    });
+                    // Check certificate validity with a strict (non-lenient) client
+                    // so an invalid/expired/self-signed cert is actually detected.
+                    if self.verify_tls(&url).await {
+                        findings.push(VulnerabilityFinding {
+                            title: "SSL/TLS Certificate Valid".to_string(),
+                            severity: Severity::Info,
+                            status: ScanStatus::NotVulnerable,
+                            description: "The SSL/TLS certificate is valid and the connection is encrypted.".to_string(),
+                            details: vec![
+                                format!("URL: {}", url),
+                                "Certificate chain verified".to_string(),
+                            ],
+                            remediation: "No action needed. Ensure certificates are renewed before expiration.".to_string(),
+                            cwe_id: Some("CWE-319".to_string()),
+                            references: vec![],
+                        });
+                    } else {
+                        findings.push(VulnerabilityFinding {
+                            title: "SSL/TLS Certificate Untrusted".to_string(),
+                            severity: Severity::Critical,
+                            status: ScanStatus::Vulnerable,
+                            description: "The TLS handshake failed: the certificate is invalid, expired, self-signed, or the chain is untrusted.".to_string(),
+                            details: vec![format!("URL: {}", url)],
+                            remediation: "Install a valid certificate from a trusted CA and ensure the full chain is served.".to_string(),
+                            cwe_id: Some("CWE-295".to_string()),
+                            references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/07-Testing_for_Weak_SSL_TLS_Ciphers".to_string()],
+                        });
+                    }
 
                     // Check TLS version from headers
                     if headers.contains_key("strict-transport-security") {
@@ -2113,6 +2447,71 @@ impl VulnerabilityScanner {
     async fn scan_file_inclusion(&self) -> ScanResult {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+
+        let lfi_payloads = [
+            "../../../../../../etc/passwd",
+            "....//....//....//etc/passwd",
+            "php://filter/convert.base64-encode/resource=../../../../etc/passwd",
+        ];
+        let rfi_payloads = [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://example.com/shell.txt",
+        ];
+        let sigs = [
+            "root:x:0:0:",
+            "/bin/bash",
+            "[boot loader]",
+            "ami-id",
+            "instance-id",
+        ];
+
+        let mut leaked = 0u32;
+        let mut samples: Vec<String> = Vec::new();
+        for url in &targets {
+            if let Ok(parsed) = Url::parse(url) {
+                let params = Self::url_params(&parsed);
+                if !params.is_empty() {
+                    for (param, _) in &params {
+                        for p in lfi_payloads.iter().chain(rfi_payloads.iter()) {
+                            if let Some(body) = self.probe_param(&parsed, param, p).await {
+                                if sigs.iter().any(|s| body.contains(*s)) {
+                                    leaked += 1;
+                                    if samples.len() < 5 {
+                                        samples.push(format!(
+                                            "File inclusion via '{}' on {}",
+                                            param, url
+                                        ));
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if leaked > 0 {
+            findings.push(VulnerabilityFinding {
+                title: "File Inclusion (LFI/RFI) Confirmed".to_string(),
+                severity: Severity::Critical,
+                status: ScanStatus::Vulnerable,
+                description: format!(
+                    "{} probe(s) returned included file contents, confirming local/remote file inclusion.",
+                    leaked
+                ),
+                details: samples,
+                remediation:
+                    "Never pass user input to include/require/file_get_contents. Use an allowlist of files.".to_string(),
+                cwe_id: Some("CWE-98".to_string()),
+                references:
+                    vec!["https://owasp.org/www-community/vulnerabilities/Local_File_Inclusion".to_string()],
+            });
+        }
 
         match self.fetch_page(&self.config.url).await {
             Ok((html, _)) => {
@@ -2426,6 +2825,366 @@ impl VulnerabilityScanner {
             timestamp: chrono::Utc::now().to_rfc3339(),
         }
     }
+
+    // ========================================================================
+    // CHECK 16: CORS Misconfiguration
+    // ========================================================================
+    async fn scan_cors_misconfig(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+
+        for url in &targets {
+            let probe = self
+                .client
+                .get(url)
+                .header("Origin", "https://evil-example.com")
+                .send()
+                .await;
+            if let Ok(resp) = probe {
+                let acao = resp
+                    .headers()
+                    .get("access-control-allow-origin")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                let acac = resp
+                    .headers()
+                    .get("access-control-allow-credentials")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_lowercase();
+                let reflected = acao == "https://evil-example.com" || acao == "*";
+                if reflected && acac == "true" {
+                    findings.push(VulnerabilityFinding {
+                        title: "CORS Misconfiguration (credentialed)".to_string(),
+                        severity: Severity::High,
+                        status: ScanStatus::Vulnerable,
+                        description: "The server reflects arbitrary origins together with Access-Control-Allow-Credentials: true, allowing theft of authenticated cross-origin data.".to_string(),
+                        details: vec![format!("URL: {}", url), format!("ACAO: {}", acao)],
+                        remediation: "Never combine a wildcard or reflected ACAO with ACA-Credentials: true. Use a strict origin allowlist.".to_string(),
+                        cwe_id: Some("CWE-942".to_string()),
+                        references: vec!["https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny".to_string()],
+                    });
+                } else if acao == "*" {
+                    findings.push(VulnerabilityFinding {
+                        title: "CORS Allows Any Origin".to_string(),
+                        severity: Severity::Low,
+                        status: ScanStatus::Warning,
+                        description: "Access-Control-Allow-Origin is '*'. Sensitive or authenticated endpoints should restrict allowed origins.".to_string(),
+                        details: vec![format!("URL: {}", url)],
+                        remediation: "Restrict ACAO to trusted origins where the resource is sensitive.".to_string(),
+                        cwe_id: Some("CWE-942".to_string()),
+                        references: vec![],
+                    });
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No CORS Misconfiguration Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "No permissive CORS policy was detected.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
+        ScanResult {
+            check_name: "CORS Misconfiguration".to_string(),
+            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
+            severity: if has_vuln { Severity::High } else { Severity::Info },
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // ========================================================================
+    // CHECK 17: Content-Security-Policy
+    // ========================================================================
+    async fn scan_csp(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+
+        for url in &targets {
+            if let Ok(resp) = self.client.get(url).send().await {
+                match resp.headers().get("content-security-policy").and_then(|v| v.to_str().ok()) {
+                    Some(csp) => {
+                        let csp_l = csp.to_lowercase();
+                        if csp_l.contains("unsafe-inline")
+                            || csp_l.contains("unsafe-eval")
+                            || csp_l.contains("default-src *")
+                        {
+                            findings.push(VulnerabilityFinding {
+                                title: "Weak Content-Security-Policy".to_string(),
+                                severity: Severity::Medium,
+                                status: ScanStatus::Warning,
+                                description: "A CSP is present but permits unsafe-inline/unsafe-eval or a wildcard default-src, weakening XSS protection.".to_string(),
+                                details: vec![format!("URL: {}", url), format!("CSP: {}", csp)],
+                                remediation: "Remove unsafe-inline/unsafe-eval and avoid wildcard sources; use nonces/hashes.".to_string(),
+                                cwe_id: Some("CWE-1021".to_string()),
+                                references: vec!["https://owasp.org/www-project-secure-headers/".to_string()],
+                            });
+                        }
+                    }
+                    None => {
+                        findings.push(VulnerabilityFinding {
+                            title: "Content-Security-Policy Not Enabled".to_string(),
+                            severity: Severity::Medium,
+                            status: ScanStatus::Warning,
+                            description: "No Content-Security-Policy header was found, leaving the site more exposed to XSS and data injection.".to_string(),
+                            details: vec![format!("URL: {}", url)],
+                            remediation: "Deploy a restrictive CSP (default-src 'self'; script-src with nonces).".to_string(),
+                            cwe_id: Some("CWE-1021".to_string()),
+                            references: vec!["https://owasp.org/www-project-secure-headers/".to_string()],
+                        });
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "Strong Content-Security-Policy Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "A CSP is present and does not contain obvious weakeners.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
+        ScanResult {
+            check_name: "Content-Security-Policy".to_string(),
+            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
+            severity: if has_vuln { Severity::High } else { Severity::Info },
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // ========================================================================
+    // CHECK 18: Subresource Integrity
+    // ========================================================================
+    async fn scan_subresource_integrity(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+        let script_sel = Selector::parse("script[src]").ok();
+        let link_sel = Selector::parse("link[rel~=\"stylesheet\"][href]").ok();
+
+        for url in &targets {
+            if let Ok((html, _)) = self.fetch_page(url).await {
+                let doc = Html::parse_document(&html);
+                let mut check = |sel: &Option<Selector>, attr: &str, tag: &str| {
+                    if let Some(s) = sel {
+                        for elem in doc.select(s) {
+                            let val = elem.value().attr(attr).unwrap_or("").to_string();
+                            let is_external = val.starts_with("http://")
+                                || val.starts_with("https://")
+                                || (val.starts_with("//"));
+                            if is_external && elem.value().attr("integrity").is_none() {
+                                findings.push(VulnerabilityFinding {
+                                    title: "External Resource Without SRI".to_string(),
+                                    severity: Severity::Low,
+                                    status: ScanStatus::Warning,
+                                    description: format!("An external {} is loaded without an integrity attribute, allowing silent supply-chain tampering.", tag),
+                                    details: vec![format!("{}: {}", tag, val)],
+                                    remediation: "Add integrity (and crossorigin) attributes to external scripts/stylesheets.".to_string(),
+                                    cwe_id: Some("CWE-353".to_string()),
+                                    references: vec!["https://owasp.org/www-community/attacks/Subresource_Integrity".to_string()],
+                                });
+                            }
+                        }
+                    }
+                };
+                check(&script_sel, "src", "script");
+                check(&link_sel, "href", "stylesheet");
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "All External Resources Use SRI".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "No external scripts/stylesheets were found loading without Subresource Integrity.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
+        ScanResult {
+            check_name: "Subresource Integrity".to_string(),
+            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
+            severity: if has_vuln { Severity::High } else { Severity::Info },
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // ========================================================================
+    // CHECK 19: Exposed Sensitive Files
+    // ========================================================================
+    async fn scan_exposed_files(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+        let sensitive = [
+            ("/.git/HEAD", "ref:", Severity::Critical),
+            ("/.env", "APP_", Severity::Critical),
+            ("/config.php", "<?php", Severity::High),
+            ("/phpinfo.php", "phpinfo", Severity::High),
+            ("/server-status", "Apache Status", Severity::Medium),
+            ("/backup.zip", "PK", Severity::High),
+            ("/.htaccess", "RewriteEngine", Severity::Medium),
+        ];
+
+        for url in &targets {
+            if let Ok(base) = Url::parse(url) {
+                for (path, sig, sev) in sensitive.iter() {
+                    if let Ok(test) = base.join(path) {
+                        if let Ok(resp) = self.client.get(test.to_string()).send().await {
+                            if resp.status() == reqwest::StatusCode::OK {
+                                if let Ok(body) = resp.text().await {
+                                    if !body.is_empty() && body.contains(*sig) {
+                                        findings.push(VulnerabilityFinding {
+                                            title: format!("Exposed Sensitive File: {}", path),
+                                            severity: sev.clone(),
+                                            status: ScanStatus::Vulnerable,
+                                            description: format!("The file '{}' is publicly accessible and exposes sensitive information.", path),
+                                            details: vec![format!("URL: {}", test)],
+                                            remediation: "Block access to source/metadata files via the web server; remove them from the docroot.".to_string(),
+                                            cwe_id: Some("CWE-538".to_string()),
+                                            references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/01-Test_Network_Infrastructure_Configuration".to_string()],
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Exposed Sensitive Files Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "No publicly accessible sensitive files were found.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
+        ScanResult {
+            check_name: "Exposed Sensitive Files".to_string(),
+            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
+            severity: if has_vuln { Severity::High } else { Severity::Info },
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
+
+    // ========================================================================
+    // CHECK 20: Directory Listing Enabled
+    // ========================================================================
+    async fn scan_directory_listing(&self) -> ScanResult {
+        let start = std::time::Instant::now();
+        let mut findings = Vec::new();
+        let targets = if self.targets.is_empty() {
+            vec![self.config.url.clone()]
+        } else {
+            self.targets.clone()
+        };
+        let dirs = ["/images/", "/css/", "/js/", "/uploads/", "/assets/", "/backup/", "/files/"];
+
+        for url in &targets {
+            if let Ok(base) = Url::parse(url) {
+                for d in dirs.iter() {
+                    if let Ok(test) = base.join(d) {
+                        if let Ok(resp) = self.client.get(test.to_string()).send().await {
+                            if resp.status() == reqwest::StatusCode::OK {
+                                if let Ok(body) = resp.text().await {
+                                    if body.contains("Index of ") || body.contains("<title>Index of") {
+                                        findings.push(VulnerabilityFinding {
+                                            title: "Directory Listing Enabled".to_string(),
+                                            severity: Severity::Medium,
+                                            status: ScanStatus::Warning,
+                                            description: format!("Directory listing is enabled at '{}', disclosing file names and structure.", test),
+                                            details: vec![format!("URL: {}", test)],
+                                            remediation: "Disable directory indexing (e.g., Options -Indexes in Apache, autoindex off in nginx).".to_string(),
+                                            cwe_id: Some("CWE-548".to_string()),
+                                            references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/03-Test_File_Extensions_Handling".to_string()],
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if findings.is_empty() {
+            findings.push(VulnerabilityFinding {
+                title: "No Directory Listing Detected".to_string(),
+                severity: Severity::Info,
+                status: ScanStatus::NotVulnerable,
+                description: "No enabled directory listings were found on probed paths.".to_string(),
+                details: vec![],
+                remediation: "No action needed.".to_string(),
+                cwe_id: None,
+                references: vec![],
+            });
+        }
+
+        let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
+        ScanResult {
+            check_name: "Directory Listing".to_string(),
+            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
+            severity: if has_vuln { Severity::High } else { Severity::Info },
+            findings,
+            scan_duration_ms: start.elapsed().as_millis() as u64,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }
+    }
 }
 
 impl Default for ScanConfig {
@@ -2435,6 +3194,8 @@ impl Default for ScanConfig {
             timeout_secs: 30,
             follow_redirects: true,
             max_depth: 3,
+            max_pages: 50,
+            output_dir: None,
         }
     }
 }
