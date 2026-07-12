@@ -21,8 +21,15 @@
         </header>
 
         <main>
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="settings">Recording</button>
+                <button class="tab-btn" data-tab="vulnerabilities">Vulnerabilities</button>
+                <button class="tab-btn" data-tab="results">Results</button>
+            </div>
+
             <!-- Settings Panel -->
-            <section class="panel settings-panel">
+            <section class="panel settings-panel tab-content active" id="tab-settings">
                 <h2>Recording Settings</h2>
                 
                 <div class="form-group">
@@ -234,8 +241,100 @@
                 </div>
             </section>
 
-            <!-- Status Panel -->
-            <section class="panel status-panel">
+            <!-- Vulnerabilities Panel -->
+            <section class="panel vuln-panel tab-content" id="tab-vulnerabilities" style="display: none;">
+                <h2>🛡️ Security Vulnerability Scanner</h2>
+                
+                <div class="vuln-controls">
+                    <div class="form-group">
+                        <label for="scanUrl">Target URL to Scan</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input 
+                                type="text" 
+                                id="scanUrl" 
+                                placeholder="https://example.com"
+                                style="flex: 1;"
+                            />
+                            <button id="startScanBtn" class="btn btn-primary">
+                                🔍 Start Scan
+                            </button>
+                            <button id="stopScanBtn" class="btn btn-danger" disabled>
+                                ⏹️ Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scan Summary -->
+                <div id="scanSummary" class="scan-summary" style="display: none;">
+                    <div class="summary-header">
+                        <h3>Scan Results</h3>
+                        <div class="risk-score-container">
+                            <span class="risk-label">Risk Score:</span>
+                            <span id="riskScore" class="risk-score">0.0</span>
+                            <span class="risk-max">/10</span>
+                        </div>
+                    </div>
+                    <div class="summary-grid">
+                        <div class="summary-item critical">
+                            <span class="summary-count" id="criticalCount">0</span>
+                            <span class="summary-label">Critical</span>
+                        </div>
+                        <div class="summary-item high">
+                            <span class="summary-count" id="highCount">0</span>
+                            <span class="summary-label">High</span>
+                        </div>
+                        <div class="summary-item medium">
+                            <span class="summary-count" id="mediumCount">0</span>
+                            <span class="summary-label">Medium</span>
+                        </div>
+                        <div class="summary-item low">
+                            <span class="summary-count" id="lowCount">0</span>
+                            <span class="summary-label">Low</span>
+                        </div>
+                        <div class="summary-item info">
+                            <span class="summary-count" id="infoCount">0</span>
+                            <span class="summary-label">Info</span>
+                        </div>
+                    </div>
+                    <div class="summary-bar">
+                        <div id="criticalBar" class="bar-segment critical"></div>
+                        <div id="highBar" class="bar-segment high"></div>
+                        <div id="mediumBar" class="bar-segment medium"></div>
+                        <div id="lowBar" class="bar-segment low"></div>
+                        <div id="infoBar" class="bar-segment info"></div>
+                    </div>
+                    <div class="summary-stats">
+                        <span>Total Checks: <strong id="totalChecks">0</strong></span>
+                        <span>Vulnerable: <strong id="vulnerableCount">0</strong></span>
+                        <span>Warnings: <strong id="warningCount">0</strong></span>
+                        <span>Scan Duration: <strong id="scanDuration">0ms</strong></span>
+                    </div>
+                </div>
+
+                <!-- Vulnerability Details List -->
+                <div id="vulnResults" class="vuln-results" style="display: none;">
+                    <div class="vuln-results-header">
+                        <h3>Detailed Findings</h3>
+                        <div class="vuln-filters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="vulnerable">Vulnerable</button>
+                            <button class="filter-btn" data-filter="warning">Warning</button>
+                            <button class="filter-btn" data-filter="not-vulnerable">Passed</button>
+                        </div>
+                    </div>
+                    <div id="vulnList" class="vuln-list"></div>
+                </div>
+
+                <!-- Scan Progress -->
+                <div id="scanProgress" class="scan-progress" style="display: none;">
+                    <div class="scan-spinner"></div>
+                    <span id="scanStatus">Scanning...</span>
+                </div>
+            </section>
+
+            <!-- Results Panel -->
+            <section class="panel results-panel tab-content" id="tab-results" style="display: none;">
                 <h2>Status</h2>
                 
                 <div class="status-grid">

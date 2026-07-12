@@ -12,6 +12,7 @@ use crawler::{CrawlConfig, Crawler};
 use exporter::{Exporter, RecordingData};
 use notifier::{Notifier, NotificationConfig};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
+use scanner::{ScanConfig, VulnerabilityScanner, ScanReport};
 use session::SessionManager;
 
 mod cli;
@@ -46,6 +47,9 @@ struct RecordingSettings {
     progress: bool,
     log_file: Option<std::path::PathBuf>,
     pid_file: Option<std::path::PathBuf>,
+    proxy: Option<String>,
+    sitemap: Option<String>,
+    scan_url: Option<String>,
 }
 
 impl RecordingSettings {
@@ -77,6 +81,9 @@ impl RecordingSettings {
             progress: args.progress,
             log_file: args.log_file,
             pid_file: args.pid_file,
+            proxy: args.proxy,
+            sitemap: args.sitemap,
+            scan_url: args.scan_url,
         }
     }
 }
@@ -105,6 +112,7 @@ impl Default for CrawlStatus {
 struct AppState {
     status: Arc<Mutex<CrawlStatus>>,
     session_manager: Arc<Mutex<SessionManager>>,
+    scan_results: Arc<Mutex<Option<ScanReport>>>,
 }
 
 #[tauri::command]
@@ -164,6 +172,32 @@ async fn get_status(state: State<'_, AppState>) -> Result<CrawlStatus, String> {
     Ok(status.clone())
 }
 
+#[tauri::command]
+async fn run_vulnerability_scan(
+    url: String,
+    state: State<'_, AppState>,
+) -> Result<ScanReport, String> {
+    info!("Starting vulnerability scan for: {}", url);
+
+    let config = ScanConfig::new(&url).map_err(|e| e.to_string())?;
+    let scanner = VulnerabilityScanner::new(config).map_err(|e| e.to_string())?;
+
+    let report = scanner.run_full_scan().await.map_err(|e| e.to_string())?;
+
+    let mut scan_results = state.scan_results.lock().await;
+    *scan_results = Some(report.clone());
+
+    info!("Vulnerability scan completed. Risk score: {:.1}", report.summary.risk_score);
+
+    Ok(report)
+}
+
+#[tauri::command]
+async fn get_scan_results(state: State<'_, AppState>) -> Result<Option<ScanReport>, String> {
+    let scan_results = state.scan_results.lock().await;
+    Ok(scan_results.clone())
+}
+
 async fn run_recording(
     settings: RecordingSettings,
     status: Arc<Mutex<CrawlStatus>>,
@@ -182,7 +216,24 @@ async fn run_recording(
     eprintln!("Browser created successfully");
 
     let crawl_config = CrawlConfig::new(&settings.url)?;
+    let crawl_config = if let Some(ref proxy) = settings.proxy {
+        crawl_config.with_proxy(proxy)
+    } else {
+        crawl_config
+    };
+    let crawl_config = if let Some(ref sitemap) = settings.sitemap {
+        crawl_config.with_sitemap(sitemap)
+    } else {
+        crawl_config
+    };
     let mut crawler = Crawler::new(crawl_config);
+
+    // Ingest sitemap if provided
+    if settings.sitemap.is_some() {
+        if let Ok(count) = crawler.ingest_sitemap().await {
+            info!("Ingested {} URLs from sitemap", count);
+        }
+    }
 
     // Parse recording mode from settings
     let recording_mode = match settings.recording_mode.as_deref() {
@@ -352,6 +403,27 @@ async fn run_recording(
 
     info!("Recording saved to: {:?}", video_path);
     info!("Data exported to: {:?}", export_path);
+
+    // Run vulnerability scan if requested
+    if let Some(ref scan_url) = settings.scan_url {
+        info!("Running vulnerability scan on: {}", scan_url);
+        let scan_config = ScanConfig::new(scan_url)?;
+        let scanner = VulnerabilityScanner::new(scan_config)?;
+        match scanner.run_full_scan().await {
+            Ok(report) => {
+                let scan_path = std::path::PathBuf::from(&settings.output_dir)
+                    .join(format!("{}_scan.json", session_id));
+                let scan_json = serde_json::to_string_pretty(&report)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize scan: {}", e))?;
+                std::fs::write(&scan_path, scan_json)?;
+                info!("Vulnerability scan completed. Report saved to: {:?}", scan_path);
+                notifier.notify_info("Scan Complete", &format!("Risk score: {:.1}/10", report.summary.risk_score))?;
+            }
+            Err(e) => {
+                warn!("Vulnerability scan failed: {}", e);
+            }
+        }
+    }
 
     // Update final status
     let mut status_guard = status.lock().await;
@@ -596,6 +668,7 @@ fn run_gui_mode() {
     let app_state = AppState {
         status: Arc::new(Mutex::new(CrawlStatus::default())),
         session_manager: Arc::new(Mutex::new(SessionManager::new())),
+        scan_results: Arc::new(Mutex::new(None)),
     };
 
     use tauri::{CustomMenuItem, SystemTray, SystemTrayMenu, SystemTrayEvent, Manager};
@@ -649,7 +722,9 @@ fn run_gui_mode() {
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,
-            get_status
+            get_status,
+            run_vulnerability_scan,
+            get_scan_results
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -746,8 +821,25 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     
     info!("Setting up crawler...");
     let crawl_config = CrawlConfig::new(&settings.url)?;
+    let crawl_config = if let Some(ref proxy) = settings.proxy {
+        crawl_config.with_proxy(proxy)
+    } else {
+        crawl_config
+    };
+    let crawl_config = if let Some(ref sitemap) = settings.sitemap {
+        crawl_config.with_sitemap(sitemap)
+    } else {
+        crawl_config
+    };
     let mut crawler = Crawler::new(crawl_config);
-    
+
+    // Ingest sitemap if provided
+    if settings.sitemap.is_some() {
+        if let Ok(count) = crawler.ingest_sitemap().await {
+            info!("Ingested {} URLs from sitemap", count);
+        }
+    }
+
     info!("Configuring recorder...");
     let recording_config = build_recording_config(&settings);
     let recorder = Recorder::new(recording_config);
@@ -814,14 +906,85 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     
     info!("Recording saved to: {:?}", video_path);
     info!("Total pages visited: {}", pages_visited);
-    
+
+    // Run vulnerability scan if requested
+    if let Some(ref scan_url) = settings.scan_url {
+        info!("Running vulnerability scan on: {}", scan_url);
+        let scan_config = ScanConfig::new(scan_url)?;
+        let scanner = VulnerabilityScanner::new(scan_config)?;
+        match scanner.run_full_scan().await {
+            Ok(report) => {
+                let scan_path = std::path::PathBuf::from(&settings.output_dir)
+                    .join(format!("{}_scan.json", session_id));
+                let scan_json = serde_json::to_string_pretty(&report)?;
+                std::fs::write(&scan_path, scan_json)?;
+                info!("Vulnerability scan completed. Report saved to: {:?}", scan_path);
+                println!("\n🛡️ Vulnerability Scan Results:");
+                println!("─────────────────────────────────────────────────────");
+                println!("  Risk Score: {:.1}/10", report.summary.risk_score);
+                println!("  Total Checks: {}", report.summary.total_checks);
+                println!("  Vulnerabilities: {}", report.summary.vulnerable);
+                println!("  Warnings: {}", report.summary.warnings);
+                println!("  Critical: {}", report.summary.critical_count);
+                println!("  High: {}", report.summary.high_count);
+                println!("  Medium: {}", report.summary.medium_count);
+                println!("  Low: {}", report.summary.low_count);
+                println!("─────────────────────────────────────────────────────");
+            }
+            Err(e) => {
+                warn!("Vulnerability scan failed: {}", e);
+            }
+        }
+    }
+
     Ok(session_id)
 }
 
 fn resume_session(session_id: &str) -> Result<()> {
-    info!("Resume functionality not yet implemented");
-    info!("Session ID: {}", session_id);
-    warn!("This feature is coming soon!");
+    info!("Resuming session: {}", session_id);
+
+    // Look for session data file
+    let session_file = std::path::PathBuf::from("./recordings")
+        .join(format!("{}_data.json", session_id));
+
+    if !session_file.exists() {
+        warn!("Session data file not found: {:?}", session_file);
+        warn!("Available sessions can be listed with: site-recorder list");
+        return Ok(());
+    }
+
+    let session_json = std::fs::read_to_string(&session_file)?;
+    let recording_data: Vec<RecordingData> = serde_json::from_str(&session_json)?;
+
+    println!("\n📋 Session: {}", session_id);
+    println!("─────────────────────────────────────────────────────");
+    println!("  Pages recorded: {}", recording_data.len());
+    if let Some(first) = recording_data.first() {
+        println!("  Start time: {}", first.timestamp.format("%Y-%m-%d %H:%M:%S"));
+        println!("  Base URL: {}", first.url);
+    }
+    if let Some(last) = recording_data.last() {
+        println!("  End time: {}", last.timestamp.format("%Y-%m-%d %H:%M:%S"));
+    }
+    println!("─────────────────────────────────────────────────────");
+
+    // Check for associated video files
+    let recordings_dir = std::path::PathBuf::from("./recordings");
+    if let Ok(entries) = std::fs::read_dir(&recordings_dir) {
+        let mut video_count = 0;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.contains(session_id) && (name.ends_with(".mp4") || name.ends_with(".webm")) {
+                video_count += 1;
+                println!("  📹 Video: {}", name);
+            }
+        }
+        if video_count == 0 {
+            println!("  No associated video files found");
+        }
+    }
+
+    println!("\n✅ Session resume complete. Data loaded successfully.");
     Ok(())
 }
 

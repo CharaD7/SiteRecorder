@@ -40,6 +40,8 @@ pub struct CrawlArgs {
     pub username: Option<String>,
     pub password: Option<String>,
     pub sitemap: Option<String>,
+    pub proxy: Option<String>,
+    pub scan_url: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -120,6 +122,14 @@ pub enum Commands {
         /// Read URLs from sitemap.xml
         #[arg(long)]
         sitemap: Option<String>,
+
+        /// Proxy URL (e.g., http://proxy:8080)
+        #[arg(long)]
+        proxy: Option<String>,
+
+        /// Run vulnerability scan on URL after crawl
+        #[arg(long)]
+        scan_url: Option<String>,
     },
     
     /// Resume an interrupted session
@@ -160,6 +170,8 @@ impl Commands {
                 username,
                 password,
                 sitemap,
+                proxy,
+                scan_url,
             } => CrawlArgs {
                 url,
                 max_pages,
@@ -179,6 +191,8 @@ impl Commands {
                 username,
                 password,
                 sitemap,
+                proxy,
+                scan_url,
             },
             _ => panic!("into_crawl_args called on non-Crawl command"),
         }
