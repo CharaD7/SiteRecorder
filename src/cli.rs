@@ -36,6 +36,7 @@ pub struct CrawlArgs {
     pub pid_file: Option<PathBuf>,
     pub screen_width: u32,
     pub screen_height: u32,
+    pub region: Option<(i32, i32, i32, i32)>,
     pub auth_url: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
@@ -109,6 +110,10 @@ pub enum Commands {
         #[arg(long, default_value = "1080")]
         screen_height: u32,
 
+        /// Screen region to record as WxH+X+Y (e.g., 1280x720+100+50)
+        #[arg(long, value_parser = parse_region)]
+        region: Option<(i32, i32, i32, i32)>,
+
         /// Login URL (if authentication required)
         #[arg(long)]
         auth_url: Option<String>,
@@ -176,6 +181,7 @@ impl Commands {
                 pid_file,
                 screen_width,
                 screen_height,
+                region,
                 auth_url,
                 username,
                 password,
@@ -213,11 +219,44 @@ impl Commands {
                     scan_url,
                     login_script,
                     concurrency,
+                    region,
                 }
             }
             _ => panic!("into_crawl_args called on non-Crawl command"),
         }
     }
+}
+
+/// Parse a screen region in the form `WxH+X+Y` (e.g. `1280x720+100+50`).
+fn parse_region(s: &str) -> Result<(i32, i32, i32, i32), String> {
+    let parts: Vec<&str> = s.split('+').collect();
+    if parts.len() != 3 {
+        return Err("Region must be in the form WxH+X+Y".to_string());
+    }
+    let dims: Vec<&str> = parts[0].split('x').collect();
+    if dims.len() != 2 {
+        return Err("Region size must be in the form WxH".to_string());
+    }
+    let w = dims[0]
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| "Invalid width".to_string())?;
+    let h = dims[1]
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| "Invalid height".to_string())?;
+    let x = parts[1]
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| "Invalid x offset".to_string())?;
+    let y = parts[2]
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| "Invalid y offset".to_string())?;
+    if w <= 0 || h <= 0 {
+        return Err("Width and height must be positive".to_string());
+    }
+    Ok((x, y, w, h))
 }
 
 #[derive(Debug, Clone, ValueEnum)]

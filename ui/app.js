@@ -10,6 +10,7 @@ let usernameSelector, passwordSelector, submitSelector;
 let loginScriptFile, loginScript;
 let recordingModeSelect, enableAudioCheckbox, screenWidthInput, screenHeightInput;
 let concurrencyInput;
+let regionXInput, regionYInput, regionWInput, regionHInput;
 
 let statusInterval = null;
 let scanInterval = null;
@@ -82,6 +83,14 @@ async function startRecording() {
         enable_audio: enableAudioCheckbox.checked,
         screen_width: parseInt(screenWidthInput.value),
         screen_height: parseInt(screenHeightInput.value),
+        screen_region: (parseInt(regionWInput.value) > 0 && parseInt(regionHInput.value) > 0)
+            ? [
+                parseInt(regionXInput.value) || 0,
+                parseInt(regionYInput.value) || 0,
+                parseInt(regionWInput.value),
+                parseInt(regionHInput.value),
+              ]
+            : null,
         concurrency: parseInt(concurrencyInput.value) || 1,
         proxy: null,
         sitemap: null,
@@ -504,6 +513,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     screenWidthInput = document.getElementById('screenWidth');
     screenHeightInput = document.getElementById('screenHeight');
     concurrencyInput = document.getElementById('concurrency');
+    regionXInput = document.getElementById('regionX');
+    regionYInput = document.getElementById('regionY');
+    regionWInput = document.getElementById('regionW');
+    regionHInput = document.getElementById('regionH');
     
     console.log('DOM elements initialized');
     

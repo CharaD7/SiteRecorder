@@ -61,6 +61,7 @@ pub struct RecordingConfig {
     pub mode: RecordingMode,
     pub screen_width: Option<u32>,
     pub screen_height: Option<u32>,
+    pub screen_region: Option<(i32, i32, i32, i32)>, // (x, y, width, height)
 }
 
 impl Default for RecordingConfig {
@@ -74,6 +75,7 @@ impl Default for RecordingConfig {
             mode: RecordingMode::Both,  // Default to both screen and browser recording
             screen_width: Some(1920),
             screen_height: Some(1080),
+            screen_region: None,
         }
     }
 }
@@ -199,12 +201,24 @@ impl Recorder {
         {
             // Use x11grab for Linux (like Kazam)
             let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+            let (input_display, video_size) = match self.config.screen_region {
+                Some((x, y, w, h)) => (
+                    format!("{}+{},{}", display, x, y),
+                    format!("{}x{}", w, h),
+                ),
+                None => (
+                    display,
+                    format!(
+                        "{}x{}",
+                        self.config.screen_width.unwrap_or(1920),
+                        self.config.screen_height.unwrap_or(1080)
+                    ),
+                ),
+            };
             cmd.arg("-f").arg("x11grab")
                .arg("-framerate").arg(self.config.fps.to_string())
-               .arg("-video_size").arg(format!("{}x{}", 
-                   self.config.screen_width.unwrap_or(1920),
-                   self.config.screen_height.unwrap_or(1080)))
-               .arg("-i").arg(display);
+               .arg("-video_size").arg(video_size)
+               .arg("-i").arg(input_display);
         }
 
         #[cfg(target_os = "macos")]
@@ -221,6 +235,13 @@ impl Recorder {
             cmd.arg("-f").arg("gdigrab")
                .arg("-framerate").arg(self.config.fps.to_string())
                .arg("-i").arg("desktop");
+        }
+
+        // On platforms without native region selection (macOS/Windows),
+        // apply a crop video filter for the requested screen region.
+        #[cfg(not(target_os = "linux"))]
+        if let Some((x, y, w, h)) = self.config.screen_region {
+            cmd.arg("-vf").arg(format!("crop={}:{}:{}:{}", w, h, x, y));
         }
 
         // Add audio if enabled

@@ -132,6 +132,29 @@
                     </div>
                 </div>
 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="regionX">Region X</label>
+                        <input type="number" id="regionX" value="0" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regionY">Region Y</label>
+                        <input type="number" id="regionY" value="0" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regionW">Region Width</label>
+                        <input type="number" id="regionW" value="0" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="regionH">Region Height</label>
+                        <input type="number" id="regionH" value="0" min="0" />
+                    </div>
+                </div>
+                <small class="field-hint">
+                    Set Width &amp; Height &gt; 0 to record a specific screen area
+                    (Linux/X11 uses native capture; macOS/Windows crop).
+                </small>
+
                 <div class="form-group checkbox-group">
                     <label>
                         <input type="checkbox" id="enableAudio" />

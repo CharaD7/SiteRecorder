@@ -43,6 +43,7 @@ struct RecordingSettings {
     enable_audio: Option<bool>,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
+    screen_region: Option<(i32, i32, i32, i32)>,
     daemon: bool,
     progress: bool,
     log_file: Option<std::path::PathBuf>,
@@ -79,6 +80,7 @@ impl RecordingSettings {
             enable_audio: Some(args.audio),
             screen_width: Some(args.screen_width),
             screen_height: Some(args.screen_height),
+            screen_region: args.region,
             daemon: args.daemon,
             progress: args.progress,
             log_file: args.log_file,
@@ -287,11 +289,12 @@ async fn run_recording(
         fps: settings.fps.unwrap_or(30),
         quality: 80,
         audio_enabled: settings.enable_audio.unwrap_or(false),
-        mode: recording_mode,
-        screen_width: settings.screen_width.or(Some(1920)),
-        screen_height: settings.screen_height.or(Some(1080)),
-    };
-    let recorder = Recorder::new(recording_config);
+            mode: recording_mode,
+            screen_width: settings.screen_width.or(Some(1920)),
+            screen_height: settings.screen_height.or(Some(1080)),
+            screen_region: settings.screen_region,
+        };
+        let recorder = Recorder::new(recording_config);
 
     let notifier = Notifier::new(NotificationConfig::default());
     let exporter = Exporter::new();
@@ -875,6 +878,7 @@ fn build_recording_config(settings: &RecordingSettings) -> RecordingConfig {
         mode: recording_mode_from_settings(settings),
         screen_width: settings.screen_width.or(Some(1920)),
         screen_height: settings.screen_height.or(Some(1080)),
+        screen_region: settings.screen_region,
     }
 }
 
