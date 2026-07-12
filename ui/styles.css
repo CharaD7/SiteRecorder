@@ -891,3 +891,240 @@ footer {
     color: var(--text-color);
     font-size: 1rem;
 }
+
+/* Vulnerability actions (export / false-positive) */
+.vuln-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.fp-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.fp-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.fp-btn:hover {
+    border-color: var(--accent-color);
+}
+
+.finding.dismissed {
+    opacity: 0.45;
+    border-style: dashed;
+}
+
+/* Scan history */
+.scan-history {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.scan-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.scan-history-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.history-search {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+}
+
+.scan-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.history-empty {
+    color: var(--text-color);
+    opacity: 0.6;
+    font-size: 0.9rem;
+    padding: 16px;
+    text-align: center;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    flex-wrap: wrap;
+}
+
+.history-main {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.history-target {
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.78rem;
+    opacity: 0.7;
+    margin-top: 4px;
+}
+
+.history-stats {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.risk-pill, .vuln-pill, .warn-pill {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 10px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.history-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.history-actions .btn {
+    padding: 5px 10px;
+    font-size: 0.78rem;
+}
+
+/* ===== Attention banner (vulnerabilities / sensitive data) ===== */
+.scan-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
+    padding: 14px 18px;
+    border-radius: 10px;
+    border: 2px solid;
+    font-size: 0.98rem;
+    font-weight: 600;
+}
+
+.scan-alert .alert-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.scan-alert .alert-num {
+    font-size: 1.25rem;
+    font-weight: 800;
+    padding: 0 4px;
+}
+
+.scan-alert.alert-critical {
+    color: #fff;
+    background: linear-gradient(90deg, #b71c1c, #e53935);
+    border-color: #ff5252;
+    box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.7);
+    animation: alert-pulse 1.4s infinite;
+}
+
+.scan-alert.alert-warning {
+    color: #1a1205;
+    background: linear-gradient(90deg, #ffb300, #ffca28);
+    border-color: #ff8f00;
+}
+
+@keyframes alert-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.6); }
+    70%  { box-shadow: 0 0 0 12px rgba(229, 57, 53, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0); }
+}
+
+/* Sensitive-data / secret badge */
+.badge-sensitive {
+    background: #b71c1c !important;
+    color: #fff !important;
+    border: 1px solid #ff5252;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    animation: alert-pulse 1.6s infinite;
+}
+
+.filter-sensitive {
+    border-color: #ff5252 !important;
+    color: #ff8a80 !important;
+}
+
+.filter-btn.filter-sensitive.active {
+    background: #b71c1c;
+    color: #fff;
+    border-color: #ff5252;
+}
+
+/* Findings that expose secrets / sensitive data */
+.finding.sensitive {
+    border: 2px solid #ff5252 !important;
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(229, 57, 53, 0.10),
+        rgba(229, 57, 53, 0.10) 10px,
+        rgba(229, 57, 53, 0.18) 10px,
+        rgba(229, 57, 53, 0.18) 20px
+    ) !important;
+    box-shadow: 0 0 10px rgba(229, 57, 53, 0.35);
+}
+
+/* Vulnerable check items get a strong left accent + glow */
+.vuln-item.vulnerable {
+    border-left: 6px solid #f44336;
+    box-shadow: 0 0 14px rgba(244, 67, 54, 0.25);
+}
+
+.vuln-item.has-sensitive {
+    border-left: 6px solid #b71c1c;
+}
+
+.vuln-item.vulnerable .vuln-check-name {
+    font-weight: 700;
+}
+
+/* Make the vulnerable status pill pop */
+.vuln-item.vulnerable .badge-vulnerable {
+    animation: alert-pulse 1.8s infinite;
+}

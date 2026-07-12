@@ -327,6 +327,9 @@
                     </div>
                 </div>
 
+                <!-- Attention banner for vulnerabilities / sensitive data -->
+                <div id="scanAlert" class="scan-alert" style="display: none;"></div>
+
                 <!-- Scan Summary -->
                 <div id="scanSummary" class="scan-summary" style="display: none;">
                     <div class="summary-header">
@@ -381,11 +384,40 @@
                         <div class="vuln-filters">
                             <button class="filter-btn active" data-filter="all">All</button>
                             <button class="filter-btn" data-filter="vulnerable">Vulnerable</button>
+                            <button class="filter-btn filter-sensitive" data-filter="sensitive">🔒 Sensitive</button>
                             <button class="filter-btn" data-filter="warning">Warning</button>
                             <button class="filter-btn" data-filter="not-vulnerable">Passed</button>
                         </div>
+                        <div class="vuln-actions">
+                            <label class="fp-toggle">
+                                <input type="checkbox" id="hideFp" />
+                                <span>Hide marked false positives</span>
+                            </label>
+                            <button id="exportJsonBtn" class="btn btn-secondary" type="button">⬇ JSON</button>
+                            <button id="exportCsvBtn" class="btn btn-secondary" type="button">⬇ CSV</button>
+                        </div>
                     </div>
                     <div id="vulnList" class="vuln-list"></div>
+                </div>
+
+                <!-- Scan History -->
+                <div class="scan-history">
+                    <div class="scan-history-header">
+                        <h3>📚 Scan History</h3>
+                        <button id="refreshHistoryBtn" class="btn btn-secondary" type="button">🔄 Refresh</button>
+                    </div>
+                    <div class="scan-history-controls">
+                        <input type="text" id="historySearch" class="history-search"
+                               placeholder="Search by target URL or scan id..." style="flex: 1;" />
+                        <select id="historySort" class="themed-select">
+                            <option value="time">Newest first</option>
+                            <option value="risk">Highest risk</option>
+                            <option value="target">Target A–Z</option>
+                        </select>
+                    </div>
+                    <div id="scanHistoryList" class="scan-history-list">
+                        <div class="history-empty">No saved scans yet. Run a scan with an Output Directory set.</div>
+                    </div>
                 </div>
 
                 <!-- Scan Progress -->
