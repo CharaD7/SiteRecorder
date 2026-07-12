@@ -199,26 +199,44 @@ impl Recorder {
         
         #[cfg(target_os = "linux")]
         {
-            // Use x11grab for Linux (like Kazam)
-            let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-            let (input_display, video_size) = match self.config.screen_region {
-                Some((x, y, w, h)) => (
-                    format!("{}+{},{}", display, x, y),
-                    format!("{}x{}", w, h),
-                ),
-                None => (
-                    display,
-                    format!(
-                        "{}x{}",
-                        self.config.screen_width.unwrap_or(1920),
-                        self.config.screen_height.unwrap_or(1080)
+            // Detect display server: Wayland requires PipeWire capture since
+            // x11grab cannot access Wayland compositor surfaces.
+            let is_wayland = std::env::var("XDG_SESSION_TYPE")
+                .map(|v| v.eq_ignore_ascii_case("wayland"))
+                .unwrap_or(false)
+                || std::env::var("WAYLAND_DISPLAY").is_ok();
+
+            if is_wayland {
+                info!("Wayland session detected, using PipeWire screen capture");
+                cmd.arg("-f").arg("pipewire")
+                   .arg("-framerate").arg(self.config.fps.to_string())
+                   .arg("-i").arg("default");
+                // Region selection on Wayland is applied via a crop filter
+                if let Some((x, y, w, h)) = self.config.screen_region {
+                    cmd.arg("-vf").arg(format!("crop={}:{}:{}:{}", w, h, x, y));
+                }
+            } else {
+                // Use x11grab for X11 (like Kazam)
+                let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+                let (input_display, video_size) = match self.config.screen_region {
+                    Some((x, y, w, h)) => (
+                        format!("{}+{},{}", display, x, y),
+                        format!("{}x{}", w, h),
                     ),
-                ),
-            };
-            cmd.arg("-f").arg("x11grab")
-               .arg("-framerate").arg(self.config.fps.to_string())
-               .arg("-video_size").arg(video_size)
-               .arg("-i").arg(input_display);
+                    None => (
+                        display,
+                        format!(
+                            "{}x{}",
+                            self.config.screen_width.unwrap_or(1920),
+                            self.config.screen_height.unwrap_or(1080)
+                        ),
+                    ),
+                };
+                cmd.arg("-f").arg("x11grab")
+                   .arg("-framerate").arg(self.config.fps.to_string())
+                   .arg("-video_size").arg(video_size)
+                   .arg("-i").arg(input_display);
+            }
         }
 
         #[cfg(target_os = "macos")]
