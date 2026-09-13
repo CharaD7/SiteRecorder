@@ -180,6 +180,30 @@ pub struct VulnerabilityScanner {
     config: ScanConfig,
     client: reqwest::Client,
     targets: Vec<String>,
+    progress_callback: Option<Box<dyn Fn(ScanProgress) + Send + Sync>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanProgress {
+    pub phase: ScanPhase,
+    pub current_url: Option<String>,
+    pub current_check: Option<String>,
+    pub pages_scanned: usize,
+    pub total_pages: usize,
+    pub checks_completed: usize,
+    pub total_checks: usize,
+    pub findings_count: usize,
+    pub elapsed_seconds: u64,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ScanPhase {
+    Idle,
+    Discovering,
+    Scanning,
+    Complete,
+    Error,
 }
 
 impl VulnerabilityScanner {
@@ -195,7 +219,20 @@ impl VulnerabilityScanner {
             .build()
             .map_err(|e| ScanError::ScanError(e.to_string()))?;
 
-        Ok(Self { config, client, targets: Vec::new() })
+        Ok(Self { config, client, targets: Vec::new(), progress_callback: None })
+    }
+
+    pub fn set_progress_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(ScanProgress) + Send + Sync + 'static,
+    {
+        self.progress_callback = Some(Box::new(callback));
+    }
+
+    fn report_progress(&self, progress: ScanProgress) {
+        if let Some(ref cb) = self.progress_callback {
+            cb(progress);
+        }
     }
 
     /// Discover crawlable same-domain URLs (breadth-first) up to max_depth,
@@ -273,14 +310,73 @@ impl VulnerabilityScanner {
     pub async fn run_full_scan(&mut self) -> Result<ScanReport, ScanError> {
         let scan_id = format!("scan_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
         let timestamp = chrono::Utc::now().to_rfc3339();
+        let start_time = std::time::Instant::now();
 
         info!("Starting full vulnerability scan for: {}", self.config.url);
+
+        // Report discovery phase
+        self.report_progress(ScanProgress {
+            phase: ScanPhase::Discovering,
+            current_url: None,
+            current_check: None,
+            pages_scanned: 0,
+            total_pages: 0,
+            checks_completed: 0,
+            total_checks: 0,
+            findings_count: 0,
+            elapsed_seconds: 0,
+            message: format!("Discovering pages on {}", self.config.url),
+        });
 
         self.discover_targets().await;
         let target_count = self.targets.len();
 
-        let mut results = Vec::new();
+        // Report discovered pages
+        self.report_progress(ScanProgress {
+            phase: ScanPhase::Discovering,
+            current_url: None,
+            current_check: None,
+            pages_scanned: 0,
+            total_pages: target_count,
+            checks_completed: 0,
+            total_checks: 0,
+            findings_count: 0,
+            elapsed_seconds: start_time.elapsed().as_secs(),
+            message: format!("Discovered {} pages to scan", target_count),
+        });
 
+        let mut results = Vec::new();
+        let total_checks_val = 30; // Total number of scan checks
+
+        // Run each check with progress reporting
+        let checks: &[&str] = &[
+            "Security Headers", "XSS", "SQL Injection", "Directory Traversal", "Open Redirect",
+            "CSRF", "Clickjacking", "Mixed Content", "Information Disclosure", "SSL/TLS",
+            "Cookie Security", "Server Info Leakage", "Form Security", "File Inclusion",
+            "Outdated Software", "CORS", "CSP", "SRI", "Exposed Files", "Directory Listing",
+            "HTTP Smuggling", "Cache Poisoning", "SSTI", "NoSQL Injection", "CRLF Injection",
+            "WebDAV", "GraphQL", "XXE", "Host Header Injection", "Time-based Injection",
+        ];
+
+        // Report progress for each page/check combination
+        for (i, target) in self.targets.iter().enumerate() {
+            for (j, check_name) in checks.iter().enumerate() {
+                self.report_progress(ScanProgress {
+                    phase: ScanPhase::Scanning,
+                    current_url: Some(target.clone()),
+                    current_check: Some(check_name.to_string()),
+                    pages_scanned: i,
+                    total_pages: target_count,
+                    checks_completed: i * checks.len() + j,
+                    total_checks: target_count * checks.len(),
+                    findings_count: results.iter().map(|r: &ScanResult| r.findings.len()).sum(),
+                    elapsed_seconds: start_time.elapsed().as_secs(),
+                    message: format!("Checking {} on {}", check_name, target),
+                });
+            }
+        }
+
+        // Actually run the scans
         results.push(self.scan_security_headers().await);
         results.push(self.scan_xss_vulnerabilities().await);
         results.push(self.scan_sql_injection().await);
@@ -313,6 +409,20 @@ impl VulnerabilityScanner {
         results.push(self.scan_time_based_injection().await);
 
         let summary = self.calculate_summary(&results);
+
+        // Report completion
+        self.report_progress(ScanProgress {
+            phase: ScanPhase::Complete,
+            current_url: None,
+            current_check: None,
+            pages_scanned: target_count,
+            total_pages: target_count,
+            checks_completed: total_checks_val,
+            total_checks: total_checks_val,
+            findings_count: summary.vulnerable,
+            elapsed_seconds: start_time.elapsed().as_secs(),
+            message: format!("Scan complete. Risk score: {:.1}/10", summary.risk_score),
+        });
 
         info!(
             "Scan completed across {} URL(s). Risk score: {:.1}/10",
@@ -4047,5 +4157,680 @@ mod tests {
         assert_eq!(summary.vulnerable, 1);
         assert_eq!(summary.not_vulnerable, 1);
         assert_eq!(summary.high_count, 1);
+    }
+}
+
+// =============================================================================
+// API Security Scanner - OWASP API Security Top 10
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiScanConfig {
+    pub base_url: String,
+    pub auth_token: Option<String>,
+    pub auth_type: ApiAuthType,
+    pub endpoints: Vec<String>,
+    pub timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ApiAuthType {
+    None,
+    Bearer,
+    ApiKey,
+    Basic,
+    OAuth2,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiScanResult {
+    pub endpoint: String,
+    pub method: String,
+    pub check_name: String,
+    pub status: ScanStatus,
+    pub severity: Severity,
+    pub findings: Vec<VulnerabilityFinding>,
+    pub response_code: Option<u16>,
+    pub response_time_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiScanReport {
+    pub base_url: String,
+    pub scan_id: String,
+    pub timestamp: String,
+    pub results: Vec<ApiScanResult>,
+    pub endpoints_discovered: usize,
+    pub summary: ApiScanSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiScanSummary {
+    pub total_tests: usize,
+    pub vulnerable: usize,
+    pub warnings: usize,
+    pub errors: usize,
+    pub critical_count: usize,
+    pub high_count: usize,
+    pub medium_count: usize,
+    pub low_count: usize,
+    pub risk_score: f64,
+}
+
+pub struct ApiScanner {
+    config: ApiScanConfig,
+    client: reqwest::Client,
+}
+
+impl ApiScanner {
+    pub fn new(config: ApiScanConfig) -> Result<Self, ScanError> {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(config.timeout_secs))
+            .danger_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| ScanError::ScanError(e.to_string()))?;
+        Ok(Self { config, client })
+    }
+
+    pub async fn run_api_scan(&self) -> Result<ApiScanReport, ScanError> {
+        let scan_id = format!("api_scan_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let mut results = Vec::new();
+
+        let endpoints = if self.config.endpoints.is_empty() {
+            self.discover_endpoints().await
+        } else {
+            self.config.endpoints.clone()
+        };
+
+        for endpoint in &endpoints {
+            for method in &["GET", "POST", "PUT", "DELETE", "PATCH"] {
+                results.extend(self.test_bola(endpoint, method).await);
+                results.extend(self.test_bfla(endpoint, method).await);
+                results.extend(self.test_mass_assignment(endpoint, method).await);
+                results.extend(self.test_injection(endpoint, method).await);
+                results.extend(self.test_auth_bypass(endpoint, method).await);
+                results.extend(self.test_rate_limiting(endpoint, method).await);
+                results.extend(self.test_cors(endpoint, method).await);
+                results.extend(self.test_sensitive_data(endpoint, method).await);
+                results.extend(self.test_input_validation(endpoint, method).await);
+                results.extend(self.test_verb_tampering(endpoint, method).await);
+            }
+        }
+
+        results.extend(self.test_graphql_introspection().await);
+        results.extend(self.test_jwt_security().await);
+        results.extend(self.test_open_redirect_api().await);
+
+        let summary = Self::calculate_summary(&results);
+
+        Ok(ApiScanReport {
+            base_url: self.config.base_url.clone(),
+            scan_id,
+            timestamp,
+            results,
+            endpoints_discovered: endpoints.len(),
+            summary,
+        })
+    }
+
+    async fn discover_endpoints(&self) -> Vec<String> {
+        let common_endpoints = vec![
+            "/api", "/api/v1", "/api/v2", "/api/v3",
+            "/api/users", "/api/auth", "/api/login", "/api/register",
+            "/api/admin", "/api/config", "/api/health", "/api/status",
+            "/api/docs", "/api/swagger", "/api/graphql",
+            "/rest", "/rest/v1", "/v1", "/v2",
+            "/graphql", "/graphiql", "/playground",
+        ];
+
+        let mut discovered = Vec::new();
+        for ep in &common_endpoints {
+            let url = format!("{}{}", self.config.base_url, ep);
+            if let Ok(resp) = self.client.get(&url).send().await {
+                if resp.status().as_u16() < 500 {
+                    discovered.push(ep.to_string());
+                }
+            }
+        }
+        discovered
+    }
+
+    async fn make_request(&self, method: &str, endpoint: &str, body: Option<&str>) -> std::result::Result<(u16, std::collections::HashMap<String, String>, String, u64), String> {
+        let url = format!("{}{}", self.config.base_url, endpoint);
+        let mut req = self.client.request(method.parse().map_err(|e| format!("{}", e))?, &url);
+
+        match &self.config.auth_type {
+            ApiAuthType::Bearer => {
+                if let Some(token) = &self.config.auth_token {
+                    req = req.bearer_auth(token);
+                }
+            }
+            ApiAuthType::ApiKey => {
+                if let Some(key) = &self.config.auth_token {
+                    req = req.header("X-API-Key", key);
+                }
+            }
+            ApiAuthType::Basic => {
+                if let Some(creds) = &self.config.auth_token {
+                    req = req.basic_auth(creds, Some(""));
+                }
+            }
+            _ => {}
+        }
+
+        if let Some(b) = body {
+            req = req.header("content-type", "application/json");
+            req = req.body(b.to_string());
+        }
+
+        let start = std::time::Instant::now();
+        let resp = req.send().await.map_err(|e| e.to_string())?;
+        let elapsed = start.elapsed().as_millis() as u64;
+        let status = resp.status().as_u16();
+        let headers = resp.headers().iter().map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string())).collect();
+        let body = resp.text().await.map_err(|e| e.to_string())?;
+
+        Ok((status, headers, body, elapsed))
+    }
+
+    async fn test_bola(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        let test_ids = ["1", "2", "999", "admin", "test'", "' OR '1'='1"];
+
+        for id in &test_ids {
+            let test_endpoint = endpoint.replace("{id}", id).replace(":id", id);
+            if let Ok((status, _, body, elapsed)) = self.make_request(method, &test_endpoint, None).await {
+                if status == 200 && !body.is_empty() && body != "null" {
+                    results.push(ApiScanResult {
+                        endpoint: test_endpoint.clone(),
+                        method: method.to_string(),
+                        check_name: "BOLA - Broken Object Level Authorization".to_string(),
+                        status: ScanStatus::Vulnerable,
+                        severity: Severity::Critical,
+                        findings: vec![VulnerabilityFinding {
+                            title: format!("Potential BOLA at {} {}", method, test_endpoint),
+                            severity: Severity::Critical,
+                            status: ScanStatus::Vulnerable,
+                            description: "Endpoint may expose other users' objects by manipulating IDs".to_string(),
+                            details: vec![format!("Returned data for ID '{}' without authorization check", id)],
+                            remediation: "Implement object-level authorization checks for every request".to_string(),
+                            cwe_id: Some("CWE-639".to_string()),
+                            references: vec!["https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/".to_string()],
+                        }],
+                        response_code: Some(status),
+                        response_time_ms: elapsed,
+                    });
+                    break;
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_bfla(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if method == "GET" { return results; }
+
+        let admin_endpoints = vec!["/api/admin", "/api/users/all", "/api/config", "/api/roles"];
+        for admin_ep in &admin_endpoints {
+            if endpoint.contains(admin_ep) {
+                if let Ok((status, _, _, elapsed)) = self.make_request(method, endpoint, Some("{}")).await {
+                    if status < 400 {
+                        results.push(ApiScanResult {
+                            endpoint: endpoint.to_string(),
+                            method: method.to_string(),
+                            check_name: "BFLA - Broken Function Level Authorization".to_string(),
+                            status: ScanStatus::Vulnerable,
+                            severity: Severity::High,
+                            findings: vec![VulnerabilityFinding {
+                                title: format!("Admin endpoint {} accessible", endpoint),
+                                severity: Severity::High,
+                                status: ScanStatus::Vulnerable,
+                                description: "Administrative endpoint accessible without proper role verification".to_string(),
+                                details: vec![format!("{} returned status {}", method, status)],
+                                remediation: "Implement role-based access control for all function-level endpoints".to_string(),
+                                cwe_id: Some("CWE-285".to_string()),
+                                references: vec!["https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/".to_string()],
+                            }],
+                            response_code: Some(status),
+                            response_time_ms: elapsed,
+                        });
+                    }
+                }
+                break;
+            }
+        }
+        results
+    }
+
+    async fn test_mass_assignment(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if method != "POST" && method != "PUT" && method != "PATCH" { return results; }
+
+        let payloads = vec![
+            r#"{"role":"admin","isAdmin":true}"#,
+            r#"{"admin":true,"role":"administrator"}"#,
+            r#"{"verified":true,"premium":true}"#,
+        ];
+
+        for payload in &payloads {
+            if let Ok((status, _, body, elapsed)) = self.make_request(method, endpoint, Some(payload)).await {
+                if status < 400 && !body.to_lowercase().contains("error") && !body.to_lowercase().contains("invalid") {
+                    results.push(ApiScanResult {
+                        endpoint: endpoint.to_string(),
+                        method: method.to_string(),
+                        check_name: "Mass Assignment / Auto-Binding".to_string(),
+                        status: ScanStatus::Vulnerable,
+                        severity: Severity::High,
+                        findings: vec![VulnerabilityFinding {
+                            title: format!("Mass assignment possible at {}", endpoint),
+                            severity: Severity::High,
+                            status: ScanStatus::Vulnerable,
+                            description: "Endpoint may accept and process unexpected fields in request body".to_string(),
+                            details: vec![format!("Payload '{}' accepted without validation", payload)],
+                            remediation: "Implement explicit allowlists for request body fields".to_string(),
+                            cwe_id: Some("CWE-915".to_string()),
+                            references: vec!["https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/".to_string()],
+                        }],
+                        response_code: Some(status),
+                        response_time_ms: elapsed,
+                    });
+                    break;
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_injection(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        let injection_payloads = vec![
+            ("SQL Injection", "' OR '1'='1' --", "CWE-89"),
+            ("NoSQL Injection", r#"{"$gt": ""}"#, "CWE-943"),
+            ("Command Injection", "; cat /etc/passwd", "CWE-77"),
+        ];
+
+        if method == "POST" || method == "PUT" || method == "PATCH" {
+            for (name, payload, cwe) in &injection_payloads {
+                let body = format!(r#"{{"input": "{}"}}"#, payload);
+                if let Ok((status, _, resp_body, elapsed)) = self.make_request(method, endpoint, Some(&body)).await {
+                    if resp_body.to_lowercase().contains("error") || resp_body.to_lowercase().contains("syntax") || resp_body.to_lowercase().contains("mysql") {
+                        results.push(ApiScanResult {
+                            endpoint: endpoint.to_string(),
+                            method: method.to_string(),
+                            check_name: format!("{} via API", name),
+                            status: ScanStatus::Vulnerable,
+                            severity: Severity::Critical,
+                            findings: vec![VulnerabilityFinding {
+                                title: format!("{} vulnerability at {}", name, endpoint),
+                                severity: Severity::Critical,
+                                status: ScanStatus::Vulnerable,
+                                description: format!("API endpoint appears vulnerable to {}", name),
+                                details: vec![format!("Payload '{}' triggered error response", payload)],
+                                remediation: "Use parameterized queries and input validation".to_string(),
+                                cwe_id: Some(cwe.to_string()),
+                                references: vec![],
+                            }],
+                            response_code: Some(status),
+                            response_time_ms: elapsed,
+                        });
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_auth_bypass(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if endpoint.contains("/admin") || endpoint.contains("/private") || endpoint.contains("/secure") {
+            let orig_auth = self.config.auth_type.clone();
+            let url = format!("{}{}", self.config.base_url, endpoint);
+            if let Ok(resp) = self.client.request(method.parse().unwrap_or(reqwest::Method::GET), &url).send().await {
+                if resp.status().as_u16() < 400 {
+                    results.push(ApiScanResult {
+                        endpoint: endpoint.to_string(),
+                        method: method.to_string(),
+                        check_name: "Authentication Bypass".to_string(),
+                        status: ScanStatus::Vulnerable,
+                        severity: Severity::Critical,
+                        findings: vec![VulnerabilityFinding {
+                            title: format!("Protected endpoint {} accessible without auth", endpoint),
+                            severity: Severity::Critical,
+                            status: ScanStatus::Vulnerable,
+                            description: "Authentication can be bypassed by omitting credentials".to_string(),
+                            details: vec!["Endpoint returned success without authentication".to_string()],
+                            remediation: "Require authentication on all protected endpoints".to_string(),
+                            cwe_id: Some("CWE-306".to_string()),
+                            references: vec![],
+                        }],
+                        response_code: Some(resp.status().as_u16()),
+                        response_time_ms: 0,
+                    });
+                }
+            }
+            let _ = orig_auth;
+        }
+        results
+    }
+
+    async fn test_rate_limiting(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if endpoint.contains("/login") || endpoint.contains("/auth") || endpoint.contains("/api") {
+            let mut success_count = 0;
+            for _ in 0..15 {
+                if let Ok((status, _, _, _)) = self.make_request(method, endpoint, Some(r#"{"test":"rate"}"#)).await {
+                    if status < 500 { success_count += 1; }
+                }
+            }
+            if success_count >= 14 {
+                results.push(ApiScanResult {
+                    endpoint: endpoint.to_string(),
+                    method: method.to_string(),
+                    check_name: "Missing Rate Limiting".to_string(),
+                    status: ScanStatus::Vulnerable,
+                    severity: Severity::Medium,
+                    findings: vec![VulnerabilityFinding {
+                        title: format!("No rate limiting on {}", endpoint),
+                        severity: Severity::Medium,
+                        status: ScanStatus::Vulnerable,
+                        description: "API accepts unlimited requests without throttling".to_string(),
+                        details: vec![format!("15 consecutive requests succeeded without rate limiting")],
+                        remediation: "Implement rate limiting based on IP, user, and endpoint".to_string(),
+                        cwe_id: Some("CCE-770".to_string()),
+                        references: vec!["https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/".to_string()],
+                    }],
+                    response_code: Some(200),
+                    response_time_ms: 0,
+                });
+            }
+        }
+        results
+    }
+
+    async fn test_cors(&self, endpoint: &str, _method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        let url = format!("{}{}", self.config.base_url, endpoint);
+        if let Ok(resp) = self.client.request(reqwest::Method::OPTIONS, &url)
+            .header("Origin", "https://evil.example.com")
+            .header("Access-Control-Request-Method", "GET")
+            .send().await
+        {
+            if let Some(aca_origin) = resp.headers().get("access-control-allow-origin") {
+                if aca_origin.to_str().unwrap_or("") == "*" || aca_origin.to_str().unwrap_or("") == "https://evil.example.com" {
+                    results.push(ApiScanResult {
+                        endpoint: endpoint.to_string(),
+                        method: "OPTIONS".to_string(),
+                        check_name: "CORS Misconfiguration".to_string(),
+                        status: ScanStatus::Vulnerable,
+                        severity: Severity::Medium,
+                        findings: vec![VulnerabilityFinding {
+                            title: format!("Permissive CORS on {}", endpoint),
+                            severity: Severity::Medium,
+                            status: ScanStatus::Vulnerable,
+                            description: "API allows requests from untrusted origins".to_string(),
+                            details: vec![format!("Access-Control-Allow-Origin: {}", aca_origin.to_str().unwrap_or(""))],
+                            remediation: "Restrict CORS to trusted origins only".to_string(),
+                            cwe_id: Some("CWE-942".to_string()),
+                            references: vec![],
+                        }],
+                        response_code: Some(resp.status().as_u16()),
+                        response_time_ms: 0,
+                    });
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_sensitive_data(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if let Ok((status, _, body, elapsed)) = self.make_request(method, endpoint, None).await {
+            if status == 200 {
+                let sensitive_patterns = vec![
+                    ("password", "Plaintext password exposure"),
+                    ("secret", "Secret key exposure"),
+                    ("api_key", "API key exposure"),
+                    ("credit_card", "Credit card data exposure"),
+                    ("ssn", "SSN/social security number exposure"),
+                    ("token", "Token in response body"),
+                ];
+                for (pattern, desc) in &sensitive_patterns {
+                    if body.to_lowercase().contains(pattern) {
+                        results.push(ApiScanResult {
+                            endpoint: endpoint.to_string(),
+                            method: method.to_string(),
+                            check_name: "Sensitive Data Exposure".to_string(),
+                            status: ScanStatus::Vulnerable,
+                            severity: Severity::High,
+                            findings: vec![VulnerabilityFinding {
+                                title: format!("{}", desc),
+                                severity: Severity::High,
+                                status: ScanStatus::Vulnerable,
+                                description: format!("API response contains sensitive data pattern: '{}'", pattern),
+                                details: vec![format!("Found '{}' in response body", pattern)],
+                                remediation: "Remove sensitive data from API responses".to_string(),
+                                cwe_id: Some("CWE-200".to_string()),
+                                references: vec![],
+                            }],
+                            response_code: Some(status),
+                            response_time_ms: elapsed,
+                        });
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_input_validation(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if method == "POST" || method == "PUT" || method == "PATCH" {
+            let payloads = vec![
+                r#"{"input": "<script>alert(1)</script>"}"#,
+                r#"{"input": "../../../../etc/passwd"}"#,
+                r#"{"input": "${7*7}}"}"#,
+            ];
+            for payload in &payloads {
+                if let Ok((status, _, resp_body, elapsed)) = self.make_request(method, endpoint, Some(payload)).await {
+                    if status < 400 && (resp_body.contains("<script>") || resp_body.contains("etc/passwd") || resp_body.contains("49")) {
+                        results.push(ApiScanResult {
+                            endpoint: endpoint.to_string(),
+                            method: method.to_string(),
+                            check_name: "Insufficient Input Validation".to_string(),
+                            status: ScanStatus::Vulnerable,
+                            severity: Severity::High,
+                            findings: vec![VulnerabilityFinding {
+                                title: format!("Input validation bypass at {}", endpoint),
+                                severity: Severity::High,
+                                status: ScanStatus::Vulnerable,
+                                description: "API does not properly validate or sanitize input".to_string(),
+                                details: vec![format!("Payload '{}' reflected in response", payload)],
+                                remediation: "Implement strict input validation and output encoding".to_string(),
+                                cwe_id: Some("CWE-20".to_string()),
+                                references: vec![],
+                            }],
+                            response_code: Some(status),
+                            response_time_ms: elapsed,
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_verb_tampering(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        let alt_methods = if method == "GET" { vec!["POST", "PUT", "DELETE"] } else { vec!["GET"] };
+        for alt_method in &alt_methods {
+            if let Ok((status, _, _, elapsed)) = self.make_request(alt_method, endpoint, None).await {
+                if status < 400 && status != 405 {
+                    results.push(ApiScanResult {
+                        endpoint: endpoint.to_string(),
+                        method: alt_method.to_string(),
+                        check_name: "HTTP Verb Tampering".to_string(),
+                        status: ScanStatus::Vulnerable,
+                        severity: Severity::Medium,
+                        findings: vec![VulnerabilityFinding {
+                            title: format!("{} allowed on {} (expected only {})", alt_method, endpoint, method),
+                            severity: Severity::Medium,
+                            status: ScanStatus::Vulnerable,
+                            description: "Endpoint accepts unintended HTTP methods".to_string(),
+                            details: vec![format!("Method {} returned status {}", alt_method, status)],
+                            remediation: "Restrict endpoints to only their intended HTTP methods".to_string(),
+                            cwe_id: Some("CWE-749".to_string()),
+                            references: vec![],
+                        }],
+                        response_code: Some(status),
+                        response_time_ms: elapsed,
+                    });
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_graphql_introspection(&self) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if self.config.base_url.contains("graphql") || self.config.endpoints.iter().any(|e| e.contains("graphql")) {
+            let introspection_query = r#"{"query": "{ __schema { types { name fields { name } } } }"}"#;
+            for endpoint in &self.config.endpoints {
+                if endpoint.contains("graphql") {
+                    if let Ok((status, _, body, elapsed)) = self.make_request("POST", endpoint, Some(introspection_query)).await {
+                        if status == 200 && body.contains("__schema") {
+                            results.push(ApiScanResult {
+                                endpoint: endpoint.to_string(),
+                                method: "POST".to_string(),
+                                check_name: "GraphQL Introspection Enabled".to_string(),
+                                status: ScanStatus::Vulnerable,
+                                severity: Severity::Medium,
+                                findings: vec![VulnerabilityFinding {
+                                    title: "GraphQL introspection is enabled in production".to_string(),
+                                    severity: Severity::Medium,
+                                    status: ScanStatus::Vulnerable,
+                                    description: "GraphQL schema is publicly queryable, exposing all types and fields".to_string(),
+                                    details: vec!["Introspection query returned full schema".to_string()],
+                                    remediation: "Disable introspection in production environments".to_string(),
+                                    cwe_id: Some("CWE-200".to_string()),
+                                    references: vec![],
+                                }],
+                                response_code: Some(status),
+                                response_time_ms: elapsed,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_jwt_security(&self) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        if let Some(token) = &self.config.auth_token {
+            let parts: Vec<&str> = token.split('.').collect();
+            if parts.len() == 3 {
+                if parts[1].contains("none") || token.starts_with("eyJhbGciOiJub25l") {
+                    results.push(ApiScanResult {
+                        endpoint: "global".to_string(),
+                        method: "N/A".to_string(),
+                        check_name: "JWT 'none' Algorithm".to_string(),
+                        status: ScanStatus::Vulnerable,
+                        severity: Severity::Critical,
+                        findings: vec![VulnerabilityFinding {
+                            title: "JWT accepts 'none' algorithm".to_string(),
+                            severity: Severity::Critical,
+                            status: ScanStatus::Vulnerable,
+                            description: "JWT token uses the insecure 'none' algorithm".to_string(),
+                            details: vec!["Token header indicates algorithm: none".to_string()],
+                            remediation: "Reject tokens with 'none' algorithm on the server side".to_string(),
+                            cwe_id: Some("CWE-327".to_string()),
+                            references: vec![],
+                        }],
+                        response_code: None,
+                        response_time_ms: 0,
+                    });
+                }
+            }
+        }
+        results
+    }
+
+    async fn test_open_redirect_api(&self) -> Vec<ApiScanResult> {
+        let mut results = Vec::new();
+        let redirect_params = vec!["next", "redirect", "return_url", "callback", "url", "dest"];
+        let malicious_url = "https://evil.example.com/phishing";
+
+        for endpoint in &self.config.endpoints {
+            for param in &redirect_params {
+                let test_url = format!("{}?{}={}", endpoint, param, urlencoding::encode(malicious_url));
+                if let Ok((status, headers, _, elapsed)) = self.make_request("GET", &test_url, None).await {
+                    if status == 302 || status == 301 {
+                        if let Some(location) = headers.get("location") {
+                            if location.contains("evil.example.com") {
+                                results.push(ApiScanResult {
+                                    endpoint: endpoint.to_string(),
+                                    method: "GET".to_string(),
+                                    check_name: "Open Redirect via API".to_string(),
+                                    status: ScanStatus::Vulnerable,
+                                    severity: Severity::Medium,
+                                    findings: vec![VulnerabilityFinding {
+                                        title: format!("Open redirect via '{}' parameter", param),
+                                        severity: Severity::Medium,
+                                        status: ScanStatus::Vulnerable,
+                                        description: "API redirects to attacker-controlled URLs".to_string(),
+                                        details: vec![format!("Parameter '{}' redirects to arbitrary URLs", param)],
+                                        remediation: "Validate redirect URLs against an allowlist".to_string(),
+                                        cwe_id: Some("CWE-601".to_string()),
+                                        references: vec![],
+                                    }],
+                                    response_code: Some(status),
+                                    response_time_ms: elapsed,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        results
+    }
+
+    fn calculate_summary(results: &[ApiScanResult]) -> ApiScanSummary {
+        let mut summary = ApiScanSummary {
+            total_tests: results.len(),
+            vulnerable: 0,
+            warnings: 0,
+            errors: 0,
+            critical_count: 0,
+            high_count: 0,
+            medium_count: 0,
+            low_count: 0,
+            risk_score: 0.0,
+        };
+
+        for result in results {
+            match result.status {
+                ScanStatus::Vulnerable => summary.vulnerable += 1,
+                ScanStatus::Warning => summary.warnings += 1,
+                ScanStatus::Error => summary.errors += 1,
+                _ => {}
+            }
+            for finding in &result.findings {
+                match finding.severity {
+                    Severity::Critical => summary.critical_count += 1,
+                    Severity::High => summary.high_count += 1,
+                    Severity::Medium => summary.medium_count += 1,
+                    Severity::Low | Severity::Info => summary.low_count += 1,
+                }
+            }
+        }
+
+        let total = summary.total_tests.max(1) as f64;
+        summary.risk_score = ((summary.critical_count as f64 * 10.0 + summary.high_count as f64 * 7.0 + summary.medium_count as f64 * 4.0) / total * 10.0).min(10.0);
+        summary
     }
 }

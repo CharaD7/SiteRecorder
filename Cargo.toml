@@ -7,6 +7,21 @@ members = [
     "crates/notifier",
     "crates/exporter",
     "crates/scanner",
+    "crates/credentials",
+    "crates/auth-profiles",
+    "crates/network",
+    "crates/passwords",
+    "crates/os-pentest",
+    "crates/mobile",
+    "crates/cloud",
+    "crates/web3",
+    "crates/gray-team",
+    "crates/blue-team",
+    "crates/white-team",
+    "crates/cross-team",
+    "crates/http-proxy",
+    "crates/packet-capture",
+    "crates/auth-engine",
 ]
 resolver = "2"
 
@@ -45,6 +60,36 @@ session = { path = "crates/session" }
 notifier = { path = "crates/notifier" }
 exporter = { path = "crates/exporter" }
 scanner = { path = "crates/scanner" }
+credentials = { path = "crates/credentials" }
+auth-profiles = { path = "crates/auth-profiles" }
+network = { path = "crates/network" }
+passwords = { path = "crates/passwords" }
+os-pentest = { path = "crates/os-pentest" }
+mobile = { path = "crates/mobile" }
+cloud = { path = "crates/cloud" }
+web3 = { path = "crates/web3" }
+gray-team = { path = "crates/gray-team" }
+blue-team = { path = "crates/blue-team" }
+white-team = { path = "crates/white-team" }
+cross-team = { path = "crates/cross-team" }
+http-proxy = { path = "crates/http-proxy" }
+packet-capture = { path = "crates/packet-capture" }
+auth-engine = { path = "crates/auth-engine" }
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# TOTP
+totp-rs = { version = "5.5", features = ["qr"] }
+
+# Crypto utilities
+rand = "0.8"
+base64 = "0.21"
+aes-gcm = "0.10"
+argon2 = "0.5"
+
+# Paths
+dirs = "5.0"
 
 [build-dependencies]
 tauri-build = "1.5"
