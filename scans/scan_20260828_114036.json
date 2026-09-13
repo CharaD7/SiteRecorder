@@ -1,0 +1,658 @@
+{
+  "url": "https://synergyhrms.com",
+  "scan_id": "scan_20260828_114036",
+  "timestamp": "2026-08-28T11:40:36.818826436+00:00",
+  "results": [
+    {
+      "check_name": "Security Headers Analysis",
+      "status": "Vulnerable",
+      "severity": "High",
+      "findings": [
+        {
+          "title": "Missing X-Frame-Options Header",
+          "severity": "Medium",
+          "status": "Vulnerable",
+          "description": "The X-Frame-Options header is missing, making the site susceptible to clickjacking attacks.",
+          "details": [
+            "No X-Frame-Options header found in HTTP response"
+          ],
+          "remediation": "Add 'X-Frame-Options: DENY' or 'X-Frame-Options: SAMEORIGIN' header to all HTTP responses.",
+          "cwe_id": "CWE-1021",
+          "references": [
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options"
+          ]
+        },
+        {
+          "title": "Missing Content-Security-Policy Header",
+          "severity": "High",
+          "status": "Vulnerable",
+          "description": "No Content-Security-Policy header found. This increases the risk of XSS and data injection attacks.",
+          "details": [
+            "CSP header is completely absent"
+          ],
+          "remediation": "Implement a Content-Security-Policy header with appropriate directives for your application.",
+          "cwe_id": "CWE-693",
+          "references": [
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy"
+          ]
+        },
+        {
+          "title": "Missing HSTS Header",
+          "severity": "High",
+          "status": "Vulnerable",
+          "description": "The Strict-Transport-Security header is missing. Users may be vulnerable to protocol downgrade attacks.",
+          "details": [
+            "HSTS header is completely absent"
+          ],
+          "remediation": "Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains' header.",
+          "cwe_id": "CWE-319",
+          "references": [
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security"
+          ]
+        },
+        {
+          "title": "Missing X-Content-Type-Options Header",
+          "severity": "Low",
+          "status": "Vulnerable",
+          "description": "The X-Content-Type-Options header is missing, potentially allowing MIME-type sniffing.",
+          "details": [
+            "Header absent from response"
+          ],
+          "remediation": "Add 'X-Content-Type-Options: nosniff' to all responses.",
+          "cwe_id": "CWE-693",
+          "references": [
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options"
+          ]
+        },
+        {
+          "title": "Missing X-XSS-Protection Header",
+          "severity": "Low",
+          "status": "Warning",
+          "description": "The X-XSS-Protection header is missing. While modern browsers rely on CSP, this provides defense-in-depth.",
+          "details": [
+            "Header absent from response"
+          ],
+          "remediation": "Add 'X-XSS-Protection: 1; mode=block' as a defense-in-depth measure.",
+          "cwe_id": "CWE-79",
+          "references": []
+        },
+        {
+          "title": "Missing Referrer-Policy Header",
+          "severity": "Low",
+          "status": "Warning",
+          "description": "No Referrer-Policy header found. Sensitive information in URLs may leak via Referer headers.",
+          "details": [
+            "Header absent from response"
+          ],
+          "remediation": "Add 'Referrer-Policy: strict-origin-when-cross-origin' header.",
+          "cwe_id": "CWE-200",
+          "references": []
+        },
+        {
+          "title": "Missing Permissions-Policy Header",
+          "severity": "Low",
+          "status": "Warning",
+          "description": "No Permissions-Policy header found. Browser features are not restricted.",
+          "details": [
+            "Header absent from response"
+          ],
+          "remediation": "Add a Permissions-Policy header to restrict browser features.",
+          "cwe_id": null,
+          "references": [
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy"
+          ]
+        }
+      ],
+      "scan_duration_ms": 840,
+      "timestamp": "2026-08-28T11:40:38.939348998+00:00"
+    },
+    {
+      "check_name": "Cross-Site Scripting (XSS) Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [],
+      "scan_duration_ms": 394,
+      "timestamp": "2026-08-28T11:40:39.333678198+00:00"
+    },
+    {
+      "check_name": "SQL Injection Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [],
+      "scan_duration_ms": 636,
+      "timestamp": "2026-08-28T11:40:39.970644050+00:00"
+    },
+    {
+      "check_name": "Directory Traversal Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [],
+      "scan_duration_ms": 892,
+      "timestamp": "2026-08-28T11:40:40.862789814+00:00"
+    },
+    {
+      "check_name": "Open Redirect Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [],
+      "scan_duration_ms": 513,
+      "timestamp": "2026-08-28T11:40:41.376286297+00:00"
+    },
+    {
+      "check_name": "CSRF Vulnerability Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Forms Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No forms were found on the page, so CSRF risk is minimal.",
+          "details": [],
+          "remediation": "Ensure any AJAX-based state changes use anti-CSRF tokens.",
+          "cwe_id": "CWE-352",
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 409,
+      "timestamp": "2026-08-28T11:40:41.785705862+00:00"
+    },
+    {
+      "check_name": "Clickjacking Detection",
+      "status": "Vulnerable",
+      "severity": "Medium",
+      "findings": [
+        {
+          "title": "Missing Clickjacking Protection",
+          "severity": "Medium",
+          "status": "Vulnerable",
+          "description": "The page can be embedded in an iframe, making it susceptible to clickjacking attacks.",
+          "details": [
+            "No X-Frame-Options header found",
+            "No CSP frame-ancestors directive found"
+          ],
+          "remediation": "Add 'X-Frame-Options: DENY' header or implement CSP with 'frame-ancestors' directive.",
+          "cwe_id": "CWE-1021",
+          "references": [
+            "https://owasp.org/www-community/attacks/Clickjacking"
+          ]
+        }
+      ],
+      "scan_duration_ms": 727,
+      "timestamp": "2026-08-28T11:40:42.513325402+00:00"
+    },
+    {
+      "check_name": "Mixed Content Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Mixed Content Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "All resources are loaded over HTTPS.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": "CWE-319",
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 507,
+      "timestamp": "2026-08-28T11:40:43.020987266+00:00"
+    },
+    {
+      "check_name": "Information Disclosure",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Obvious Information Disclosure Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No obvious sensitive information was found in the page source.",
+          "details": [],
+          "remediation": "Continue regular security audits.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 605,
+      "timestamp": "2026-08-28T11:40:43.626634408+00:00"
+    },
+    {
+      "check_name": "SSL/TLS Configuration",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "SSL/TLS Certificate Valid",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "The SSL/TLS certificate is valid and the connection is encrypted.",
+          "details": [
+            "URL: https://synergyhrms.com",
+            "Certificate chain verified"
+          ],
+          "remediation": "No action needed. Ensure certificates are renewed before expiration.",
+          "cwe_id": "CWE-319",
+          "references": []
+        },
+        {
+          "title": "HSTS Not Enabled",
+          "severity": "Medium",
+          "status": "Warning",
+          "description": "HSTS is not enabled, users could be downgraded to HTTP via MITM attacks.",
+          "details": [
+            "Strict-Transport-Security header not found"
+          ],
+          "remediation": "Enable HSTS with max-age=31536000; includeSubDomains",
+          "cwe_id": "CWE-319",
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 2250,
+      "timestamp": "2026-08-28T11:40:45.877109896+00:00"
+    },
+    {
+      "check_name": "Cookie Security Analysis",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Cookies Set",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No cookies were set by the server on this page.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": "CWE-614",
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 615,
+      "timestamp": "2026-08-28T11:40:46.493130411+00:00"
+    },
+    {
+      "check_name": "Server Information Leakage",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "Server Header Exposes Version Information",
+          "severity": "Low",
+          "status": "Warning",
+          "description": "The Server header reveals the web server software and version, which can help attackers identify known vulnerabilities.",
+          "details": [
+            "Server: nginx/1.18.0 (Ubuntu)"
+          ],
+          "remediation": "Remove or obfuscate the Server header. Configure the web server to suppress version information.",
+          "cwe_id": "CWE-200",
+          "references": [
+            "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/02-Enumerate_Infrastructure_and_Application_Admin_Interfaces"
+          ]
+        }
+      ],
+      "scan_duration_ms": 291,
+      "timestamp": "2026-08-28T11:40:46.784871095+00:00"
+    },
+    {
+      "check_name": "Form Security Analysis",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Form Security Issues Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No obvious form security issues were found.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 418,
+      "timestamp": "2026-08-28T11:40:47.203185961+00:00"
+    },
+    {
+      "check_name": "File Inclusion Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No File Inclusion Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No obvious file inclusion vulnerabilities were found.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 357,
+      "timestamp": "2026-08-28T11:40:47.561090632+00:00"
+    },
+    {
+      "check_name": "Outdated Software Detection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Outdated Software Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No obviously outdated software versions were detected.",
+          "details": [],
+          "remediation": "Continue keeping all software up-to-date.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 290,
+      "timestamp": "2026-08-28T11:40:47.851155125+00:00"
+    },
+    {
+      "check_name": "CORS Misconfiguration",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No CORS Misconfiguration Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No permissive CORS policy was detected.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 271,
+      "timestamp": "2026-08-28T11:40:48.122441818+00:00"
+    },
+    {
+      "check_name": "Content-Security-Policy",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "Content-Security-Policy Not Enabled",
+          "severity": "Medium",
+          "status": "Warning",
+          "description": "No Content-Security-Policy header was found, leaving the site more exposed to XSS and data injection.",
+          "details": [
+            "URL: https://synergyhrms.com"
+          ],
+          "remediation": "Deploy a restrictive CSP (default-src 'self'; script-src with nonces).",
+          "cwe_id": "CWE-1021",
+          "references": [
+            "https://owasp.org/www-project-secure-headers/"
+          ]
+        }
+      ],
+      "scan_duration_ms": 303,
+      "timestamp": "2026-08-28T11:40:48.426289203+00:00"
+    },
+    {
+      "check_name": "Subresource Integrity",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "All External Resources Use SRI",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No external scripts/stylesheets were found loading without Subresource Integrity.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 527,
+      "timestamp": "2026-08-28T11:40:48.953675768+00:00"
+    },
+    {
+      "check_name": "Exposed Sensitive Files",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Exposed Sensitive Files Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No publicly accessible sensitive files were found.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 3252,
+      "timestamp": "2026-08-28T11:40:52.206716666+00:00"
+    },
+    {
+      "check_name": "Directory Listing",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Directory Listing Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No enabled directory listings were found on probed paths.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 3094,
+      "timestamp": "2026-08-28T11:40:55.301067363+00:00"
+    },
+    {
+      "check_name": "HTTP Request Smuggling",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No CL/TE Smuggling Precondition Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "Ambiguous Content-Length/Transfer-Encoding requests were rejected as expected.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 1128,
+      "timestamp": "2026-08-28T11:40:56.429356924+00:00"
+    },
+    {
+      "check_name": "Web Cache Poisoning",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Cache Poisoning Vector Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "Unkeyed header reflection was not observed.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 1352,
+      "timestamp": "2026-08-28T11:40:57.782375650+00:00"
+    },
+    {
+      "check_name": "Server-Side Template Injection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No SSTI Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "Template expressions were not evaluated in reflected responses.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 3026,
+      "timestamp": "2026-08-28T11:41:00.808877686+00:00"
+    },
+    {
+      "check_name": "NoSQL Injection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No NoSQL Injection Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "NoSQL operator/auth-bypass behavior was not observed on probed endpoints.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 8791,
+      "timestamp": "2026-08-28T11:41:09.600760954+00:00"
+    },
+    {
+      "check_name": "CRLF / Header Injection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No CRLF Injection Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "CRLF sequences in parameters were not reflected into response headers.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 305,
+      "timestamp": "2026-08-28T11:41:09.906397124+00:00"
+    },
+    {
+      "check_name": "WebDAV / Verb Tampering",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Dangerous HTTP Verbs Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "PUT/DELETE methods were not found enabled on the target.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 307,
+      "timestamp": "2026-08-28T11:41:10.214233174+00:00"
+    },
+    {
+      "check_name": "GraphQL Abuse",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Exposed GraphQL Endpoint Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No GraphQL introspection/batching surface was found on probed paths.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 2245,
+      "timestamp": "2026-08-28T11:41:12.460009623+00:00"
+    },
+    {
+      "check_name": "XXE Injection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No XXE Surface Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "XML external entity parsing was not observed on probed endpoints.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 2904,
+      "timestamp": "2026-08-28T11:41:15.364349662+00:00"
+    },
+    {
+      "check_name": "Host Header Injection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Host Header Injection Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "The Host header is not reflected into responses.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 377,
+      "timestamp": "2026-08-28T11:41:15.742122078+00:00"
+    },
+    {
+      "check_name": "Time-based Blind Injection",
+      "status": "NotVulnerable",
+      "severity": "Info",
+      "findings": [
+        {
+          "title": "No Time-based Blind Injection Detected",
+          "severity": "Info",
+          "status": "NotVulnerable",
+          "description": "No significant response delays were induced by time-delay payloads.",
+          "details": [],
+          "remediation": "No action needed.",
+          "cwe_id": null,
+          "references": []
+        }
+      ],
+      "scan_duration_ms": 3512,
+      "timestamp": "2026-08-28T11:41:19.254306657+00:00"
+    }
+  ],
+  "summary": {
+    "total_checks": 30,
+    "vulnerable": 2,
+    "not_vulnerable": 28,
+    "warnings": 0,
+    "errors": 0,
+    "critical_count": 0,
+    "high_count": 1,
+    "medium_count": 1,
+    "low_count": 0,
+    "info_count": 28,
+    "risk_score": 0.8833333333333333
+  }
+}
