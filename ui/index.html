@@ -1,495 +1,3704 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-team="red">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SiteRecorder</title>
+    <title>SiteRecorder CyberOps</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="header-content">
-                <div>
-                    <h1>🎬 SiteRecorder</h1>
-                    <p>Automated Site Crawling, Recording & Vulnerability Scanning</p>
-                </div>
-                <button id="themeToggle" class="theme-toggle" title="Toggle Dark/Light Mode">
-                    <span class="theme-icon">🌙</span>
+    <div class="app-layout" id="appLayout">
+        <!-- ========== TOP BAR ========== -->
+        <header class="topbar">
+            <div class="topbar-brand">
+                <span class="brand-icon">⚡</span>
+                <span>SiteRecorder</span>
+                <span class="badge badge-info" style="font-size:10px; margin-left:4px;">CyberOps</span>
+            </div>
+
+            <div class="topbar-search">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="globalSearch" placeholder="Search assets, findings, commands...">
+                <span class="search-shortcut">⌘K</span>
+            </div>
+
+            <div class="topbar-actions">
+                <button class="topbar-btn" data-tooltip="Active Operations" id="opsBtn">
+                    <span id="opsIndicator">🔴</span>
+                    <span class="badge" id="activeOpsBadge" style="display:none;">0</span>
                 </button>
+                <button class="topbar-btn" data-tooltip="Notifications" id="notifBtn">
+                    🔔
+                    <span class="badge empty" id="notifBadge">0</span>
+                </button>
+                <button class="topbar-btn" data-tooltip="Documentation" id="docsBtn">📖</button>
+                <button class="topbar-btn" data-tooltip="Toggle theme" id="themeToggleBtn">🌙</button>
+                <button class="topbar-btn" data-tooltip="Settings" id="settingsBtn">⚙️</button>
+                <div class="topbar-avatar" data-tooltip="Operator" id="userAvatar">OP</div>
             </div>
         </header>
 
-        <main>
-            <!-- Tab Navigation -->
-            <div class="tab-nav">
-                <button class="tab-btn active" data-tab="settings">Recording</button>
-                <button class="tab-btn" data-tab="vulnerabilities">Vulnerabilities</button>
-                <button class="tab-btn" data-tab="results">Results</button>
+        <!-- ========== TEAM TABS ========== -->
+        <nav class="team-tabs" id="teamTabs">
+            <button class="team-tab active" data-team="red" id="tabRed">
+                <span class="team-icon">🔴</span>
+                <span>Red Team</span>
+                <span class="team-badge" id="redBadge">0</span>
+            </button>
+            <button class="team-tab" data-team="gray" id="tabGray">
+                <span class="team-icon">🔘</span>
+                <span>Gray Team</span>
+                <span class="team-badge" id="grayBadge">0</span>
+            </button>
+            <button class="team-tab" data-team="blue" id="tabBlue">
+                <span class="team-icon">🔵</span>
+                <span>Blue Team</span>
+                <span class="team-badge" id="blueBadge">0</span>
+            </button>
+            <button class="team-tab" data-team="white" id="tabWhite">
+                <span class="team-icon">⚪</span>
+                <span>White Team</span>
+                <span class="team-badge" id="whiteBadge">0</span>
+            </button>
+        </nav>
+
+        <!-- ========== SIDEBAR ========== -->
+        <aside class="sidebar" id="sidebar">
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Dynamic content based on active team -->
+            </nav>
+            <div class="sidebar-toggle">
+                <button id="sidebarCollapseBtn" data-tooltip="Collapse sidebar">
+                    ◀
+                </button>
             </div>
+        </aside>
 
-            <!-- Settings Panel -->
-            <section class="panel settings-panel tab-content active" id="tab-settings">
-                <h2>Recording Settings</h2>
-                
-                <div class="form-group">
-                    <label for="url">Website URL</label>
-                    <input 
-                        type="text" 
-                        id="url" 
-                        placeholder="https://example.com"
-                        value="https://example.com"
-                    />
+        <!-- ========== CONTENT AREA ========== -->
+        <main class="content" id="contentArea">
+            <!-- Dynamic content based on active section -->
+        </main>
+    </div>
+
+    <!-- ========== COMMAND PALETTE ========== -->
+    <div class="command-palette-overlay" id="commandPalette" style="display:none;">
+        <div class="command-palette">
+            <div class="command-palette-input">
+                <span>🔍</span>
+                <input type="text" id="commandInput" placeholder="Type a command or search...">
+            </div>
+            <div class="command-palette-results" id="commandResults">
+                <!-- Dynamic command list -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== TOAST CONTAINER ========== -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ========== MODAL CONTAINER ========== -->
+    <div id="modalContainer"></div>
+
+    <!-- ========== TEAM TEMPLATES ========== -->
+
+    <!-- RED TEAM Sidebar -->
+    <template id="sidebar-red">
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Operations</div>
+            <button class="sidebar-item active" data-section="red-dashboard">
+                <span class="item-icon">📊</span>
+                <span class="item-label">Dashboard</span>
+            </button>
+            <button class="sidebar-item" data-section="red-targets">
+                <span class="item-icon">🎯</span>
+                <span class="item-label">Targets</span>
+                <span class="item-badge" id="targetCount">0</span>
+            </button>
+            <button class="sidebar-item" data-section="red-scans">
+                <span class="item-icon">🔍</span>
+                <span class="item-label">Scans</span>
+                <span class="item-badge" id="activeScanCount">0</span>
+            </button>
+            <button class="sidebar-item" data-section="red-findings">
+                <span class="item-icon">⚠️</span>
+                <span class="item-label">Findings</span>
+                <span class="item-badge" id="findingCount">0</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Attack Arsenal</div>
+            <button class="sidebar-item" data-section="red-web">
+                <span class="item-icon">🌐</span>
+                <span class="item-label">Web Apps</span>
+            </button>
+            <button class="sidebar-item" data-section="apiscanner">
+                <span class="item-icon">🔌</span>
+                <span class="item-label">API Scanner</span>
+            </button>
+            <button class="sidebar-item" data-section="red-network">
+                <span class="item-icon">🔌</span>
+                <span class="item-label">Network</span>
+            </button>
+            <button class="sidebar-item" data-section="red-os">
+                <span class="item-icon">💻</span>
+                <span class="item-label">OS Pentest</span>
+            </button>
+            <button class="sidebar-item" data-section="red-mobile">
+                <span class="item-icon">📱</span>
+                <span class="item-label">Mobile</span>
+            </button>
+            <button class="sidebar-item" data-section="red-cloud">
+                <span class="item-icon">☁️</span>
+                <span class="item-label">Cloud</span>
+            </button>
+            <button class="sidebar-item" data-section="red-web3">
+                <span class="item-icon">⛓️</span>
+                <span class="item-label">Web3</span>
+            </button>
+            <button class="sidebar-item" data-section="red-email">
+                <span class="item-icon">📧</span>
+                <span class="item-label">Email</span>
+            </button>
+            <button class="sidebar-item" data-section="red-wireless">
+                <span class="item-icon">📡</span>
+                <span class="item-label">Wireless</span>
+            </button>
+            <button class="sidebar-item" data-section="red-passwords">
+                <span class="item-icon">🔑</span>
+                <span class="item-label">Passwords</span>
+            </button>
+            <button class="sidebar-item" data-section="red-exploit">
+                <span class="item-icon">💥</span>
+                <span class="item-label">Exploitation</span>
+            </button>
+            <button class="sidebar-item" data-section="http-proxy">
+                <span class="item-icon">🌐</span>
+                <span class="item-label">HTTP Proxy</span>
+            </button>
+            <button class="sidebar-item" data-section="packet-capture">
+                <span class="item-icon">📡</span>
+                <span class="item-label">Packet Capture</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Recording</div>
+            <button class="sidebar-item" data-section="red-recording">
+                <span class="item-icon">🎬</span>
+                <span class="item-label">Screen Recording</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Utilities</div>
+            <button class="sidebar-item" data-section="red-osint">
+                <span class="item-icon">🕵️</span>
+                <span class="item-label">OSINT</span>
+            </button>
+            <button class="sidebar-item" data-section="red-payloads">
+                <span class="item-icon">📦</span>
+                <span class="item-label">Payloads</span>
+            </button>
+            <button class="sidebar-item" data-section="red-sessions">
+                <span class="item-icon">🔐</span>
+                <span class="item-label">Sessions</span>
+            </button>
+            <button class="sidebar-item" data-section="red-auth-profiles">
+                <span class="item-icon">🔑</span>
+                <span class="item-label">Auth Profiles</span>
+            </button>
+            <button class="sidebar-item" data-section="red-totp">
+                <span class="item-icon">⏱️</span>
+                <span class="item-label">TOTP Generator</span>
+            </button>
+            <button class="sidebar-item" data-section="red-reports">
+                <span class="item-icon">📋</span>
+                <span class="item-label">Reports</span>
+            </button>
+        </div>
+    </template>
+
+    <!-- GRAY TEAM Sidebar -->
+    <template id="sidebar-gray">
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Operations</div>
+            <button class="sidebar-item active" data-section="gray-dashboard">
+                <span class="item-icon">📊</span>
+                <span class="item-label">Dashboard</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-simulations">
+                <span class="item-icon">⚔️</span>
+                <span class="item-label">Simulations</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-matrix">
+                <span class="item-icon">🗺️</span>
+                <span class="item-label">ATT&CK Matrix</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-purple">
+                <span class="item-icon">🤝</span>
+                <span class="item-label">Purple Team</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Analysis</div>
+            <button class="sidebar-item" data-section="gray-threatmodel">
+                <span class="item-icon">🧩</span>
+                <span class="item-label">Threat Model</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-correlation">
+                <span class="item-icon">🔗</span>
+                <span class="item-label">Correlation</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-detections">
+                <span class="item-icon">🛡️</span>
+                <span class="item-label">Detections</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-surface">
+                <span class="item-icon">🌍</span>
+                <span class="item-label">Attack Surface</span>
+            </button>
+            <button class="sidebar-item" data-section="gray-reports">
+                <span class="item-icon">📋</span>
+                <span class="item-label">Reports</span>
+            </button>
+        </div>
+    </template>
+
+    <!-- BLUE TEAM Sidebar -->
+    <template id="sidebar-blue">
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Operations</div>
+            <button class="sidebar-item active" data-section="blue-dashboard">
+                <span class="item-icon">📊</span>
+                <span class="item-label">SOC Dashboard</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-alerts">
+                <span class="item-icon">🚨</span>
+                <span class="item-label">Alerts</span>
+                <span class="item-badge" id="alertCount">0</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-incidents">
+                <span class="item-icon">🔥</span>
+                <span class="item-label">Incidents</span>
+                <span class="item-badge" id="incidentCount">0</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-hunt">
+                <span class="item-icon">🔍</span>
+                <span class="item-label">Threat Hunting</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Analysis</div>
+            <button class="sidebar-item" data-section="blue-intel">
+                <span class="item-icon">🧠</span>
+                <span class="item-label">Intel</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-logs">
+                <span class="item-icon">📝</span>
+                <span class="item-label">Log Analysis</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-forensics">
+                <span class="item-icon">🔬</span>
+                <span class="item-label">Forensics</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-malware">
+                <span class="item-icon">🦠</span>
+                <span class="item-label">Malware</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-network">
+                <span class="item-icon">🌐</span>
+                <span class="item-label">Network</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-endpoints">
+                <span class="item-icon">💻</span>
+                <span class="item-label">Endpoints</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-cloud">
+                <span class="item-icon">☁️</span>
+                <span class="item-label">Cloud</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-audit-log">
+                <span class="item-icon">📜</span>
+                <span class="item-label">Audit Log</span>
+            </button>
+            <button class="sidebar-item" data-section="blue-reports">
+                <span class="item-icon">📋</span>
+                <span class="item-label">Reports</span>
+            </button>
+        </div>
+    </template>
+
+    <!-- WHITE TEAM Sidebar -->
+    <template id="sidebar-white">
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Governance</div>
+            <button class="sidebar-item active" data-section="white-dashboard">
+                <span class="item-icon">📊</span>
+                <span class="item-label">Dashboard</span>
+            </button>
+            <button class="sidebar-item" data-section="white-compliance">
+                <span class="item-icon">✅</span>
+                <span class="item-label">Compliance</span>
+            </button>
+            <button class="sidebar-item" data-section="white-risk">
+                <span class="item-icon">⚖️</span>
+                <span class="item-label">Risk Register</span>
+            </button>
+            <button class="sidebar-item" data-section="white-policies">
+                <span class="item-icon">📜</span>
+                <span class="item-label">Policies</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Management</div>
+            <button class="sidebar-item" data-section="white-vendors">
+                <span class="item-icon">🏢</span>
+                <span class="item-label">Vendors</span>
+            </button>
+            <button class="sidebar-item" data-section="white-training">
+                <span class="item-icon">🎓</span>
+                <span class="item-label">Training</span>
+            </button>
+            <button class="sidebar-item" data-section="white-metrics">
+                <span class="item-icon">📈</span>
+                <span class="item-label">Metrics</span>
+            </button>
+            <button class="sidebar-item" data-section="white-reports">
+                <span class="item-icon">📋</span>
+                <span class="item-label">Reports</span>
+            </button>
+        </div>
+    </template>
+
+    <!-- ========== CONTENT TEMPLATES ========== -->
+
+    <!-- Dashboard Template -->
+    <template id="content-dashboard">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title" id="dashboardTitle">Dashboard</h1>
+                <p class="content-subtitle" id="dashboardSubtitle">Security operations overview</p>
+            </div>
+            <div class="content-actions">
+                <button class="btn btn-secondary" id="refreshDashBtn">🔄 Refresh</button>
+                <button class="btn btn-primary" id="newOpBtn">+ New Operation</button>
+            </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="grid grid-4 mb-6">
+            <div class="stat-card">
+                <div class="stat-value" id="statTargets">0</div>
+                <div class="stat-label">Active Targets</div>
+                <div class="stat-change up" id="statTargetsChange">↑ 0 this week</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statFindings">0</div>
+                <div class="stat-label">Open Findings</div>
+                <div class="stat-change down" id="statFindingsChange">↓ 0 this week</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statRisk">0.0</div>
+                <div class="stat-label">Avg Risk Score</div>
+                <div class="stat-change" id="statRiskChange">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statOperations">0</div>
+                <div class="stat-label">Active Operations</div>
+                <div class="stat-change running" id="statOperationsChange">● Running</div>
+            </div>
+        </div>
+
+        <!-- Severity Distribution -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <span class="card-title">Severity Distribution</span>
+                <div class="flex gap-2">
+                    <button class="badge badge-critical" id="criticalCount">0 Critical</button>
+                    <button class="badge badge-high" id="highCount">0 High</button>
+                    <button class="badge badge-medium" id="mediumCount">0 Medium</button>
+                    <button class="badge badge-low" id="lowCount">0 Low</button>
+                    <button class="badge badge-info" id="infoCount">0 Info</button>
                 </div>
+            </div>
+            <div class="card-body">
+                <div class="severity-bar" id="severityBar">
+                    <div class="segment segment-critical" id="criticalBar" style="width:0%"></div>
+                    <div class="segment segment-high" id="highBar" style="width:0%"></div>
+                    <div class="segment segment-medium" id="mediumBar" style="width:0%"></div>
+                    <div class="segment segment-low" id="lowBar" style="width:0%"></div>
+                    <div class="segment segment-info" id="infoBar" style="width:0%"></div>
+                </div>
+            </div>
+        </div>
 
+        <!-- Active Operations & Recent Activity -->
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Active Operations</span>
+                    <button class="btn btn-sm btn-ghost" id="viewAllOps">View All →</button>
+                </div>
+                <div class="card-body" id="activeOpsList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-title">No Active Operations</div>
+                        <div class="empty-state-text">Launch a scan or operation to get started.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Recent Activity</span>
+                    <button class="btn btn-sm btn-ghost" id="viewAllActivity">View All →</button>
+                </div>
+                <div class="card-body" id="activityFeed">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <div class="empty-state-title">No Recent Activity</div>
+                        <div class="empty-state-text">Actions will appear here as you work.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Generic Tool Page Template -->
+    <template id="content-toolpage">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title" id="toolTitle">Tool Name</h1>
+                <p class="content-subtitle" id="toolSubtitle">Tool description</p>
+            </div>
+            <div class="content-actions" id="toolActions">
+                <button class="btn btn-secondary" id="toolHelpBtn">❓ Help</button>
+            </div>
+        </div>
+        <div id="toolContent">
+            <!-- Dynamic tool content -->
+        </div>
+    </template>
+
+    <!-- Web Scanner Tool -->
+    <template id="content-webscanner">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">🌐 Web Application Scanner</h1>
+                <p class="content-subtitle">Authenticated & unauthenticated web vulnerability scanning</p>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="maxPages">Max Pages</label>
-                        <input 
-                            type="number" 
-                            id="maxPages" 
-                            value="50"
-                            min="1"
-                            max="1000"
-                        />
+                        <label class="form-label">Target URL</label>
+                        <input type="text" class="input" id="webScanUrl" placeholder="https://example.com">
                     </div>
-
                     <div class="form-group">
-                        <label for="delay">Delay (ms)</label>
-                        <input 
-                            type="number" 
-                            id="delay" 
-                            value="2000"
-                            min="500"
-                            max="10000"
-                            step="500"
-                        />
+                        <label class="form-label">Auth Type</label>
+                        <select class="input" id="webScanAuthType" onchange="toggleAuthFields()">
+                            <option value="none">Unauthenticated</option>
+                            <option value="basic">Basic Auth</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="apikey">API Key</option>
+                            <option value="cookie">Cookie</option>
+                            <option value="form">Form-Based Login</option>
+                            <option value="oauth2">OAuth2</option>
+                            <option value="custom">Custom Headers</option>
+                        </select>
                     </div>
-                    
                     <div class="form-group">
-                        <label for="fps">Recording FPS</label>
-                        <select id="fps" class="themed-select">
-                            <option value="15">15 FPS (Recommended - Smaller files)</option>
-                            <option value="24">24 FPS (Cinematic)</option>
-                            <option value="30" selected>30 FPS (Standard)</option>
-                            <option value="60">60 FPS (Smooth - Larger files)</option>
+                        <label class="form-label">Scan Profile</label>
+                        <select class="input" id="webScanProfile">
+                            <option value="full">Full Scan (100+ checks)</option>
+                            <option value="quick">Quick Scan (Top 20)</option>
+                            <option value="owasp">OWASP Top 10</option>
+                            <option value="api">API Security</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- Recording Mode Selection -->
-                <div class="form-group">
-                    <label for="recordingMode">Recording Mode</label>
-                    <select id="recordingMode" class="themed-select">
-                        <option value="both" selected>📹 Both (Screen + Screenshots) - Recommended</option>
-                        <option value="screen">🖥️ Screen Only (Like OBS/Kazam)</option>
-                        <option value="browser">📸 Screenshots Only (Browser)</option>
-                    </select>
-                    <small class="field-hint">
-                        <strong>Both:</strong> Records screen + browser screenshots | 
-                        <strong>Screen:</strong> Real-time screen capture | 
-                        <strong>Screenshots:</strong> Browser-only captures
-                    </small>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="screenWidth">Screen Width</label>
-                        <input 
-                            type="number" 
-                            id="screenWidth" 
-                            value="1920"
-                            min="640"
-                            max="3840"
-                            step="80"
-                        />
-                    </div>
-
-                    <div class="form-group">
-                        <label for="screenHeight">Screen Height</label>
-                        <input 
-                            type="number" 
-                            id="screenHeight" 
-                            value="1080"
-                            min="480"
-                            max="2160"
-                            step="60"
-                        />
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="concurrency">Crawl Workers</label>
-                        <input 
-                            type="number" 
-                            id="concurrency" 
-                            value="1"
-                            min="1"
-                            max="32"
-                        />
-                        <small class="field-hint">Concurrent workers for parallel link discovery (&gt;1 speeds up crawling)</small>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="regionX">Region X</label>
-                        <input type="number" id="regionX" value="0" min="0" />
-                    </div>
-                    <div class="form-group">
-                        <label for="regionY">Region Y</label>
-                        <input type="number" id="regionY" value="0" min="0" />
-                    </div>
-                    <div class="form-group">
-                        <label for="regionW">Region Width</label>
-                        <input type="number" id="regionW" value="0" min="0" />
-                    </div>
-                    <div class="form-group">
-                        <label for="regionH">Region Height</label>
-                        <input type="number" id="regionH" value="0" min="0" />
-                    </div>
-                </div>
-                <small class="field-hint">
-                    Set Width &amp; Height &gt; 0 to record a specific screen area
-                    (Linux/X11 uses native capture; macOS/Windows crop).
-                </small>
-
-                <div class="form-group checkbox-group">
-                    <label>
-                        <input type="checkbox" id="enableAudio" />
-                        <span>🎤 Enable Audio Recording (Screen mode only)</span>
-                    </label>
-                </div>
-
-                <div class="form-group">
-                    <label for="outputDir">Output Directory</label>
-                    <div style="display: flex; gap: 10px;">
-                        <input 
-                            type="text" 
-                            id="outputDir" 
-                            value=""
-                            readonly
-                            style="flex: 1;"
-                        />
-                        <button id="selectDirBtn" class="btn btn-secondary" type="button">
-                            📁 Browse
-                        </button>
-                    </div>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label>
-                        <input type="checkbox" id="headless" />
-                        <span>Headless Mode (no browser window)</span>
-                    </label>
-                </div>
-
-                <!-- Authentication Section -->
-                <div class="auth-section">
-                    <div class="auth-header">
-                        <label>
-                            <input type="checkbox" id="requiresAuth" />
-                            <span>🔐 Site Requires Authentication</span>
-                        </label>
-                    </div>
-                    <div id="authFields" class="auth-fields" style="display: none;">
+                <!-- Auth Fields (shown based on selection) -->
+                <div id="authFieldsBasic" class="auth-fields" style="display:none;">
+                    <div class="form-row">
                         <div class="form-group">
-                            <label for="authUrl">Login Page URL</label>
-                            <input 
-                                type="text" 
-                                id="authUrl" 
-                                placeholder="https://example.com/login"
-                            />
+                            <label class="form-label">Username</label>
+                            <input type="text" class="input" id="authBasicUser" placeholder="admin">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="input" id="authBasicPass" placeholder="••••••">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="authFieldsBearer" class="auth-fields" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Bearer Token</label>
+                        <input type="text" class="input" id="authBearerToken" placeholder="eyJhbGciOiJIUzI1NiIs...">
+                    </div>
+                </div>
+
+                <div id="authFieldsApiKey" class="auth-fields" style="display:none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">API Key</label>
+                            <input type="text" class="input" id="authApiKey" placeholder="sk-...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Header Name</label>
+                            <input type="text" class="input" id="authApiHeader" value="X-API-Key" placeholder="X-API-Key">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Location</label>
+                            <select class="input" id="authApiLocation">
+                                <option value="header">Header</option>
+                                <option value="query">Query Parameter</option>
+                                <option value="cookie">Cookie</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="authFieldsCookie" class="auth-fields" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Cookies (one per line: name=value)</label>
+                        <textarea class="input" id="authCookies" rows="3" placeholder="session_id=abc123&#10;csrf_token=xyz789"></textarea>
+                    </div>
+                </div>
+
+                <div id="authFieldsForm" class="auth-fields" style="display:none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Login URL</label>
+                            <input type="text" class="input" id="authFormUrl" placeholder="https://example.com/login">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="input" id="authFormUser" placeholder="admin">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="input" id="authFormPass" placeholder="••••••">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Username Field Name</label>
+                            <input type="text" class="input" id="authFormUserField" value="username" placeholder="username">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password Field Name</label>
+                            <input type="text" class="input" id="authFormPassField" value="password" placeholder="password">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">CSRF Field (optional)</label>
+                            <input type="text" class="input" id="authFormCsrf" placeholder="csrf_token">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="authFieldsOAuth2" class="auth-fields" style="display:none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Token URL</label>
+                            <input type="text" class="input" id="authOAuth2Url" placeholder="https://auth.example.com/oauth/token">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Client ID</label>
+                            <input type="text" class="input" id="authOAuth2ClientId" placeholder="my-app">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Client Secret</label>
+                            <input type="password" class="input" id="authOAuth2Secret" placeholder="••••••">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Scope (optional)</label>
+                        <input type="text" class="input" id="authOAuth2Scope" placeholder="read write">
+                    </div>
+                </div>
+
+                <div id="authFieldsCustom" class="auth-fields" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Custom Headers (one per line: Header: value)</label>
+                        <textarea class="input" id="authCustomHeaders" rows="3" placeholder="X-Custom-Auth: token123&#10;X-Request-ID: 12345"></textarea>
+                    </div>
+                </div>
+                            <option value="api">API Security</option>
+                            <option value="authenticated">Authenticated Deep</option>
+                            <option value="compliance">Compliance</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Max Pages</label>
+                        <input type="number" class="input" id="webScanMaxPages" value="50" min="1" max="1000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Concurrency</label>
+                        <input type="number" class="input" id="webScanConcurrency" value="4" min="1" max="32">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Rate Limit (req/s)</label>
+                        <input type="number" class="input" id="webScanRateLimit" value="20" min="1" max="100">
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 mt-4">
+                    <label class="checkbox">
+                        <input type="checkbox" id="webScanMFA" checked>
+                        <span>Handle MFA/OTP automatically</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="webScanReauth" checked>
+                        <span>Re-auth on session expiry</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="webScanScreenshots">
+                        <span>Capture evidence screenshots</span>
+                    </label>
+                </div>
+
+                <div class="mt-4">
+                    <button class="btn btn-primary btn-lg" id="startWebScanBtn">
+                        ▶️ Launch Scan
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scan Progress -->
+        <div class="card mb-4" id="webScanProgress" style="display:none;">
+            <div class="card-body">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="spinner spinner-sm" id="webScanSpinner"></div>
+                        <span id="webScanStatus">Initializing scanner...</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn btn-sm btn-secondary" id="pauseWebScanBtn">⏸ Pause</button>
+                        <button class="btn btn-sm btn-danger" id="cancelWebScanBtn">⏹ Cancel</button>
+                    </div>
+                </div>
+                <div class="progress mb-2">
+                    <div class="progress-bar" id="webScanProgressBar" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between text-sm text-secondary mb-3">
+                    <span id="webScanPages">0/0 pages scanned</span>
+                    <span id="webScanChecks">0/0 checks</span>
+                    <span id="webScanETA">ETA: --:--</span>
+                </div>
+                <div class="text-sm text-secondary mb-2">
+                    <strong>Current:</strong> <span id="webScanCurrent">—</span>
+                </div>
+                <div class="code-block" style="max-height:120px; overflow-y:auto; font-size:0.75rem;" id="webScanLog">
+                    <div class="text-tertial">Waiting for scan to start...</div>
+                </div>
+                <div class="mt-3" id="webScanLiveFindings"></div>
+            </div>
+        </div>
+
+        <!-- Scan Results -->
+        <div id="webScanResults" style="display:none;">
+            <!-- Results will be populated dynamically -->
+        </div>
+    </template>
+
+    <!-- API Security Scanner -->
+    <template id="content-apiscanner">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">🔌 API Security Scanner</h1>
+                <p class="content-subtitle">OWASP API Security Top 10 vulnerability testing</p>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">API Base URL</label>
+                        <input type="text" class="input" id="apiScanUrl" placeholder="https://api.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Auth Type</label>
+                        <select class="input" id="apiScanAuthType">
+                            <option value="none">No Auth</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="apikey">API Key</option>
+                            <option value="basic">Basic Auth</option>
+                            <option value="oauth2">OAuth2</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Auth Token / Credentials</label>
+                        <input type="text" class="input" id="apiScanToken" placeholder="Token or user:pass">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Endpoints (one per line, leave empty for auto-discovery)</label>
+                    <textarea class="input" id="apiScanEndpoints" rows="4" placeholder="/api/users/1&#10;/api/admin&#10;/api/login&#10;/graphql"></textarea>
+                </div>
+
+                <div class="mt-4">
+                    <button class="btn btn-primary btn-lg" id="startApiScanBtn">
+                        🔍 Start API Scan
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scan Progress -->
+        <div class="card mb-4" id="apiScanProgress" style="display:none;">
+            <div class="card-body">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="spinner spinner-sm"></div>
+                        <span id="apiScanStatus">Initializing API scanner...</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn btn-sm btn-danger" id="cancelApiScanBtn">⏹ Cancel</button>
+                    </div>
+                </div>
+                <div class="progress mb-2">
+                    <div class="progress-bar" id="apiScanProgressBar" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between text-sm text-secondary">
+                    <span id="apiScanEndpoints">0 endpoints tested</span>
+                    <span id="apiScanFindings">0 findings</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scan Results -->
+        <div id="apiScanResults" style="display:none;"></div>
+    </template>
+
+    <!-- Scanner Settings/Login Panel -->
+    <template id="content-authprofiles">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">🔐 Authentication Profiles</h1>
+                <p class="content-subtitle">Manage credentials, MFA, and login configurations for targets</p>
+            </div>
+            <div class="content-actions">
+                <button class="btn btn-secondary" id="importProfilesBtn">📥 Import</button>
+                <button class="btn btn-primary" id="newProfileBtn">+ New Profile</button>
+            </div>
+        </div>
+
+        <div class="grid grid-2">
+            <!-- Profile List -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Saved Profiles</span>
+                    <input type="text" class="input input-sm" placeholder="Search..." style="width:160px;" id="profileSearch">
+                </div>
+                <div class="card-body" id="profileList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔒</div>
+                        <div class="empty-state-title">No Profiles Yet</div>
+                        <div class="empty-state-text">Create an authentication profile to enable authenticated scanning.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Editor -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title" id="profileEditorTitle">New Authentication Profile</span>
+                </div>
+                <div class="card-body" id="profileEditor">
+                    <div class="form-group">
+                        <label class="form-label">Profile Name</label>
+                        <input type="text" class="input" id="authProfileName" placeholder="Production Admin">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Target URL</label>
+                        <input type="text" class="input" id="authProfileTarget" placeholder="https://target.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Authentication Type</label>
+                        <select class="input" id="authProfileType">
+                            <option value="form">Form-Based Login</option>
+                            <option value="basic">HTTP Basic Auth</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="oauth">OAuth / OIDC</option>
+                            <option value="apikey">API Key</option>
+                            <option value="certificate">Client Certificate</option>
+                            <option value="script">Custom Script</option>
+                        </select>
+                    </div>
+
+                    <!-- Form Auth Fields -->
+                    <div id="formAuthFields">
+                        <div class="form-group">
+                            <label class="form-label">Login Page URL</label>
+                            <input type="text" class="input" id="authLoginUrl" placeholder="https://target.com/login">
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="username">Username/Email</label>
-                                <input 
-                                    type="text" 
-                                    id="username" 
-                                    placeholder="user@example.com"
-                                    autocomplete="username"
-                                />
+                                <label class="form-label">Username / Email</label>
+                                <input type="text" class="input" id="authUsername" placeholder="user@example.com">
                             </div>
                             <div class="form-group">
-                                <label for="password">Password</label>
-                                <input 
-                                    type="password" 
-                                    id="password" 
-                                    placeholder="••••••••"
-                                    autocomplete="current-password"
-                                />
+                                <label class="form-label">Password</label>
+                                <input type="password" class="input" id="authPassword" placeholder="••••••••">
                             </div>
-                        </div>
-                        
-                        <div class="auth-note">
-                            ℹ️ The app will automatically detect login form fields. 
-                            <a href="#" id="showAdvancedAuth" class="advanced-toggle">Show Advanced Options</a>
-                        </div>
-                        
-                        <!-- Advanced selector fields -->
-                        <div id="advancedAuthFields" style="display: none;">
-                            <div class="advanced-header">
-                                <strong>⚙️ Advanced: Custom CSS Selectors</strong>
-                                <p class="help-text">Only modify if auto-detection fails</p>
-                            </div>
-                            <div class="form-group">
-                                <label for="usernameSelector">Username Field Selector</label>
-                                <input 
-                                    type="text" 
-                                    id="usernameSelector" 
-                                    placeholder="Leave empty for auto-detection"
-                                    value="input[type='email'], input[type='text'][name*='user'], input[name='username'], #username"
-                                />
-                                <small class="field-hint">Tries: email inputs, username fields, #username</small>
-                            </div>
-                            <div class="form-group">
-                                <label for="passwordSelector">Password Field Selector</label>
-                                <input 
-                                    type="text" 
-                                    id="passwordSelector" 
-                                    placeholder="Leave empty for auto-detection"
-                                    value="input[type='password'], #password"
-                                />
-                                <small class="field-hint">Tries: password inputs, #password</small>
-                            </div>
-                            <div class="form-group">
-                                <label for="submitSelector">Submit Button Selector</label>
-                                <input 
-                                    type="text" 
-                                    id="submitSelector" 
-                                    placeholder="Leave empty for auto-detection"
-                                    value="button[type='submit'], input[type='submit'], button:contains('Login'), button:contains('Sign in')"
-                                />
-                                <small class="field-hint">Tries: submit buttons, login/sign-in buttons</small>
-                            </div>
-                        </div>
-
-                        <div class="auth-divider"></div>
-
-                        <!-- Custom Login Script -->
-                        <div class="form-group">
-                            <strong>📜 Custom Login Script (JavaScript)</strong>
-                            <p class="help-text">
-                                Advanced: run a custom JS snippet in the login page context.
-                                Credentials are injected as <code>window.__SR_USER</code> and
-                                <code>window.__SR_PASS</code>. When a script is provided, the
-                                automatic form-fill is skipped in favour of your script.
-                            </p>
-                            <input
-                                type="file"
-                                id="loginScriptFile"
-                                accept=".js,.mjs,.txt,application/javascript,text/plain"
-                                style="margin-bottom: 8px;"
-                            />
-                            <textarea
-                                id="loginScript"
-                                rows="8"
-                                class="themed-textarea"
-                                placeholder="// Example:&#10;document.querySelector('#user').value = window.__SR_USER;&#10;document.querySelector('#pass').value = window.__SR_PASS;&#10;document.querySelector('#login-form').submit();"
-                            ></textarea>
                         </div>
                     </div>
-                </div>
 
-                <div class="button-group">
-                    <button id="startBtn" class="btn btn-primary">
-                        ▶️ Start Recording
-                    </button>
-                    <button id="stopBtn" class="btn btn-danger" disabled>
-                        ⏹️ Stop Recording
-                    </button>
-                </div>
-            </section>
-
-            <!-- Vulnerabilities Panel -->
-            <section class="panel vuln-panel tab-content" id="tab-vulnerabilities" style="display: none;">
-                <h2>🛡️ Security Vulnerability Scanner</h2>
-                
-                <div class="vuln-controls">
+                    <!-- MFA Section -->
+                    <div class="divider"></div>
                     <div class="form-group">
-                        <label for="scanUrl">Target URL to Scan</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input 
-                                type="text" 
-                                id="scanUrl" 
-                                placeholder="https://example.com"
-                                style="flex: 1;"
-                            />
-                            <button id="startScanBtn" class="btn btn-primary">
-                                🔍 Start Scan
-                            </button>
-                            <button id="stopScanBtn" class="btn btn-danger" disabled>
-                                ⏹️ Stop
-                            </button>
+                        <label class="form-label">Multi-Factor Authentication</label>
+                        <select class="input" id="authMFA">
+                            <option value="none">No MFA</option>
+                            <option value="totp">TOTP (Authenticator App)</option>
+                            <option value="sms">SMS Code</option>
+                            <option value="email">Email Code</option>
+                            <option value="push">Push Notification</option>
+                        </select>
+                    </div>
+
+                    <div id="totpFields" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">TOTP Secret</label>
+                            <input type="text" class="input" id="authTOTPSecret" placeholder="Base32 encoded secret (JBSWY3DPEHPK3PXP)">
+                            <span class="form-hint">Scan the QR code from the target application's MFA setup page</span>
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">Backup Codes (one per line)</label>
+                            <textarea class="input" id="authBackupCodes" rows="3" placeholder="12345678&#10;87654321&#10;..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Session Settings -->
+                    <div class="divider"></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Session TTL (minutes)</label>
+                            <input type="number" class="input" id="authSessionTTL" value="30" min="5" max="1440">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Re-auth Strategy</label>
+                            <select class="input" id="authReauthStrategy">
+                                <option value="auto">Automatic on 401/403</option>
+                                <option value="ttl">Time-based refresh</option>
+                                <option value="manual">Manual only</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 mt-4">
+                        <button class="btn btn-secondary" id="testAuthBtn">🔑 Test Login</button>
+                        <button class="btn btn-primary" id="saveAuthBtn">💾 Save Profile</button>
                     </div>
                 </div>
+    </div>
+    </div>
+</template>
 
-                <!-- Attention banner for vulnerabilities / sensitive data -->
-                <div id="scanAlert" class="scan-alert" style="display: none;"></div>
-
-                <!-- Scan Summary -->
-                <div id="scanSummary" class="scan-summary" style="display: none;">
-                    <div class="summary-header">
-                        <h3>Scan Results</h3>
-                        <div class="risk-score-container">
-                            <span class="risk-label">Risk Score:</span>
-                            <span id="riskScore" class="risk-score">0.0</span>
-                            <span class="risk-max">/10</span>
-                        </div>
-                    </div>
-                    <div class="summary-grid">
-                        <div class="summary-item critical">
-                            <span class="summary-count" id="criticalCount">0</span>
-                            <span class="summary-label">Critical</span>
-                        </div>
-                        <div class="summary-item high">
-                            <span class="summary-count" id="highCount">0</span>
-                            <span class="summary-label">High</span>
-                        </div>
-                        <div class="summary-item medium">
-                            <span class="summary-count" id="mediumCount">0</span>
-                            <span class="summary-label">Medium</span>
-                        </div>
-                        <div class="summary-item low">
-                            <span class="summary-count" id="lowCount">0</span>
-                            <span class="summary-label">Low</span>
-                        </div>
-                        <div class="summary-item info">
-                            <span class="summary-count" id="infoCount">0</span>
-                            <span class="summary-label">Info</span>
-                        </div>
-                    </div>
-                    <div class="summary-bar">
-                        <div id="criticalBar" class="bar-segment critical"></div>
-                        <div id="highBar" class="bar-segment high"></div>
-                        <div id="mediumBar" class="bar-segment medium"></div>
-                        <div id="lowBar" class="bar-segment low"></div>
-                        <div id="infoBar" class="bar-segment info"></div>
-                    </div>
-                    <div class="summary-stats">
-                        <span>Total Checks: <strong id="totalChecks">0</strong></span>
-                        <span>Vulnerable: <strong id="vulnerableCount">0</strong></span>
-                        <span>Warnings: <strong id="warningCount">0</strong></span>
-                        <span>Scan Duration: <strong id="scanDuration">0ms</strong></span>
-                    </div>
-                </div>
-
-                <!-- Vulnerability Details List -->
-                <div id="vulnResults" class="vuln-results" style="display: none;">
-                    <div class="vuln-results-header">
-                        <h3>Detailed Findings</h3>
-                        <div class="vuln-filters">
-                            <button class="filter-btn active" data-filter="all">All</button>
-                            <button class="filter-btn" data-filter="vulnerable">Vulnerable</button>
-                            <button class="filter-btn filter-sensitive" data-filter="sensitive">🔒 Sensitive</button>
-                            <button class="filter-btn" data-filter="warning">Warning</button>
-                            <button class="filter-btn" data-filter="not-vulnerable">Passed</button>
-                        </div>
-                        <div class="vuln-actions">
-                            <label class="fp-toggle">
-                                <input type="checkbox" id="hideFp" />
-                                <span>Hide marked false positives</span>
-                            </label>
-                            <button id="exportJsonBtn" class="btn btn-secondary" type="button">⬇ JSON</button>
-                            <button id="exportCsvBtn" class="btn btn-secondary" type="button">⬇ CSV</button>
-                        </div>
-                    </div>
-                    <div id="vulnList" class="vuln-list"></div>
-                </div>
-
-                <!-- Scan History -->
-                <div class="scan-history">
-                    <div class="scan-history-header">
-                        <h3>📚 Scan History</h3>
-                        <button id="refreshHistoryBtn" class="btn btn-secondary" type="button">🔄 Refresh</button>
-                    </div>
-                    <div class="scan-history-controls">
-                        <input type="text" id="historySearch" class="history-search"
-                                placeholder="Search by target URL or scan id..." style="flex: 1;" />
-                        <div class="sort-group" id="historySort">
-                            <span class="sort-label">Sort:</span>
-                            <button class="sort-btn active" data-sort="time" type="button">Newest</button>
-                            <button class="sort-btn" data-sort="risk" type="button">Highest risk</button>
-                            <button class="sort-btn" data-sort="target" type="button">Target A–Z</button>
-                        </div>
-                    </div>
-                    <div id="scanHistoryList" class="scan-history-list">
-                        <div class="history-empty">No saved scans yet. Run a scan with an Output Directory set.</div>
-                    </div>
-                </div>
-
-                <!-- Scan Progress -->
-                <div id="scanProgress" class="scan-progress" style="display: none;">
-                    <div class="scan-spinner"></div>
-                    <span id="scanStatus">Scanning...</span>
-                </div>
-            </section>
-
-            <!-- Results Panel -->
-            <section class="panel results-panel tab-content" id="tab-results" style="display: none;">
-                <h2>Status</h2>
-                
-                <div class="status-grid">
-                    <div class="status-item">
-                        <span class="status-label">State:</span>
-                        <span id="recordingState" class="status-value">Idle</span>
-                    </div>
-                    
-                    <div class="status-item">
-                        <span class="status-label">Session ID:</span>
-                        <span id="sessionId" class="status-value">—</span>
-                    </div>
-                    
-                    <div class="status-item">
-                        <span class="status-label">Current URL:</span>
-                        <span id="currentUrl" class="status-value">—</span>
-                    </div>
-                    
-                    <div class="status-item">
-                        <span class="status-label">Pages Visited:</span>
-                        <span id="pagesVisited" class="status-value">0</span>
-                    </div>
-                    
-                    <div class="status-item">
-                        <span class="status-label">Pages Discovered:</span>
-                        <span id="pagesDiscovered" class="status-value">0</span>
-                    </div>
-                </div>
-
-                <div class="progress-container">
-                    <div id="progressBar" class="progress-bar"></div>
-                </div>
-            </section>
-
-            <!-- Log Panel -->
-            <section class="panel log-panel">
-                <h2>Activity Log</h2>
-                <div id="logContainer" class="log-container"></div>
-            </section>
-        </main>
-
-        <footer>
-            <p>SiteRecorder v0.1.0 | Cross-platform Site Crawler</p>
-        </footer>
+<!-- Network Scanner Tool -->
+<template id="content-networkscanner">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔌 Network Scanner</h1>
+            <p class="content-subtitle">Port scanning, service detection, and network enumeration</p>
+        </div>
     </div>
 
-    <!-- Delete confirmation modal -->
-    <div id="confirmModal" class="modal-overlay" style="display: none;">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-            <div class="modal-header">
-                <span class="modal-icon">🗑️</span>
-                <h3 class="modal-title" id="confirmTitle">Delete scan?</h3>
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Target Host / IP / Range</label>
+                    <input type="text" class="input" id="netScanTarget" placeholder="example.com or 192.168.1.0/24">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ports</label>
+                    <select class="input" id="netScanPorts">
+                        <option value="common">Common Ports (24)</option>
+                        <option value="top100">Top 100</option>
+                        <option value="top1000">Top 1000</option>
+                        <option value="all">All (1-65535)</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group" id="customPortsGroup" style="display:none;">
+                    <label class="form-label">Custom Ports (comma-separated)</label>
+                    <input type="text" class="input" id="netScanCustomPorts" placeholder="22,80,443,8080">
+                </div>
             </div>
-            <div class="modal-body" id="confirmMessage"></div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" id="confirmCancel" type="button">Cancel</button>
-                <button class="btn btn-danger" id="confirmOk" type="button">Delete</button>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Scan Type</label>
+                    <select class="input" id="netScanType">
+                        <option value="connect">Connect Scan</option>
+                        <option value="syn">SYN Scan (requires root)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Timeout (ms)</label>
+                    <input type="number" class="input" id="netScanTimeout" value="2000" min="500" max="10000">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Concurrency</label>
+                    <input type="number" class="input" id="netScanConcurrency" value="100" min="1" max="500">
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 mt-4">
+                <label class="checkbox">
+                    <input type="checkbox" id="netScanService" checked>
+                    <span>Service Detection</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="netScanBanner">
+                    <span>Banner Grabbing</span>
+                </label>
+            </div>
+
+            <div class="mt-4">
+                <button class="btn btn-primary btn-lg" id="startNetScanBtn">
+                    🔍 Start Scan
+                </button>
             </div>
         </div>
     </div>
+
+    <!-- Scan Progress -->
+    <div class="card mb-4" id="netScanProgress" style="display:none;">
+        <div class="card-body">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="spinner spinner-sm"></div>
+                    <span id="netScanStatus">Initializing scanner...</span>
+                </div>
+                <div class="flex gap-2">
+                    <button class="btn btn-sm btn-danger" id="cancelNetScanBtn">⏹ Cancel</button>
+                </div>
+            </div>
+            <div class="progress mb-2">
+                <div class="progress-bar" id="netScanProgressBar" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-sm text-secondary">
+                <span id="netScanPortsCount">0/0 ports scanned</span>
+                <span id="netScanETA">ETA: --:--</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Results -->
+    <div id="netScanResults" style="display:none;"></div>
+</template>
+
+<!-- Password Attack Tool -->
+<template id="content-passwordattack">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔑 Password Attacks</h1>
+            <p class="content-subtitle">Hash identification, dictionary attacks, brute force, and spraying</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="hash-identify">Hash ID</button>
+        <button class="tab" data-tab="hash-crack">Crack</button>
+        <button class="tab" data-tab="brute-force">Brute Force</button>
+        <button class="tab" data-tab="spray">Password Spray</button>
+    </div>
+
+    <!-- Hash Identification -->
+    <div class="tab-content active" id="tab-hash-identify">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Hash Value</label>
+                    <input type="text" class="input" id="hashInput" placeholder="Enter hash to identify...">
+                </div>
+                <button class="btn btn-primary mt-4" id="identifyHashBtn">🔍 Identify Hash</button>
+                <div id="hashIdentifyResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hash Cracking -->
+    <div class="tab-content" id="tab-hash-crack" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Hash</label>
+                        <input type="text" class="input" id="crackHash" placeholder="Hash to crack...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Hash Type</label>
+                        <select class="input" id="crackHashType">
+                            <option value="md5">MD5</option>
+                            <option value="sha1">SHA-1</option>
+                            <option value="sha256">SHA-256</option>
+                            <option value="sha512">SHA-512</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Wordlist</label>
+                    <textarea class="input" id="crackWordlist" rows="6" placeholder="Enter passwords, one per line..."></textarea>
+                    <span class="form-hint">Or use built-in: <a href="#" id="useDefaultWordlist">Load default wordlist</a></span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Max Attempts</label>
+                    <input type="number" class="input" id="crackMaxAttempts" value="100000" min="1000" max="10000000">
+                </div>
+                <button class="btn btn-primary" id="startCrackBtn">💥 Start Cracking</button>
+                <div id="crackResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Brute Force -->
+    <div class="tab-content" id="tab-brute-force" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Charset</label>
+                        <select class="input" id="bruteCharset">
+                            <option value="digits">Digits (0-9)</option>
+                            <option value="lowercase">Lowercase (a-z)</option>
+                            <option value="uppercase">Uppercase (A-Z)</option>
+                            <option value="alpha">Alpha (a-z, A-Z)</option>
+                            <option value="alphanumeric">Alphanumeric</option>
+                            <option value="all">All Printable</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Min Length</label>
+                        <input type="number" class="input" id="bruteMinLen" value="1" min="1" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Max Length</label>
+                        <input type="number" class="input" id="bruteMaxLen" value="4" min="1" max="10">
+                    </div>
+                </div>
+                <button class="btn btn-secondary" id="generateMaskBtn">🎯 Generate Candidates</button>
+                <div id="bruteResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Spray -->
+    <div class="tab-content" id="tab-spray" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Target</label>
+                    <input type="text" class="input" id="sprayTarget" placeholder="https://target.com/login">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Usernames (one per line)</label>
+                        <textarea class="input" id="sprayUsers" rows="4" placeholder="admin&#10;user&#10;test"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Passwords (one per line)</label>
+                        <textarea class="input" id="sprayPasswords" rows="4" placeholder="Password123&#10;Summer2024&#10;Welcome1"></textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Delay (ms)</label>
+                        <input type="number" class="input" id="sprayDelay" value="1000" min="100" max="60000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Lockout Threshold</label>
+                        <input type="number" class="input" id="sprayLockout" value="5" min="1" max="100">
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="startSprayBtn">🌊 Start Spray</button>
+                <div id="sprayResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- OSINT Tool -->
+<template id="content-osint">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🕵️ OSINT Gathering</h1>
+            <p class="content-subtitle">Open source intelligence: DNS, subdomains, SSL, WHOIS</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="osint-dns">DNS Lookup</button>
+        <button class="tab" data-tab="osint-subdomains">Subdomains</button>
+        <button class="tab" data-tab="osint-ssl">SSL Certs</button>
+    </div>
+
+    <!-- DNS Lookup -->
+    <div class="tab-content active" id="tab-osint-dns">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Domain</label>
+                    <input type="text" class="input" id="osintDomain" placeholder="example.com">
+                </div>
+                <button class="btn btn-primary mt-4" id="dnsLookupBtn">🔍 Lookup DNS</button>
+                <div id="dnsResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subdomain Enumeration -->
+    <div class="tab-content" id="tab-osint-subdomains" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Domain</label>
+                    <input type="text" class="input" id="osintSubdomain" placeholder="example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Wordlist (optional)</label>
+                    <textarea class="input" id="osintWordlist" rows="3" placeholder="Custom subdomains, one per line..."></textarea>
+                    <span class="form-hint">Leave empty for built-in wordlist (100 entries)</span>
+                </div>
+                <button class="btn btn-primary mt-4" id="subdomainEnumBtn">🔍 Enumerate Subdomains</button>
+                <div id="subdomainResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SSL Certificate -->
+    <div class="tab-content" id="tab-osint-ssl" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Hostname</label>
+                        <input type="text" class="input" id="osintSslHost" placeholder="example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Port</label>
+                        <input type="number" class="input" id="osintSslPort" value="443" min="1" max="65535">
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-4" id="sslCheckBtn">🔒 Check SSL</button>
+                <div id="sslResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- OS Pentest Tool -->
+<template id="content-ospentest">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">💻 OS Pentesting</h1>
+            <p class="content-subtitle">Linux, Windows, macOS privilege escalation and security assessment</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Target OS</label>
+                    <select class="input" id="osTarget">
+                        <option value="linux">Linux</option>
+                        <option value="windows">Windows</option>
+                        <option value="macos">macOS</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Scan Depth</label>
+                    <select class="input" id="osScanDepth">
+                        <option value="quick">Quick (Critical only)</option>
+                        <option value="standard" selected>Standard</option>
+                        <option value="deep">Deep (All checks)</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-lg" id="startOsScanBtn">🔍 Start Assessment</button>
+        </div>
+    </div>
+
+    <div id="osScanResults" style="display:none;"></div>
+</template>
+
+<!-- Mobile Security Tool -->
+<template id="content-mobilesecurity">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📱 Mobile Security Analysis</h1>
+            <p class="content-subtitle">Android APK and iOS IPA security assessment</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Target Platform</label>
+                <select class="input" id="mobileTarget">
+                    <option value="android">Android (APK)</option>
+                    <option value="ios">iOS (IPA)</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-lg" id="startMobileScanBtn">🔍 Analyze Application</button>
+        </div>
+    </div>
+
+    <div id="mobileScanResults" style="display:none;"></div>
+</template>
+
+<!-- Cloud Security Tool -->
+<template id="content-cloudsecurity">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">☁️ Cloud Security Assessment</h1>
+            <p class="content-subtitle">AWS, Azure, GCP security posture and compliance</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Cloud Provider</label>
+                <select class="input" id="cloudProvider">
+                    <option value="aws">Amazon Web Services (AWS)</option>
+                    <option value="azure">Microsoft Azure</option>
+                    <option value="gcp">Google Cloud Platform</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-lg" id="startCloudScanBtn">🔍 Start Cloud Assessment</button>
+        </div>
+    </div>
+
+    <div id="cloudScanResults" style="display:none;"></div>
+</template>
+
+<!-- Web3 Security Tool -->
+<template id="content-web3security">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">⛓️ Web3 Security</h1>
+            <p class="content-subtitle">Smart contract auditing and wallet security analysis</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="web3-contract">Smart Contract</button>
+        <button class="tab" data-tab="web3-wallet">Wallet Analysis</button>
+    </div>
+
+    <div class="tab-content active" id="tab-web3-contract">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Blockchain</label>
+                    <select class="input" id="web3Chain">
+                        <option value="ethereum">Ethereum</option>
+                        <option value="polygon">Polygon</option>
+                        <option value="bsc">BNB Smart Chain</option>
+                        <option value="arbitrum">Arbitrum</option>
+                        <option value="optimism">Optimism</option>
+                        <option value="solana">Solana</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary mt-4" id="scanContractBtn">🔍 Audit Contract</button>
+                <div id="contractResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-web3-wallet" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Wallet Address</label>
+                    <input type="text" class="input" id="web3WalletAddress" placeholder="0x...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Blockchain</label>
+                    <select class="input" id="web3WalletChain">
+                        <option value="ethereum">Ethereum</option>
+                        <option value="polygon">Polygon</option>
+                        <option value="bsc">BNB Smart Chain</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary mt-4" id="analyzeWalletBtn">🔍 Analyze Wallet</button>
+                <div id="walletResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Gray Team: ATT&CK Matrix -->
+<template id="content-gray-matrix">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🗺️ MITRE ATT&CK Matrix</h1>
+            <p class="content-subtitle">Technique coverage and detection mapping</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="exportMatrixBtn">📥 Export</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="totalTechniques">0</div>
+            <div class="stat-label">Total Techniques</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="coveredTechniques">0</div>
+            <div class="stat-label">Covered</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="testedTechniques">0</div>
+            <div class="stat-label">Tested</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="coverageScore">0%</div>
+            <div class="stat-label">Coverage Score</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Enterprise ATT&CK Matrix</span>
+        </div>
+        <div class="card-body" id="attckMatrixContainer">
+            <!-- Matrix rendered dynamically -->
+        </div>
+    </div>
+</template>
+
+<!-- Gray Team: Threat Modeling -->
+<template id="content-gray-threatmodel">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🧩 Threat Modeling</h1>
+            <p class="content-subtitle">STRIDE-based threat identification and risk assessment</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="createThreatModelBtn">+ New Threat Model</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Model Name</label>
+                    <input type="text" class="input" id="threatModelName" placeholder="Application Threat Model">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" class="input" id="threatModelDesc" placeholder="Threat model for...">
+                </div>
+            </div>
+            <button class="btn btn-primary" id="generateThreatsBtn">🔍 Generate STRIDE Threats</button>
+        </div>
+    </div>
+
+    <div id="threatModelResults" style="display:none;"></div>
+</template>
+
+<!-- Gray Team: Purple Team -->
+<template id="content-gray-purple">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🤝 Purple Team Exercises</h1>
+            <p class="content-subtitle">Collaborative attack-defend validation</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="createExerciseBtn">+ New Exercise</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Exercise Name</label>
+                    <input type="text" class="input" id="exerciseName" placeholder="Q1 Purple Team Exercise">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" class="input" id="exerciseDesc" placeholder="Validation of...">
+                </div>
+            </div>
+            <button class="btn btn-primary" id="createExerciseSubmitBtn">🎯 Create Exercise</button>
+        </div>
+    </div>
+
+    <div id="exerciseResults" style="display:none;"></div>
+</template>
+
+<!-- Gray Team: Detection Engineering -->
+<template id="content-gray-detections">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🛡️ Detection Engineering</h1>
+            <p class="content-subtitle">Build and test detection rules</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="detection-sigma">Sigma Rules</button>
+        <button class="tab" data-tab="detection-yara">YARA Rules</button>
+        <button class="tab" data-tab="detection-apt">APT Emulation</button>
+    </div>
+
+    <div class="tab-content active" id="tab-detection-sigma">
+        <div class="card mb-4">
+            <div class="card-header">
+                <span class="card-title">Sigma Detection Rules</span>
+                <button class="btn btn-sm btn-primary" id="loadSigmaRulesBtn">📥 Load Sample Rules</button>
+            </div>
+            <div class="card-body" id="sigmaRulesContainer"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-detection-yara" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📝</div>
+                    <div class="empty-state-title">YARA Rules</div>
+                    <div class="empty-state-text">Create and manage YARA rules for malware detection.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-detection-apt" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">APT Group</label>
+                    <select class="input" id="aptGroupSelect">
+                        <option value="apt28">APT28 (Fancy Bear)</option>
+                        <option value="apt29">APT29 (Cozy Bear)</option>
+                        <option value="lazarus">Lazarus Group</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary mt-4" id="loadAptTechniquesBtn">🔍 Load Techniques</button>
+                <div id="aptResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: SOC Dashboard -->
+<template id="content-blue-dashboard">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📊 SOC Dashboard</h1>
+            <p class="content-subtitle">Security operations center overview</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="refreshSocBtn">🔄 Refresh</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="socTotalAlerts">0</div>
+            <div class="stat-label">Total Alerts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="socOpenIncidents">0</div>
+            <div class="stat-label">Open Incidents</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="socMttd">0m</div>
+            <div class="stat-label">Mean Time to Detect</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="socMttR">0m</div>
+            <div class="stat-label">Mean Time to Respond</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2 mb-4">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Severity Distribution</span></div>
+            <div class="card-body" id="socSeverityDist"></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Top Alert Sources</span></div>
+            <div class="card-body" id="socAlertSources"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Recent Alerts</span>
+            <button class="btn btn-sm btn-ghost" id="viewAllAlertsBtn">View All →</button>
+        </div>
+        <div class="card-body" id="socRecentAlerts"></div>
+    </div>
+</template>
+
+<!-- Blue Team: Incidents -->
+<template id="content-blue-incidents">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔥 Incident Response</h1>
+            <p class="content-subtitle">Track and manage security incidents</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="createIncidentBtn">+ New Incident</button>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="incidentForm" style="display:none;">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Title</label>
+                    <input type="text" class="input" id="incidentTitle" placeholder="Incident title...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Severity</label>
+                    <select class="input" id="incidentSeverity">
+                        <option value="P1">P1 - Critical</option>
+                        <option value="P2">P2 - High</option>
+                        <option value="P3">P3 - Medium</option>
+                        <option value="P4">P4 - Low</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <select class="input" id="incidentCategory">
+                        <option value="malware">Malware</option>
+                        <option value="phishing">Phishing</option>
+                        <option value="breach">Data Breach</option>
+                        <option value="ddos">DDoS</option>
+                        <option value="ransomware">Ransomware</option>
+                        <option value="apt">APT</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" class="input" id="incidentDesc" placeholder="Brief description...">
+                </div>
+            </div>
+            <button class="btn btn-primary" id="submitIncidentBtn">Create Incident</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><span class="card-title">IR Playbooks</span></div>
+        <div class="card-body" id="irPlaybooks"></div>
+    </div>
+
+    <div id="incidentResults"></div>
+</template>
+
+<!-- Blue Team: Threat Intel -->
+<template id="content-blue-intel">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🧠 Threat Intelligence</h1>
+            <p class="content-subtitle">Threat feeds, actors, and indicators</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="intel-feeds">Feeds</button>
+        <button class="tab" data-tab="intel-actors">Threat Actors</button>
+        <button class="tab" data-tab="intel-indicators">Indicators</button>
+    </div>
+
+    <div class="tab-content active" id="tab-intel-feeds">
+        <div class="card mb-4">
+            <div class="card-header"><span class="card-title">Threat Intelligence Feeds</span></div>
+            <div class="card-body" id="threatFeedsContainer"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-intel-actors" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-header"><span class="card-title">Threat Actors</span></div>
+            <div class="card-body" id="threatActorsContainer"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-intel-indicators" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-header"><span class="card-title">Indicators of Compromise</span></div>
+            <div class="card-body" id="indicatorsContainer"></div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Threat Hunting -->
+<template id="content-blue-hunt">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔍 Threat Hunting</h1>
+            <p class="content-subtitle">Proactive threat hunting operations</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="createHuntBtn">+ New Hunt</button>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="huntForm" style="display:none;">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Hypothesis Title</label>
+                    <input type="text" class="input" id="huntTitle" placeholder="Hunt hypothesis...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">MITRE Technique</label>
+                    <select class="input" id="huntTechnique">
+                        <option value="T1059">T1059 - Command Interpreter</option>
+                        <option value="T1003">T1003 - Credential Dumping</option>
+                        <option value="T1055">T1055 - Process Injection</option>
+                        <option value="T1078">T1078 - Valid Accounts</option>
+                        <option value="T1566">T1566 - Phishing</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input type="text" class="input" id="huntDesc" placeholder="What are you hunting for?">
+            </div>
+            <button class="btn btn-primary" id="submitHuntBtn">🎯 Create Hunt</button>
+        </div>
+    </div>
+
+    <div id="huntResults"></div>
+</template>
+
+<!-- Blue Team: Forensics -->
+<template id="content-blue-forensics">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔬 Digital Forensics</h1>
+            <p class="content-subtitle">Evidence analysis and malware examination</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="forensics-malware">Malware Analysis</button>
+        <button class="tab" data-tab="forensics-cases">Cases</button>
+    </div>
+
+    <div class="tab-content active" id="tab-forensics-malware">
+        <div class="card mb-4">
+            <div class="card-header">
+                <span class="card-title">Malware Analysis</span>
+                <button class="btn btn-sm btn-primary" id="loadMalwareBtn">📥 Load Sample</button>
+            </div>
+            <div class="card-body" id="malwareAnalysisContainer"></div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-forensics-cases" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📁</div>
+                    <div class="empty-state-title">Forensics Cases</div>
+                    <div class="empty-state-text">Create and manage digital forensics cases.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- White Team: GRC Dashboard -->
+<template id="content-white-dashboard">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📊 GRC Dashboard</h1>
+            <p class="content-subtitle">Governance, Risk & Compliance overview</p>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="grcComplianceScore">0%</div>
+            <div class="stat-label">Compliance Score</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="grcOpenRisks">0</div>
+            <div class="stat-label">Open Risks</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="grcCriticalRisks">0</div>
+            <div class="stat-label">Critical Risks</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="grcTrainingRate">0%</div>
+            <div class="stat-label">Training Completion</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2 mb-4">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Framework Compliance</span></div>
+            <div class="card-body" id="grcFrameworks"></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Risk Trend</span></div>
+            <div class="card-body" id="grcRiskTrend"></div>
+        </div>
+    </div>
+</template>
+
+<!-- White Team: Compliance -->
+<template id="content-white-compliance">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">✅ Compliance Management</h1>
+            <p class="content-subtitle">Framework compliance tracking and gap analysis</p>
+        </div>
+    </div>
+
+    <div id="complianceResults"></div>
+</template>
+
+<!-- White Team: Risk Register -->
+<template id="content-white-risk">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">⚖️ Risk Register</h1>
+            <p class="content-subtitle">Enterprise risk management and treatment</p>
+        </div>
+    </div>
+
+    <div id="riskResults"></div>
+</template>
+
+<!-- White Team: Policies -->
+<template id="content-white-policies">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📜 Policy Management</h1>
+            <p class="content-subtitle">Security policies and acknowledgments</p>
+        </div>
+    </div>
+
+    <div id="policyResults"></div>
+</template>
+
+<!-- White Team: Vendor Risk -->
+<template id="content-white-vendors">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🏢 Vendor Risk Management</h1>
+            <p class="content-subtitle">Third-party risk assessments and monitoring</p>
+        </div>
+    </div>
+
+    <div id="vendorResults"></div>
+</template>
+
+<!-- White Team: Training -->
+<template id="content-white-training">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🎓 Security Training</h1>
+            <p class="content-subtitle">Awareness programs and completion tracking</p>
+        </div>
+    </div>
+
+    <div id="trainingResults"></div>
+</template>
+
+<!-- Cross-Team: Assets -->
+<template id="content-assets">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🎯 Asset Inventory</h1>
+            <p class="content-subtitle">Unified asset management across all teams</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="importAssetsBtn">📥 Import</button>
+            <button class="btn btn-primary" id="addAssetBtn">+ Add Asset</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="totalAssets">0</div>
+            <div class="stat-label">Total Assets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="criticalAssets">0</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="productionAssets">0</div>
+            <div class="stat-label">Production</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="avgRiskScore">0.0</div>
+            <div class="stat-label">Avg Risk Score</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Asset List</span>
+            <input type="text" class="input input-sm" placeholder="Search assets..." style="width:200px;" id="assetSearch">
+        </div>
+        <div class="card-body" id="assetList"></div>
+    </div>
+</template>
+
+<!-- Cross-Team: Notifications -->
+<template id="content-notifications">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔔 Notifications</h1>
+            <p class="content-subtitle">System alerts and team notifications</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="markAllReadBtn">✓ Mark All Read</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body" id="notificationList"></div>
+    </div>
+</template>
+
+<!-- Cross-Team: Reports -->
+<template id="content-reports">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📋 Report Center</h1>
+            <p class="content-subtitle">Generate and manage security reports</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="generateReportBtn">+ Generate Report</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><span class="card-title">Report Templates</span></div>
+        <div class="card-body" id="reportTemplates"></div>
+    </div>
+</template>
+
+<!-- Cross-Team: Integrations -->
+<template id="content-integrations">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔗 Integrations</h1>
+            <p class="content-subtitle">Connected security tools and services</p>
+        </div>
+    </div>
+
+    <div id="integrationList"></div>
+</template>
+
+<!-- HTTP Proxy (Burp Suite) -->
+<template id="content-http-proxy">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🌐 HTTP Proxy</h1>
+            <p class="content-subtitle">Intercept, inspect, and modify HTTP/HTTPS traffic</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-success" id="proxyStartBtn">▶ Start Proxy</button>
+            <button class="btn btn-danger" id="proxyStopBtn" style="display:none;">⏹ Stop Proxy</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="proxyStatus" style="color:var(--status-error);">Offline</div>
+            <div class="stat-label">Proxy Status</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="proxySessionCount">0</div>
+            <div class="stat-label">Sessions</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="proxyPort">8080</div>
+            <div class="stat-label">Listen Port</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="proxyInterceptCount">0</div>
+            <div class="stat-label">Intercepted</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Proxy Configuration</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Listen Port</label>
+                    <input type="number" class="input" id="proxyListenPort" value="8080" min="1024" max="65535">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Intercept Requests</label>
+                    <label class="checkbox" style="margin-top:8px;">
+                        <input type="checkbox" id="proxyInterceptReq">
+                        <span>Enable request interception</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Intercept Responses</label>
+                    <label class="checkbox" style="margin-top:8px;">
+                        <input type="checkbox" id="proxyInterceptResp">
+                        <span>Enable response interception</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Intercepted Traffic</span>
+            <button class="btn btn-sm btn-secondary" id="proxyClearBtn">Clear</button>
+        </div>
+        <div class="card-body" id="proxySessionList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📡</div>
+                <div class="empty-state-title">Proxy Not Running</div>
+                <div class="empty-state-text">Start the proxy and configure your browser to use 127.0.0.1:8080</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Packet Capture (Wireshark) -->
+<template id="content-packet-capture">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📡 Packet Capture</h1>
+            <p class="content-subtitle">Capture and analyze network traffic in real-time</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-success" id="captureStartBtn">▶ Start Capture</button>
+            <button class="btn btn-danger" id="captureStopBtn" style="display:none;">⏹ Stop Capture</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="captureStatus" style="color:var(--status-error);">Idle</div>
+            <div class="stat-label">Capture Status</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="capturePacketCount">0</div>
+            <div class="stat-label">Packets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="capturePps">0</div>
+            <div class="stat-label">Packets/sec</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="captureErrors">0</div>
+            <div class="stat-label">Errors</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Interface Selection</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Network Interface</label>
+                    <select class="input" id="captureInterface"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Promiscuous Mode</label>
+                    <label class="checkbox" style="margin-top:8px;">
+                        <input type="checkbox" id="capturePromiscuous">
+                        <span>Enable promiscuous mode</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">BPF Filter</label>
+                    <input type="text" class="input" id="captureFilter" placeholder="e.g., tcp port 80">
+                </div>
+            </div>
+            <button class="btn btn-secondary mt-2" id="refreshInterfacesBtn">🔄 Refresh Interfaces</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Captured Packets</span>
+            <button class="btn btn-sm btn-secondary" id="captureClearBtn">Clear</button>
+        </div>
+        <div class="card-body" id="packetList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📦</div>
+                <div class="empty-state-title">No Packets Captured</div>
+                <div class="empty-state-text">Select an interface and start capturing to see network traffic</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Targets -->
+<template id="content-red-targets">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🎯 Target Management</h1>
+            <p class="content-subtitle">Manage and organize your pentest targets</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="importTargetsBtn">📥 Import</button>
+            <button class="btn btn-primary" id="addTargetBtn">+ Add Target</button>
+        </div>
+    </div>
+
+    <div class="grid grid-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="totalTargets">0</div>
+            <div class="stat-label">Total Targets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="scannedTargets">0</div>
+            <div class="stat-label">Scanned (7d)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="authTargets">0</div>
+            <div class="stat-label">With Auth</div>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="targetForm" style="display:none;">
+        <div class="card-header">
+            <span class="card-title" id="targetFormTitle">Add New Target</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Target Name</label>
+                    <input type="text" class="input" id="targetName" placeholder="Production Web App">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">URL</label>
+                    <input type="text" class="input" id="targetUrl" placeholder="https://example.com">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Type</label>
+                    <select class="input" id="targetType">
+                        <option value="web">Web Application</option>
+                        <option value="api">API</option>
+                        <option value="mobile">Mobile</option>
+                        <option value="network">Network</option>
+                        <option value="cloud">Cloud</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Risk Level</label>
+                    <select class="input" id="targetRisk">
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="input" id="targetDesc" rows="2" placeholder="Target description..."></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Auth Profile</label>
+                    <select class="input" id="targetAuth">
+                        <option value="">None</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tags (comma-separated)</label>
+                    <input type="text" class="input" id="targetTags" placeholder="production, external, critical">
+                </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button class="btn btn-primary" id="saveTargetBtn">💾 Save Target</button>
+                <button class="btn btn-secondary" id="cancelTargetBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Target Inventory</span>
+            <input type="text" class="input input-sm" placeholder="Search targets..." style="width:200px;" id="targetSearch">
+        </div>
+        <div class="table-container">
+            <table class="table" id="targetsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>URL</th>
+                        <th>Type</th>
+                        <th>Risk</th>
+                        <th>Auth</th>
+                        <th>Last Scan</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="targetsTableBody">
+                    <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--text-tertiary);">No targets configured. Add your first target to begin.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Scans -->
+<template id="content-red-scans">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔍 Scan Management</h1>
+            <p class="content-subtitle">Monitor and manage active scans</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="refreshScansBtn">🔄 Refresh</button>
+            <button class="btn btn-primary" id="newScanBtn">+ New Scan</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="totalScans">0</div>
+            <div class="stat-label">Total Scans</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="runningScans">0</div>
+            <div class="stat-label">Running</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="completedScans">0</div>
+            <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="failedScans">0</div>
+            <div class="stat-label">Failed</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Scan History</span>
+            <div class="flex gap-2">
+                <button class="btn btn-sm filter-btn active" data-filter="all" onclick="filterScans('all', this)">All</button>
+                <button class="btn btn-sm filter-btn" data-filter="running" onclick="filterScans('running', this)">Running</button>
+                <button class="btn btn-sm filter-btn" data-filter="completed" onclick="filterScans('completed', this)">Completed</button>
+                <button class="btn btn-sm filter-btn" data-filter="failed" onclick="filterScans('failed', this)">Failed</button>
+            </div>
+        </div>
+        <div class="card-body" id="scanList">
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-title">No Scans Yet</div>
+                <div class="empty-state-text">Start a scan to see it here.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Findings -->
+<template id="content-red-findings">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">⚠️ Findings</h1>
+            <p class="content-subtitle">Review and triage discovered vulnerabilities</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="exportFindingsBtn">📥 Export</button>
+            <button class="btn btn-primary" id="addFindingBtn">+ Add Finding</button>
+        </div>
+    </div>
+
+    <div class="grid grid-5 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="findingsCritical">0</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="findingsHigh">0</div>
+            <div class="stat-label">High</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="findingsMedium">0</div>
+            <div class="stat-label">Medium</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="findingsLow">0</div>
+            <div class="stat-label">Low</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="findingsInfo">0</div>
+            <div class="stat-label">Info</div>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="findingForm" style="display:none;">
+        <div class="card-header">
+            <span class="card-title">Add New Finding</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Title</label>
+                    <input type="text" class="input" id="findingTitle" placeholder="SQL Injection in login form">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Severity</label>
+                    <select class="input" id="findingSeverity">
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                        <option value="info">Info</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Target</label>
+                    <input type="text" class="input" id="findingTarget" placeholder="https://example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <select class="input" id="findingCategory">
+                        <option value="injection">Injection</option>
+                        <option value="xss">XSS</option>
+                        <option value="auth">Authentication</option>
+                        <option value="crypto">Cryptographic</option>
+                        <option value="config">Configuration</option>
+                        <option value="disclosure">Information Disclosure</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="input" id="findingDesc" rows="3" placeholder="Detailed description of the finding..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Remediation</label>
+                <textarea class="input" id="findingRemediation" rows="2" placeholder="How to fix this issue..."></textarea>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button class="btn btn-primary" id="saveFindingBtn">💾 Save Finding</button>
+                <button class="btn btn-secondary" id="cancelFindingBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">All Findings</span>
+            <input type="text" class="input input-sm" placeholder="Search findings..." style="width:200px;" id="findingSearch">
+        </div>
+        <div class="card-body" id="findingsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Findings</div>
+                <div class="empty-state-text">Findings will appear here when discovered.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Email Security -->
+<template id="content-red-email">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📧 Email Security</h1>
+            <p class="content-subtitle">Phishing, email infrastructure assessment</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="email-phishing">Phishing Simulator</button>
+        <button class="tab" data-tab="email-infra">Infrastructure</button>
+        <button class="tab" data-tab="email-dmarc">DMARC/SPF/DKIM</button>
+    </div>
+
+    <div class="tab-content active" id="tab-email-phishing">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Campaign Name</label>
+                        <input type="text" class="input" id="phishingCampaign" placeholder="Q1 Security Awareness">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Template</label>
+                        <select class="input" id="phishingTemplate">
+                            <option value="credential">Credential Harvest</option>
+                            <option value="attachment">Malicious Attachment</option>
+                            <option value="link">Malicious Link</option>
+                            <option value="oauth">OAuth Consent</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Target Emails (one per line)</label>
+                    <textarea class="input" id="phishingTargets" rows="4" placeholder="user@example.com"></textarea>
+                </div>
+                <button class="btn btn-primary" id="launchPhishingBtn">🚀 Launch Campaign</button>
+                <div id="phishingResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-email-infra" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Domain</label>
+                    <input type="text" class="input" id="emailDomain" placeholder="example.com">
+                </div>
+                <button class="btn btn-primary mt-4" id="checkEmailInfraBtn">🔍 Check Infrastructure</button>
+                <div id="emailInfraResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-email-dmarc" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Domain</label>
+                    <input type="text" class="input" id="dmarcDomain" placeholder="example.com">
+                </div>
+                <button class="btn btn-primary mt-4" id="checkDmarcBtn">🔍 Check DMARC/SPF/DKIM</button>
+                <div id="dmarcResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Wireless Security -->
+<template id="content-red-wireless">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📡 Wireless Security</h1>
+            <p class="content-subtitle">WiFi, Bluetooth, RFID assessment</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="wireless-wifi">WiFi</button>
+        <button class="tab" data-tab="wireless-bt">Bluetooth</button>
+        <button class="tab" data-tab="wireless-rfid">RFID/NFC</button>
+    </div>
+
+    <div class="tab-content active" id="tab-wireless-wifi">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Interface</label>
+                        <select class="input" id="wifiInterface">
+                            <option value="wlan0">wlan0</option>
+                            <option value="wlan1">wlan1</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Scan Duration (seconds)</label>
+                        <input type="number" class="input" id="wifiScanDuration" value="30" min="10" max="300">
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="scanWifiBtn">📡 Scan Networks</button>
+                <div id="wifiResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-wireless-bt" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Scan Duration (seconds)</label>
+                    <input type="number" class="input" id="btScanDuration" value="15" min="5" max="120">
+                </div>
+                <button class="btn btn-primary" id="scanBtBtn">🔵 Scan Bluetooth</button>
+                <div id="btResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-wireless-rfid" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Reader Device</label>
+                    <select class="input" id="rfidReader">
+                        <option value="acr122u">ACR122U</option>
+                        <option value="pn532">PN532</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" id="scanRfidBtn">📶 Scan RFID/NFC</button>
+                <div id="rfidResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Exploitation -->
+<template id="content-red-exploit">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">💥 Exploitation</h1>
+            <p class="content-subtitle">Exploit framework & post-exploitation</p>
+        </div>
+    </div>
+
+    <div class="tabs mb-4">
+        <button class="tab active" data-tab="exploit-search">Search Exploits</button>
+        <button class="tab" data-tab="exploit-session">Sessions</button>
+        <button class="tab" data-tab="exploit-post">Post-Exploitation</button>
+    </div>
+
+    <div class="tab-content active" id="tab-exploit-search">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">CVE / Keyword</label>
+                        <input type="text" class="input" id="exploitSearch" placeholder="CVE-2024-1234 or Apache">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Platform</label>
+                        <select class="input" id="exploitPlatform">
+                            <option value="all">All Platforms</option>
+                            <option value="windows">Windows</option>
+                            <option value="linux">Linux</option>
+                            <option value="macos">macOS</option>
+                            <option value="web">Web</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="searchExploitsBtn">🔍 Search Exploits</button>
+                <div id="exploitSearchResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-exploit-session" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-header">
+                <span class="card-title">Active Sessions</span>
+                <button class="btn btn-sm btn-primary" id="newSessionBtn">+ New Listener</button>
+            </div>
+            <div class="card-body" id="sessionsList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔌</div>
+                    <div class="empty-state-title">No Active Sessions</div>
+                    <div class="empty-state-text">Start a listener to catch incoming connections.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-exploit-post" style="display:none;">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Target Session</label>
+                    <select class="input" id="postExploitSession">
+                        <option value="">Select a session...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Module</label>
+                    <select class="input" id="postExploitModule">
+                        <option value="creds">Credential Harvesting</option>
+                        <option value="pivot">Network Pivoting</option>
+                        <option value="persist">Persistence</option>
+                        <option value="exfil">Data Exfiltration</option>
+                        <option value="lateral">Lateral Movement</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" id="runPostExploitBtn">⚡ Execute Module</button>
+                <div id="postExploitResults" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Payloads -->
+<template id="content-red-payloads">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📦 Payload Generator</h1>
+            <p class="content-subtitle">Generate custom payloads</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Payload Type</label>
+                    <select class="input" id="payloadType">
+                        <option value="reverse_shell">Reverse Shell</option>
+                        <option value="bind_shell">Bind Shell</option>
+                        <option value="meterpreter">Meterpreter</option>
+                        <option value="stager">Stager</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Platform</label>
+                    <select class="input" id="payloadPlatform">
+                        <option value="windows">Windows</option>
+                        <option value="linux">Linux</option>
+                        <option value="macos">macOS</option>
+                        <option value="web">Web (PHP/ASP)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">LHOST</label>
+                    <input type="text" class="input" id="payloadLhost" placeholder="192.168.1.100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">LPORT</label>
+                    <input type="number" class="input" id="payloadLport" value="4444" min="1" max="65535">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Encoder</label>
+                <select class="input" id="payloadEncoder">
+                    <option value="none">None</option>
+                    <option value="shikata_ga_nai">Shikata Ga Nai (x86)</option>
+                    <option value="xor">XOR</option>
+                    <option value="base64">Base64</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" id="generatePayloadBtn">⚡ Generate Payload</button>
+            <div id="payloadResults" class="mt-4"></div>
+        </div>
+    </div>
+</template>
+
+<!-- Red Team: Reports -->
+<template id="content-red-reports">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📋 Red Team Reports</h1>
+            <p class="content-subtitle">Offensive operations reporting</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="generateRedReportBtn">+ Generate Report</button>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="redReportForm" style="display:none;">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Report Title</label>
+                    <input type="text" class="input" id="redReportTitle" placeholder="Q1 Penetration Test Report">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Report Type</label>
+                    <select class="input" id="redReportType">
+                        <option value="full">Full Report</option>
+                        <option value="executive">Executive Summary</option>
+                        <option value="technical">Technical Findings</option>
+                        <option value="remediation">Remediation Plan</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Scope</label>
+                <textarea class="input" id="redReportScope" rows="2" placeholder="In-scope targets and systems..."></textarea>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button class="btn btn-primary" id="createRedReportBtn">📋 Create Report</button>
+                <button class="btn btn-secondary" id="cancelRedReportBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Generated Reports</span>
+        </div>
+        <div class="card-body" id="redReportsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Reports</div>
+                <div class="empty-state-text">Generate a report to see it here.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Gray Team: Simulations -->
+<template id="content-gray-simulations">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">⚔️ Attack Simulations</h1>
+            <p class="content-subtitle">Adversary emulation & scenario testing</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="newSimulationBtn">+ New Simulation</button>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="simulationForm" style="display:none;">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Simulation Name</label>
+                    <input type="text" class="input" id="simulationName" placeholder="APT28 Emulation">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Threat Actor</label>
+                    <select class="input" id="simulationActor">
+                        <option value="apt28">APT28 (Fancy Bear)</option>
+                        <option value="apt29">APT29 (Cozy Bear)</option>
+                        <option value="lazarus">Lazarus Group</option>
+                        <option value="custom">Custom Scenario</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="input" id="simulationDesc" rows="2" placeholder="Simulation objectives..."></textarea>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button class="btn btn-primary" id="createSimulationBtn">⚡ Create Simulation</button>
+                <button class="btn btn-secondary" id="cancelSimulationBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Simulations</span>
+        </div>
+        <div class="card-body" id="simulationsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">⚔️</div>
+                <div class="empty-state-title">No Simulations</div>
+                <div class="empty-state-text">Create an attack simulation to begin.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Gray Team: Correlation -->
+<template id="content-gray-correlation">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔗 Vulnerability Correlation</h1>
+            <p class="content-subtitle">Cross-validate and correlate findings</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="runCorrelationBtn">🔄 Run Correlation</button>
+        </div>
+    </div>
+
+    <div class="grid grid-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="correlationTotal">0</div>
+            <div class="stat-label">Correlations Found</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="correlationHigh">0</div>
+            <div class="stat-label">High Confidence</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="correlationChains">0</div>
+            <div class="stat-label">Attack Chains</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Correlated Findings</span>
+        </div>
+        <div class="card-body" id="correlationResults">
+            <div class="empty-state">
+                <div class="empty-state-icon">🔗</div>
+                <div class="empty-state-title">No Correlations</div>
+                <div class="empty-state-text">Run correlation analysis to find relationships.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Gray Team: Attack Surface -->
+<template id="content-gray-surface">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🌍 Attack Surface</h1>
+            <p class="content-subtitle">Continuous attack surface management</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="scanSurfaceBtn">🔄 Scan Surface</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="surfaceAssets">0</div>
+            <div class="stat-label">Discovered Assets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="surfaceExposure">0</div>
+            <div class="stat-label">Exposed Services</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="surfaceRisk">0</div>
+            <div class="stat-label">Risk Score</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="surfaceChanges">0</div>
+            <div class="stat-label">Changes (7d)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Surface Map</span>
+        </div>
+        <div class="card-body" id="surfaceResults">
+            <div class="empty-state">
+                <div class="empty-state-icon">🌍</div>
+                <div class="empty-state-title">No Surface Data</div>
+                <div class="empty-state-text">Run a surface scan to discover assets.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Gray Team: Reports -->
+<template id="content-gray-reports">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📋 Gray Team Reports</h1>
+            <p class="content-subtitle">Validation & coverage reports</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="generateGrayReportBtn">+ Generate Report</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Reports</span>
+        </div>
+        <div class="card-body" id="grayReportsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Reports</div>
+                <div class="empty-state-text">Generate a coverage or validation report.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Alerts -->
+<template id="content-blue-alerts">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🚨 Alert Queue</h1>
+            <p class="content-subtitle">Triage and manage security alerts</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-secondary" id="refreshAlertsBtn">🔄 Refresh</button>
+            <button class="btn btn-primary" id="createAlertBtn">+ Create Alert</button>
+        </div>
+    </div>
+
+    <div class="grid grid-5 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="alertsCritical">0</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="alertsHigh">0</div>
+            <div class="stat-label">High</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="alertsMedium">0</div>
+            <div class="stat-label">Medium</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="alertsLow">0</div>
+            <div class="stat-label">Low</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="alertsTotal">0</div>
+            <div class="stat-label">Total</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Alert Queue</span>
+            <div class="flex gap-2">
+                <button class="btn btn-sm filter-btn active" data-filter="all" onclick="filterAlerts('all', this)">All</button>
+                <button class="btn btn-sm filter-btn" data-filter="critical" onclick="filterAlerts('critical', this)">Critical</button>
+                <button class="btn btn-sm filter-btn" data-filter="unack" onclick="filterAlerts('unack', this)">Unacknowledged</button>
+            </div>
+        </div>
+        <div class="card-body" id="alertsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">🚨</div>
+                <div class="empty-state-title">No Alerts</div>
+                <div class="empty-state-text">Alerts will appear here from your detection systems.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Log Analysis -->
+<template id="content-blue-logs">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📝 Log Analysis</h1>
+            <p class="content-subtitle">Centralized log search & analysis</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Search Query</label>
+                    <input type="text" class="input" id="logQuery" placeholder="error OR failed OR denied">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Log Source</label>
+                    <select class="input" id="logSource">
+                        <option value="all">All Sources</option>
+                        <option value="firewall">Firewall</option>
+                        <option value="ids">IDS/IPS</option>
+                        <option value="endpoint">Endpoint</option>
+                        <option value="auth">Authentication</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Time Range</label>
+                    <select class="input" id="logTimeRange">
+                        <option value="1h">Last Hour</option>
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                        <option value="30d">Last 30 Days</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Max Results</label>
+                    <input type="number" class="input" id="logMaxResults" value="100" min="10" max="10000">
+                </div>
+            </div>
+            <button class="btn btn-primary" id="searchLogsBtn">🔍 Search Logs</button>
+            <div id="logResults" class="mt-4"></div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Malware Analysis -->
+<template id="content-blue-malware">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🦠 Malware Analysis</h1>
+            <p class="content-subtitle">Static & dynamic malware analysis</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="uploadSampleBtn">📤 Upload Sample</button>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="malwareUploadForm" style="display:none;">
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Sample Name</label>
+                <input type="text" class="input" id="malwareName" placeholder="suspected_malware.exe">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">File Type</label>
+                    <select class="input" id="malwareType">
+                        <option value="exe">Windows Executable</option>
+                        <option value="dll">DLL</option>
+                        <option value="pdf">PDF</option>
+                        <option value="doc">Office Document</option>
+                        <option value="script">Script (JS/VBS/PS)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Analysis Type</label>
+                    <select class="input" id="malwareAnalysisType">
+                        <option value="static">Static Analysis</option>
+                        <option value="dynamic">Dynamic Analysis</option>
+                        <option value="both">Both</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button class="btn btn-primary" id="submitMalwareBtn">🔬 Submit for Analysis</button>
+                <button class="btn btn-secondary" id="cancelMalwareBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Analysis Queue</span>
+        </div>
+        <div class="card-body" id="malwareList">
+            <div class="empty-state">
+                <div class="empty-state-icon">🦠</div>
+                <div class="empty-state-title">No Samples</div>
+                <div class="empty-state-text">Upload a sample for analysis.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Network Defense -->
+<template id="content-blue-network">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🌐 Network Defense</h1>
+            <p class="content-subtitle">Network monitoring & IDS</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="deployIdsBtn">+ Deploy IDS</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="netMonitored">0</div>
+            <div class="stat-label">Monitored Interfaces</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="netAlerts">0</div>
+            <div class="stat-label">Alerts (24h)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="netBlocked">0</div>
+            <div class="stat-label">Blocked IPs</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="netBandwidth">0</div>
+            <div class="stat-label">Bandwidth (Mbps)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Network Status</span>
+        </div>
+        <div class="card-body" id="networkStatus">
+            <div class="empty-state">
+                <div class="empty-state-icon">🌐</div>
+                <div class="empty-state-title">No Monitoring</div>
+                <div class="empty-state-text">Deploy an IDS sensor to begin monitoring.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Endpoints -->
+<template id="content-blue-endpoints">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">💻 Endpoints</h1>
+            <p class="content-subtitle">EDR & endpoint vulnerability management</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="scanEndpointsBtn">🔄 Scan Endpoints</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="endpointTotal">0</div>
+            <div class="stat-label">Total Endpoints</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="endpointProtected">0</div>
+            <div class="stat-label">Protected</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="endpointVulnerable">0</div>
+            <div class="stat-label">Vulnerable</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="endpointIsolated">0</div>
+            <div class="stat-label">Isolated</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Endpoint Inventory</span>
+        </div>
+        <div class="card-body" id="endpointList">
+            <div class="empty-state">
+                <div class="empty-state-icon">💻</div>
+                <div class="empty-state-title">No Endpoints</div>
+                <div class="empty-state-text">Scan your network to discover endpoints.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Cloud Defense -->
+<template id="content-blue-cloud">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">☁️ Cloud Defense</h1>
+            <p class="content-subtitle">Cloud security posture management</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="scanCloudDefenseBtn">🔄 Scan Cloud</button>
+        </div>
+    </div>
+
+    <div class="grid grid-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="cloudAccounts">0</div>
+            <div class="stat-label">Cloud Accounts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="cloudFindings">0</div>
+            <div class="stat-label">Misconfigurations</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="cloudCompliance">0%</div>
+            <div class="stat-label">Compliance</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Cloud Posture</span>
+        </div>
+        <div class="card-body" id="cloudDefenseStatus">
+            <div class="empty-state">
+                <div class="empty-state-icon">☁️</div>
+                <div class="empty-state-title">No Cloud Accounts</div>
+                <div class="empty-state-text">Connect a cloud account to begin monitoring.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Blue Team: Reports -->
+<template id="content-blue-reports">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📋 Blue Team Reports</h1>
+            <p class="content-subtitle">Defensive operations reports</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="generateBlueReportBtn">+ Generate Report</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Reports</span>
+        </div>
+        <div class="card-body" id="blueReportsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Reports</div>
+                <div class="empty-state-text">Generate a defensive operations report.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- White Team: Metrics -->
+<template id="content-white-metrics">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📈 Metrics & KPIs</h1>
+            <p class="content-subtitle">Security KPIs & board reporting</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="exportMetricsBtn">📥 Export Dashboard</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="mttr">0h</div>
+            <div class="stat-label">Mean Time to Remediate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="patchRate">0%</div>
+            <div class="stat-label">Patch Compliance</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="phishRate">0%</div>
+            <div class="stat-label">Phish Click Rate</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="openFindings">0</div>
+            <div class="stat-label">Open Critical Findings</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2 mb-4">
+        <div class="card">
+            <div class="card-header"><span class="card-title">Remediation Trend</span></div>
+            <div class="card-body" id="remediationTrend"></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Risk Trend</span></div>
+            <div class="card-body" id="metricsRiskTrend"></div>
+        </div>
+    </div>
+</template>
+
+<!-- White Team: Reports -->
+<template id="content-white-reports">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📋 White Team Reports</h1>
+            <p class="content-subtitle">Executive & compliance reports</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="generateWhiteReportBtn">+ Generate Report</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Reports</span>
+        </div>
+        <div class="card-body" id="whiteReportsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Reports</div>
+                <div class="empty-state-text">Generate an executive or compliance report.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+    <!-- Screen Recording -->
+    <template id="content-red-recording">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">🎬 Screen Recording</h1>
+                <p class="content-subtitle">Screen capture, browser recording, and screenshot functionality</p>
+            </div>
+            <div class="content-actions">
+                <button class="btn btn-danger" id="recordingStopBtn" style="display:none;">⏹ Stop Recording</button>
+                <button class="btn btn-success" id="recordingStartBtn">▶ Start Recording</button>
+            </div>
+        </div>
+
+        <div class="grid grid-3 mb-4">
+            <div class="stat-card">
+                <div class="stat-value" id="recordingStatus" style="color:var(--status-error);">Idle</div>
+                <div class="stat-label">Recording Status</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recordingDuration">00:00</div>
+                <div class="stat-label">Duration</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recordingPages">0</div>
+                <div class="stat-label">Pages Visited</div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <span class="card-title">Recording Configuration</span>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Target URL</label>
+                        <input type="text" class="input" id="recordingUrl" placeholder="https://example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Recording Mode</label>
+                        <select class="input" id="recordingMode">
+                            <option value="both">Screen + Browser</option>
+                            <option value="screen">Screen Only</option>
+                            <option value="browser">Browser Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Output Format</label>
+                        <select class="input" id="recordingFormat">
+                            <option value="mp4">MP4</option>
+                            <option value="webm">WebM</option>
+                            <option value="avi">AVI</option>
+                            <option value="mkv">MKV</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Frames Per Second (FPS)</label>
+                        <input type="number" class="input" id="recordingFps" value="30" min="1" max="60">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quality (1-100)</label>
+                        <input type="number" class="input" id="recordingQuality" value="80" min="1" max="100">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Max Pages</label>
+                        <input type="number" class="input" id="recordingMaxPages" value="50" min="1" max="1000">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Screen Width</label>
+                        <input type="number" class="input" id="recordingWidth" value="1920" min="640" max="3840">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Screen Height</label>
+                        <input type="number" class="input" id="recordingHeight" value="1080" min="480" max="2160">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Delay Between Pages (ms)</label>
+                        <input type="number" class="input" id="recordingDelay" value="2000" min="500" max="10000">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Output Directory</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" class="input" id="recordingOutputDir" placeholder="./recordings" style="flex:1;">
+                        <button class="btn btn-secondary" id="recordingBrowseDirBtn">📂 Browse</button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 mt-4">
+                    <label class="checkbox">
+                        <input type="checkbox" id="recordingAudio">
+                        <span>Enable Audio Recording</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="recordingHeadless" checked>
+                        <span>Headless Mode</span>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="recordingScreenshots" checked>
+                        <span>Capture Screenshots</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <span class="card-title">Screenshot Capture</span>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Screenshot URL</label>
+                        <input type="text" class="input" id="screenshotUrl" placeholder="https://example.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Screenshot Type</label>
+                        <select class="input" id="screenshotType">
+                            <option value="full">Full Page</option>
+                            <option value="viewport">Viewport Only</option>
+                            <option value="element">Specific Element</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" id="screenshotElementGroup" style="display:none;">
+                    <label class="form-label">CSS Selector</label>
+                    <input type="text" class="input" id="screenshotSelector" placeholder="#main-content or .header">
+                </div>
+                <button class="btn btn-primary" id="captureScreenshotBtn">📸 Capture Screenshot</button>
+                <div id="screenshotResults" class="mt-4"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Recording Sessions</span>
+                <button class="btn btn-sm btn-secondary" id="refreshRecordingsBtn">🔄 Refresh</button>
+            </div>
+            <div class="card-body" id="recordingSessionsList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🎬</div>
+                    <div class="empty-state-title">No Recording Sessions</div>
+                    <div class="empty-state-text">Start a recording to see session details here.</div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Red Team: Auth Profiles -->
+    <template id="content-red-auth-profiles">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">🔑 Auth Profiles</h1>
+                <p class="content-subtitle">Manage authentication credentials and login configurations</p>
+            </div>
+            <div class="content-actions">
+                <button class="btn btn-secondary" id="importAuthProfilesBtn">📥 Import</button>
+                <button class="btn btn-primary" id="newAuthProfileBtn">+ New Profile</button>
+            </div>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Saved Profiles</span>
+                    <input type="text" class="input input-sm" placeholder="Search..." style="width:160px;" id="authProfileSearch">
+                </div>
+                <div class="card-body" id="authProfilesList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔒</div>
+                        <div class="empty-state-title">No Profiles Yet</div>
+                        <div class="empty-state-text">Create an authentication profile to enable authenticated scanning.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title" id="authProfileEditorTitle">New Authentication Profile</span>
+                </div>
+                <div class="card-body" id="authProfileEditor">
+                    <div class="form-group">
+                        <label class="form-label">Profile Name</label>
+                        <input type="text" class="input" id="authProfileName" placeholder="Production Admin">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Target URL</label>
+                        <input type="text" class="input" id="authProfileTarget" placeholder="https://target.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Authentication Type</label>
+                        <select class="input" id="authProfileType">
+                            <option value="form">Form-Based Login</option>
+                            <option value="basic">HTTP Basic Auth</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="oauth2">OAuth2</option>
+                            <option value="apikey">API Key</option>
+                            <option value="cookie">Cookie</option>
+                            <option value="custom">Custom Headers</option>
+                        </select>
+                    </div>
+
+                    <div id="authFieldsForm" class="auth-type-fields">
+                        <div class="form-group">
+                            <label class="form-label">Login URL</label>
+                            <input type="text" class="input" id="authLoginUrl" placeholder="https://target.com/login">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="input" id="authUsername" placeholder="admin">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Password</label>
+                                <input type="password" class="input" id="authPassword" placeholder="••••••">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="authFieldsBasic" class="auth-type-fields" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="input" id="authBasicUser" placeholder="admin">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Password</label>
+                                <input type="password" class="input" id="authBasicPass" placeholder="••••••">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="authFieldsBearer" class="auth-type-fields" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">Bearer Token</label>
+                            <input type="text" class="input" id="authBearerToken" placeholder="eyJhbGciOiJIUzI1NiIs...">
+                        </div>
+                    </div>
+
+                    <div id="authFieldsApiKey" class="auth-type-fields" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">API Key</label>
+                                <input type="text" class="input" id="authApiKey" placeholder="sk-...">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Header Name</label>
+                                <input type="text" class="input" id="authApiHeader" value="X-API-Key" placeholder="X-API-Key">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="authFieldsCookie" class="auth-type-fields" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">Cookies (name=value, one per line)</label>
+                            <textarea class="input" id="authCookies" rows="3" placeholder="session_id=abc123&#10;csrf_token=xyz789"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="authFieldsOAuth2" class="auth-type-fields" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Token URL</label>
+                                <input type="text" class="input" id="authOAuth2Url" placeholder="https://auth.example.com/oauth/token">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Client ID</label>
+                                <input type="text" class="input" id="authOAuth2ClientId" placeholder="my-app">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Client Secret</label>
+                            <input type="password" class="input" id="authOAuth2Secret" placeholder="••••••">
+                        </div>
+                    </div>
+
+                    <div id="authFieldsCustom" class="auth-type-fields" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">Custom Headers (Header: value, one per line)</label>
+                            <textarea class="input" id="authCustomHeaders" rows="3" placeholder="X-Custom-Auth: token123&#10;X-Request-ID: 12345"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+                    <div class="form-group">
+                        <label class="form-label">Multi-Factor Authentication</label>
+                        <select class="input" id="authMFA">
+                            <option value="none">No MFA</option>
+                            <option value="totp">TOTP (Authenticator App)</option>
+                            <option value="sms">SMS Code</option>
+                            <option value="email">Email Code</option>
+                        </select>
+                    </div>
+
+                    <div id="totpFields" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">TOTP Secret</label>
+                            <input type="text" class="input" id="authTOTPSecret" placeholder="Base32 encoded secret">
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 mt-4">
+                        <button class="btn btn-secondary" id="testAuthBtn">🔑 Test Login</button>
+                        <button class="btn btn-primary" id="saveAuthBtn">💾 Save Profile</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Red Team: TOTP Generator -->
+    <template id="content-red-totp">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">⏱️ TOTP Generator</h1>
+                <p class="content-subtitle">Time-based One-Time Password generator and validator</p>
+            </div>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Generate TOTP</span>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label">TOTP Secret (Base32)</label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" class="input" id="totpSecret" placeholder="JBSWY3DPEHPK3PXP" style="flex:1;">
+                            <button class="btn btn-secondary" id="generateTotpSecretBtn">🎲 Generate</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Algorithm</label>
+                            <select class="input" id="totpAlgorithm">
+                                <option value="SHA1">SHA-1</option>
+                                <option value="SHA256">SHA-256</option>
+                                <option value="SHA512">SHA-512</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Digits</label>
+                            <select class="input" id="totpDigits">
+                                <option value="6">6 digits</option>
+                                <option value="8">8 digits</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Period (seconds)</label>
+                            <input type="number" class="input" id="totpPeriod" value="30" min="15" max="120">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="generateTotpBtn">🔄 Generate Code</button>
+
+                    <div id="totpResult" style="display:none; margin-top:24px;">
+                        <div style="text-align:center; padding:24px; background:var(--bg-tertiary); border-radius:12px;">
+                            <div style="font-size:0.8rem; color:var(--text-tertiary); margin-bottom:8px;">Current TOTP Code</div>
+                            <div style="font-size:3rem; font-weight:700; font-family:var(--font-mono); letter-spacing:8px; color:var(--text-primary);" id="totpCodeDisplay">000000</div>
+                            <div style="margin-top:12px;">
+                                <div class="progress" style="width:200px; margin:0 auto;">
+                                    <div class="progress-bar" id="totpCountdownBar" style="width:100%"></div>
+                                </div>
+                                <div style="font-size:0.8rem; color:var(--text-tertiary); margin-top:4px;" id="totpCountdownText">30s remaining</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Validate & Provisioning</span>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label">Code to Validate</label>
+                        <input type="text" class="input" id="totpValidateCode" placeholder="Enter 6-digit code" maxlength="8">
+                    </div>
+                    <button class="btn btn-secondary" id="validateTotpBtn">✓ Validate Code</button>
+                    <div id="totpValidateResult" style="margin-top:12px;"></div>
+
+                    <div class="divider"></div>
+
+                    <h4 style="margin-bottom:12px;">Provisioning URI</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Account Name</label>
+                            <input type="text" class="input" id="totpAccount" placeholder="user@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Issuer</label>
+                            <input type="text" class="input" id="totpIssuer" placeholder="SiteRecorder">
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" id="getProvisioningUriBtn">📱 Get QR URI</button>
+                    <div id="totpUriResult" style="margin-top:12px;"></div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Blue Team: Audit Log -->
+    <template id="content-blue-audit-log">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">📜 Audit Log</h1>
+                <p class="content-subtitle">System activity and security event log</p>
+            </div>
+            <div class="content-actions">
+                <button class="btn btn-secondary" id="exportAuditLogBtn">📥 Export</button>
+                <button class="btn btn-primary" id="refreshAuditLogBtn">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <div class="grid grid-4 mb-4">
+            <div class="stat-card">
+                <div class="stat-value" id="auditTotalEntries">0</div>
+                <div class="stat-label">Total Entries</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="auditTodayEntries">0</div>
+                <div class="stat-label">Today</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="auditCriticalEntries">0</div>
+                <div class="stat-label">Critical Events</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="auditUniqueUsers">0</div>
+                <div class="stat-label">Unique Users</div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Action Type</label>
+                        <select class="input" id="auditActionFilter">
+                            <option value="all">All Actions</option>
+                            <option value="auth_profile_created">Auth Profile Created</option>
+                            <option value="auth_profile_updated">Auth Profile Updated</option>
+                            <option value="auth_profile_deleted">Auth Profile Deleted</option>
+                            <option value="scan_started">Scan Started</option>
+                            <option value="scan_completed">Scan Completed</option>
+                            <option value="login">User Login</option>
+                            <option value="logout">User Logout</option>
+                            <option value="settings_changed">Settings Changed</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date Range</label>
+                        <select class="input" id="auditDateFilter">
+                            <option value="today">Today</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                            <option value="all">All Time</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Search</label>
+                        <input type="text" class="input" id="auditSearch" placeholder="Search entries...">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Audit Entries</span>
+            </div>
+            <div class="card-body" id="auditLogList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📜</div>
+                    <div class="empty-state-title">No Audit Entries</div>
+                    <div class="empty-state-text">System activity will be logged here.</div>
+                </div>
+            </div>
+        </div>
+    </template>
 
     <script src="app.js"></script>
 </body>
