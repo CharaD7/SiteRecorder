@@ -1,0 +1,22 @@
+[package]
+name = "packet-capture"
+version = "0.1.0"
+edition = "2021"
+authors = ["CharaTech"]
+description = "Network packet capture and analysis - Wireshark core functionality"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+chrono = "0.4"
+uuid = { version = "1.6", features = ["v4"] }
+tokio = { version = "1.35", features = ["full"] }
+pcap = "1.1"
+pnet = "0.34"
+dns-parser = "0.8"
+tls-parser = "0.11"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"

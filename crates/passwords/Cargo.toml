@@ -1,0 +1,21 @@
+[package]
+name = "passwords"
+version = "0.1.0"
+edition = "2021"
+authors = ["CharaTech"]
+description = "Password attack tools: hash identification, cracking, spraying"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+chrono = "0.4"
+rand = "0.8"
+sha1 = "0.10"
+sha2 = "0.10"
+md-5 = "0.10"
+base64 = "0.21"
+tokio = { version = "1.35", features = ["full"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
