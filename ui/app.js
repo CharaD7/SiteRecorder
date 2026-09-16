@@ -1120,59 +1120,59 @@
         const configs = {
             // Red Team
             'red-targets': { icon: '🎯', title: 'Target Management', description: 'Manage and organize your pentest targets', content: renderTargetsContent() },
-            'red-scans': { icon: '🔍', title: 'Scan Management', description: 'Monitor and manage active scans' },
-            'red-findings': { icon: '⚠️', title: 'Findings', description: 'Review and triage discovered vulnerabilities' },
-            'red-network': { icon: '🔌', title: 'Network Pentesting', description: 'Port scanning, service enumeration, network attacks' },
-            'red-os': { icon: '💻', title: 'OS Pentesting', description: 'Linux, Windows, macOS exploitation' },
-            'red-mobile': { icon: '📱', title: 'Mobile Security', description: 'Android & iOS application testing' },
-            'red-cloud': { icon: '☁️', title: 'Cloud Security', description: 'AWS, Azure, GCP assessment' },
-            'red-web3': { icon: '⛓️', title: 'Web3 Security', description: 'Smart contract & blockchain auditing' },
-            'red-email': { icon: '📧', title: 'Email Security', description: 'Phishing, email infrastructure assessment' },
-            'red-wireless': { icon: '📡', title: 'Wireless Security', description: 'WiFi, Bluetooth, RFID assessment' },
-            'red-passwords': { icon: '🔑', title: 'Password Attacks', description: 'Cracking, spraying, brute force' },
-            'red-exploit': { icon: '💥', title: 'Exploitation', description: 'Exploit framework & post-exploitation' },
-            'red-osint': { icon: '🕵️', title: 'OSINT', description: 'Open source intelligence gathering' },
-            'red-payloads': { icon: '📦', title: 'Payload Generator', description: 'Generate custom payloads' },
-            'red-sessions': { icon: '🔐', title: 'Sessions & Auth', description: 'Manage authentication profiles' },
-            'red-auth-profiles': { icon: '🔑', title: 'Auth Profiles', description: 'Manage credentials and login configurations for targets' },
-            'red-totp': { icon: '⏱️', title: 'TOTP Generator', description: 'Time-based OTP generation and validation' },
-            'red-reports': { icon: '📋', title: 'Red Team Reports', description: 'Offensive operations reporting' },
+            'red-scans': { icon: '🔍', title: 'Scan Management', description: 'Monitor and manage active scans', content: renderRedScansContent() },
+            'red-findings': { icon: '⚠️', title: 'Findings', description: 'Review and triage discovered vulnerabilities', content: renderRedFindingsContent() },
+            'red-network': { icon: '🔌', title: 'Network Pentesting', description: 'Port scanning, service enumeration, network attacks', content: renderNetworkScannerContent() },
+            'red-os': { icon: '💻', title: 'OS Pentesting', description: 'Linux, Windows, macOS exploitation', content: renderOsPentestContent() },
+            'red-mobile': { icon: '📱', title: 'Mobile Security', description: 'Android & iOS application testing', content: renderMobileSecurityContent() },
+            'red-cloud': { icon: '☁️', title: 'Cloud Security', description: 'AWS, Azure, GCP assessment', content: renderCloudSecurityContent() },
+            'red-web3': { icon: '⛓️', title: 'Web3 Security', description: 'Smart contract & blockchain auditing', content: renderWeb3SecurityContent() },
+            'red-email': { icon: '📧', title: 'Email Security', description: 'Phishing, email infrastructure assessment', content: renderEmailSecurityContent() },
+            'red-wireless': { icon: '📡', title: 'Wireless Security', description: 'WiFi, Bluetooth, RFID assessment', content: renderWirelessSecurityContent() },
+            'red-passwords': { icon: '🔑', title: 'Password Attacks', description: 'Cracking, spraying, brute force', content: renderPasswordAttacksContent() },
+            'red-exploit': { icon: '💥', title: 'Exploitation', description: 'Exploit framework & post-exploitation', content: renderExploitationContent() },
+            'red-osint': { icon: '🕵️', title: 'OSINT', description: 'Open source intelligence gathering', content: renderOsintContent() },
+            'red-payloads': { icon: '📦', title: 'Payload Generator', description: 'Generate custom payloads', content: renderPayloadsContent() },
+            'red-sessions': { icon: '🔐', title: 'Sessions & Auth', description: 'Manage authentication profiles', content: renderSessionsContent() },
+            'red-auth-profiles': { icon: '🔑', title: 'Auth Profiles', description: 'Manage credentials and login configurations for targets', content: renderAuthProfilesContent() },
+            'red-totp': { icon: '⏱️', title: 'TOTP Generator', description: 'Time-based OTP generation and validation', content: renderTotpContent() },
+            'red-reports': { icon: '📋', title: 'Red Team Reports', description: 'Offensive operations reporting', content: renderRedReportsContent() },
 
             // Gray Team
-            'gray-dashboard': { icon: '📊', title: 'Gray Team Dashboard', description: 'Purple team & validation overview' },
-            'gray-simulations': { icon: '⚔️', title: 'Attack Simulations', description: 'Adversary emulation & scenario testing' },
-            'gray-matrix': { icon: '🗺️', title: 'ATT&CK Matrix', description: 'MITRE ATT&CK coverage mapping' },
-            'gray-purple': { icon: '🤝', title: 'Purple Team', description: 'Collaborative attack-defend exercises' },
-            'gray-threatmodel': { icon: '🧩', title: 'Threat Modeling', description: 'Application & infrastructure threat models' },
-            'gray-correlation': { icon: '🔗', title: 'Vulnerability Correlation', description: 'Cross-validate and correlate findings' },
-            'gray-detections': { icon: '🛡️', title: 'Detection Engineering', description: 'Build and test detection rules' },
-            'gray-surface': { icon: '🌍', title: 'Attack Surface', description: 'Continuous attack surface management' },
-            'gray-reports': { icon: '📋', title: 'Gray Team Reports', description: 'Validation & coverage reports' },
+            'gray-dashboard': { icon: '📊', title: 'Gray Team Dashboard', description: 'Purple team & validation overview', content: renderGrayDashboardContent() },
+            'gray-simulations': { icon: '⚔️', title: 'Attack Simulations', description: 'Adversary emulation & scenario testing', content: renderSimulationsContent() },
+            'gray-matrix': { icon: '🗺️', title: 'ATT&CK Matrix', description: 'MITRE ATT&CK coverage mapping', content: renderAttckMatrixContent() },
+            'gray-purple': { icon: '🤝', title: 'Purple Team', description: 'Collaborative attack-defend exercises', content: renderPurpleTeamContent() },
+            'gray-threatmodel': { icon: '🧩', title: 'Threat Modeling', description: 'Application & infrastructure threat models', content: renderThreatModelContent() },
+            'gray-correlation': { icon: '🔗', title: 'Vulnerability Correlation', description: 'Cross-validate and correlate findings', content: renderCorrelationContent() },
+            'gray-detections': { icon: '🛡️', title: 'Detection Engineering', description: 'Build and test detection rules', content: renderDetectionsContent() },
+            'gray-surface': { icon: '🌍', title: 'Attack Surface', description: 'Continuous attack surface management', content: renderAttackSurfaceContent() },
+            'gray-reports': { icon: '📋', title: 'Gray Team Reports', description: 'Validation & coverage reports', content: renderGrayReportsContent() },
 
             // Blue Team
-            'blue-dashboard': { icon: '📊', title: 'SOC Dashboard', description: 'Security operations center overview' },
-            'blue-alerts': { icon: '🚨', title: 'Alert Queue', description: 'Triage and manage security alerts' },
-            'blue-incidents': { icon: '🔥', title: 'Incidents', description: 'Incident response tracking' },
-            'blue-hunt': { icon: '🔍', title: 'Threat Hunting', description: 'Proactive threat hunting operations' },
-            'blue-intel': { icon: '🧠', title: 'Threat Intel', description: 'Threat intelligence management' },
-            'blue-logs': { icon: '📝', title: 'Log Analysis', description: 'Centralized log search & analysis' },
-            'blue-forensics': { icon: '🔬', title: 'Forensics', description: 'Digital forensics & incident analysis' },
-            'blue-malware': { icon: '🦠', title: 'Malware Analysis', description: 'Static & dynamic malware analysis' },
-            'blue-network': { icon: '🌐', title: 'Network Defense', description: 'Network monitoring & IDS' },
-            'blue-endpoints': { icon: '💻', title: 'Endpoints', description: 'EDR & endpoint vulnerability management' },
-            'blue-cloud': { icon: '☁️', title: 'Cloud Defense', description: 'Cloud security posture management' },
-            'blue-audit-log': { icon: '📜', title: 'Audit Log', description: 'System activity and security event log' },
-            'blue-reports': { icon: '📋', title: 'Blue Team Reports', description: 'Defensive operations reports' },
+            'blue-dashboard': { icon: '📊', title: 'SOC Dashboard', description: 'Security operations center overview', content: renderBlueDashboardContent() },
+            'blue-alerts': { icon: '🚨', title: 'Alert Queue', description: 'Triage and manage security alerts', content: renderAlertsContent() },
+            'blue-incidents': { icon: '🔥', title: 'Incidents', description: 'Incident response tracking', content: renderIncidentsContent() },
+            'blue-hunt': { icon: '🔍', title: 'Threat Hunting', description: 'Proactive threat hunting operations', content: renderHuntContent() },
+            'blue-intel': { icon: '🧠', title: 'Threat Intel', description: 'Threat intelligence management', content: renderIntelContent() },
+            'blue-logs': { icon: '📝', title: 'Log Analysis', description: 'Centralized log search & analysis', content: renderLogAnalysisContent() },
+            'blue-forensics': { icon: '🔬', title: 'Forensics', description: 'Digital forensics & incident analysis', content: renderForensicsContent() },
+            'blue-malware': { icon: '🦠', title: 'Malware Analysis', description: 'Static & dynamic malware analysis', content: renderMalwareContent() },
+            'blue-network': { icon: '🌐', title: 'Network Defense', description: 'Network monitoring & IDS', content: renderNetworkDefenseContent() },
+            'blue-endpoints': { icon: '💻', title: 'Endpoints', description: 'EDR & endpoint vulnerability management', content: renderEndpointsContent() },
+            'blue-cloud': { icon: '☁️', title: 'Cloud Defense', description: 'Cloud security posture management', content: renderCloudDefenseContent() },
+            'blue-audit-log': { icon: '📜', title: 'Audit Log', description: 'System activity and security event log', content: renderAuditLogContent() },
+            'blue-reports': { icon: '📋', title: 'Blue Team Reports', description: 'Defensive operations reports', content: renderBlueReportsContent() },
 
             // White Team
-            'white-dashboard': { icon: '📊', title: 'White Team Dashboard', description: 'Governance, risk & compliance overview' },
-            'white-compliance': { icon: '✅', title: 'Compliance', description: 'Compliance framework management' },
-            'white-risk': { icon: '⚖️', title: 'Risk Register', description: 'Enterprise risk management' },
-            'white-policies': { icon: '📜', title: 'Policies', description: 'Security policy management' },
-            'white-vendors': { icon: '🏢', title: 'Vendor Risk', description: 'Third-party risk management' },
-            'white-training': { icon: '🎓', title: 'Training', description: 'Security awareness & skills management' },
-            'white-metrics': { icon: '📈', title: 'Metrics', description: 'Security KPIs & board reporting' },
-            'white-reports': { icon: '📋', title: 'White Team Reports', description: 'Executive & compliance reports' },
+            'white-dashboard': { icon: '📊', title: 'White Team Dashboard', description: 'Governance, risk & compliance overview', content: renderWhiteDashboardContent() },
+            'white-compliance': { icon: '✅', title: 'Compliance', description: 'Compliance framework management', content: renderComplianceContent() },
+            'white-risk': { icon: '⚖️', title: 'Risk Register', description: 'Enterprise risk management', content: renderRiskContent() },
+            'white-policies': { icon: '📜', title: 'Policies', description: 'Security policy management', content: renderPoliciesContent() },
+            'white-vendors': { icon: '🏢', title: 'Vendor Risk', description: 'Third-party risk management', content: renderVendorsContent() },
+            'white-training': { icon: '🎓', title: 'Training', description: 'Security awareness & skills management', content: renderTrainingContent() },
+            'white-metrics': { icon: '📈', title: 'Metrics', description: 'Security KPIs & board reporting', content: renderMetricsContent() },
+            'white-reports': { icon: '📋', title: 'White Team Reports', description: 'Executive & compliance reports', content: renderWhiteReportsContent() },
         };
         return configs[section] || { icon: '🔧', title: section, description: 'Tool configuration' };
     }
@@ -1227,6 +1227,567 @@
     }
 
     // ========================================
+    // Red Team Content Functions
+    // ========================================
+
+    function renderRedScansContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header">
+                    <span class="card-title">Active Scans</span>
+                    <button class="btn btn-sm btn-primary">+ New Scan</button>
+                </div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead><tr><th>Scan Name</th><th>Target</th><th>Status</th><th>Progress</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            <tr><td>Web App Scan</td><td>https://example.com</td><td><span class="badge badge-success">Running</span></td><td>45%</td><td><button class="btn btn-sm btn-secondary">Pause</button></td></tr>
+                            <tr><td>API Scan</td><td>https://api.example.com</td><td><span class="badge badge-info">Queued</span></td><td>0%</td><td><button class="btn btn-sm btn-secondary">Cancel</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderRedFindingsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header">
+                    <span class="card-title">Vulnerability Findings</span>
+                    <div class="flex gap-2">
+                        <select class="input input-sm"><option>All Severities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+                        <button class="btn btn-sm btn-secondary">📥 Export</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead><tr><th>Severity</th><th>Title</th><th>Target</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            <tr><td><span class="badge badge-critical">Critical</span></td><td>SQL Injection in Login</td><td>https://example.com</td><td>Open</td><td><button class="btn btn-sm btn-secondary">View</button></td></tr>
+                            <tr><td><span class="badge badge-high">High</span></td><td>XSS in Search</td><td>https://example.com</td><td>Open</td><td><button class="btn btn-sm btn-secondary">View</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderNetworkScannerContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Network Scanner</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Target</label><input type="text" class="input" placeholder="192.168.1.0/24" id="netScanTarget"></div>
+                    <div class="form-group"><label class="form-label">Scan Type</label><select class="input" id="netScanType"><option>Port Scan</option><option>Service Enumeration</option><option>OS Detection</option></select></div>
+                    <button class="btn btn-primary" id="startNetScanBtn">Start Scan</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderOsPentestContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">OS Pentesting</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Target OS</label><select class="input" id="osTarget"><option>Linux</option><option>Windows</option><option>macOS</option></select></div>
+                    <div class="form-group"><label class="form-label">Scan Depth</label><select class="input" id="osScanDepth"><option>Quick</option><option>Standard</option><option>Deep</option></select></div>
+                    <button class="btn btn-primary" id="startOsScanBtn">Start OS Scan</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderMobileSecurityContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Mobile Security Analysis</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Target Type</label><select class="input" id="mobileTarget"><option>Android APK</option><option>iOS IPA</option></select></div>
+                    <button class="btn btn-primary" id="startMobileScanBtn">Analyze App</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderCloudSecurityContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Cloud Security Assessment</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Cloud Provider</label><select class="input" id="cloudProvider"><option>AWS</option><option>Azure</option><option>GCP</option></select></div>
+                    <button class="btn btn-primary" id="startCloudScanBtn">Start Assessment</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderWeb3SecurityContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Web3 / Smart Contract Audit</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Blockchain</label><select class="input" id="web3Chain"><option>Ethereum</option><option>BSC</option><option>Polygon</option></select></div>
+                    <div class="form-group"><label class="form-label">Contract Address</label><input type="text" class="input" placeholder="0x..." id="web3Contract"></div>
+                    <button class="btn btn-primary" id="startWeb3ScanBtn">Audit Contract</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderEmailSecurityContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Email Security Assessment</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Domain</label><input type="text" class="input" placeholder="example.com" id="emailDomain"></div>
+                    <button class="btn btn-primary" id="startEmailScanBtn">Start Assessment</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderWirelessSecurityContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Wireless Security</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Interface</label><select class="input" id="wifiInterface"><option>wlan0</option><option>wlan1</option></select></div>
+                    <button class="btn btn-primary" id="startWifiScanBtn">Scan Networks</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPasswordAttacksContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Password Attacks</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Hash Type</label><select class="input" id="crackHashType"><option>MD5</option><option>SHA1</option><option>NTLM</option><option>bcrypt</option></select></div>
+                    <div class="form-group"><label class="form-label">Hash</label><input type="text" class="input" placeholder="Enter hash" id="crackHash"></div>
+                    <button class="btn btn-primary" id="startCrackBtn">Start Cracking</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderExploitationContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Exploitation Framework</span></div>
+                <div class="card-body">
+                    <p class="text-tertiary">Select a target and exploit module to begin.</p>
+                    <button class="btn btn-primary" id="startExploitBtn">Launch Exploit</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderOsintContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">OSINT Gathering</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Target</label><input type="text" class="input" placeholder="domain or email" id="osintTarget"></div>
+                    <button class="btn btn-primary" id="startOsintBtn">Gather Intelligence</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPayloadsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Payload Generator</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Payload Type</label><select class="input" id="payloadType"><option>Reverse Shell</option><option>Bind Shell</option><option>Command Execution</option></select></div>
+                    <div class="form-group"><label class="form-label">LHOST</label><input type="text" class="input" placeholder="192.168.1.100" id="payloadLhost"></div>
+                    <div class="form-group"><label class="form-label">LPORT</label><input type="text" class="input" placeholder="4444" id="payloadLport"></div>
+                    <button class="btn btn-primary" id="generatePayloadBtn">Generate Payload</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderSessionsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Sessions & Auth</span></div>
+                <div class="card-body">
+                    <p class="text-tertiary">Manage active sessions and authentication profiles.</p>
+                    <button class="btn btn-primary" id="viewSessionsBtn">View Active Sessions</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderAuthProfilesContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Authentication Profiles</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Profile Name</label><input type="text" class="input" id="authProfileName"></div>
+                    <div class="form-group"><label class="form-label">Target</label><input type="text" class="input" id="authProfileTarget"></div>
+                    <div class="form-group"><label class="form-label">Type</label><select class="input" id="authProfileType"><option>Form</option><option>Basic Auth</option><option>Bearer Token</option></select></div>
+                    <button class="btn btn-primary" id="saveAuthProfileBtn">Save Profile</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderTotpContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">TOTP Generator</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Secret</label><input type="text" class="input" placeholder="Enter TOTP secret" id="totpSecret"></div>
+                    <button class="btn btn-primary" id="generateTotpBtn">Generate OTP</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderRedReportsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Red Team Reports</span></div>
+                <div class="card-body">
+                    <p class="text-tertiary">Generate and export offensive operation reports.</p>
+                    <button class="btn btn-primary" id="generateRedReportBtn">Generate Report</button>
+                </div>
+            </div>
+        `;
+    }
+
+    // ========================================
+    // Gray Team Content Functions
+    // ========================================
+
+    function renderGrayDashboardContent() {
+        return `
+            <div class="grid grid-3 mb-4">
+                <div class="stat-card"><div class="stat-value">12</div><div class="stat-label">Simulations</div></div>
+                <div class="stat-card"><div class="stat-value">85%</div><div class="stat-label">ATT&CK Coverage</div></div>
+                <div class="stat-card"><div class="stat-value">47</div><div class="stat-label">Validated Findings</div></div>
+            </div>
+        `;
+    }
+
+    function renderSimulationsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Attack Simulations</span><button class="btn btn-sm btn-primary">+ New Simulation</button></div>
+                <div class="card-body text-tertiary">No simulations configured. Create one to begin adversary emulation.</div>
+            </div>
+        `;
+    }
+
+    function renderAttckMatrixContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">ATT&CK Matrix</span></div>
+                <div class="card-body">
+                    <div class="grid grid-4">
+                        <div class="card"><div class="card-header">Initial Access</div><div class="card-body text-sm">T1566 Phishing</div></div>
+                        <div class="card"><div class="card-header">Execution</div><div class="card-body text-sm">T1059 Command Interpreter</div></div>
+                        <div class="card"><div class="card-header">Credential Access</div><div class="card-body text-sm">T1003 Credential Dumping</div></div>
+                        <div class="card"><div class="card-header">Persistence</div><div class="card-body text-sm">T1078 Valid Accounts</div></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPurpleTeamContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Purple Team Exercises</span></div>
+                <div class="card-body text-tertiary">Collaborative attack-defend exercises will appear here.</div>
+            </div>
+        `;
+    }
+
+    function renderThreatModelContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Threat Models</span><button class="btn btn-sm btn-primary">+ Create Model</button></div>
+                <div class="card-body text-tertiary">No threat models yet. Create one to begin STRIDE analysis.</div>
+            </div>
+        `;
+    }
+
+    function renderCorrelationContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Vulnerability Correlation</span></div>
+                <div class="card-body text-tertiary">Cross-validate findings from multiple sources to identify correlated risks.</div>
+            </div>
+        `;
+    }
+
+    function renderDetectionsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Detection Rules</span></div>
+                <div class="card-body text-tertiary">Build and test detection rules for your SIEM.</div>
+            </div>
+        `;
+    }
+
+    function renderAttackSurfaceContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Attack Surface Management</span></div>
+                <div class="card-body text-tertiary">Monitor and manage your external attack surface.</div>
+            </div>
+        `;
+    }
+
+    function renderGrayReportsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Gray Team Reports</span></div>
+                <div class="card-body text-tertiary">Generate validation and coverage reports.</div>
+            </div>
+        `;
+    }
+
+    // ========================================
+    // Blue Team Content Functions
+    // ========================================
+
+    function renderBlueDashboardContent() {
+        return `
+            <div class="grid grid-3 mb-4">
+                <div class="stat-card"><div class="stat-value">24</div><div class="stat-label">Active Alerts</div></div>
+                <div class="stat-card"><div class="stat-value">3</div><div class="stat-label">Open Incidents</div></div>
+                <div class="stat-card"><div class="stat-value">99.2%</div><div class="stat-label">Uptime</div></div>
+            </div>
+        `;
+    }
+
+    function renderAlertsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Alert Queue</span></div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead><tr><th>Severity</th><th>Title</th><th>Source</th><th>Time</th><th>Status</th></tr></thead>
+                        <tbody>
+                            <tr><td><span class="badge badge-critical">Critical</span></td><td>Brute Force Detected</td><td>Firewall</td><td>2m ago</td><td>Open</td></tr>
+                            <tr><td><span class="badge badge-high">High</span></td><td>Malware C2 Beacon</td><td>EDR</td><td>15m ago</td><td>Investigating</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderIncidentsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Incidents</span><button class="btn btn-sm btn-primary">+ New Incident</button></div>
+                <div class="card-body text-tertiary">No active incidents. All systems nominal.</div>
+            </div>
+        `;
+    }
+
+    function renderHuntContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Threat Hunting</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Hunt Query</label><textarea class="input" rows="4" placeholder="Enter your hunt query..."></textarea></div>
+                    <button class="btn btn-primary" id="runHuntBtn">Run Hunt</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderIntelContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Threat Intelligence</span></div>
+                <div class="card-body text-tertiary">Manage IOCs, threat feeds, and intelligence sources.</div>
+            </div>
+        `;
+    }
+
+    function renderLogAnalysisContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Log Analysis</span></div>
+                <div class="card-body">
+                    <div class="form-group"><label class="form-label">Search Query</label><input type="text" class="input" placeholder="Search logs..." id="logSearch"></div>
+                    <button class="btn btn-primary" id="searchLogsBtn">Search</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderForensicsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Digital Forensics</span></div>
+                <div class="card-body text-tertiary">Forensic analysis tools and case management.</div>
+            </div>
+        `;
+    }
+
+    function renderMalwareContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Malware Analysis</span></div>
+                <div class="card-body text-tertiary">Static and dynamic malware analysis sandbox.</div>
+            </div>
+        `;
+    }
+
+    function renderNetworkDefenseContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Network Defense</span></div>
+                <div class="card-body text-tertiary">Network monitoring, IDS/IPS management, and traffic analysis.</div>
+            </div>
+        `;
+    }
+
+    function renderEndpointsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Endpoints</span></div>
+                <div class="card-body text-tertiary">EDR and endpoint vulnerability management.</div>
+            </div>
+        `;
+    }
+
+    function renderCloudDefenseContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Cloud Defense</span></div>
+                <div class="card-body text-tertiary">Cloud security posture management and monitoring.</div>
+            </div>
+        `;
+    }
+
+    function renderAuditLogContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Audit Log</span></div>
+                <div class="card-body text-tertiary">System activity and security event logging.</div>
+            </div>
+        `;
+    }
+
+    function renderBlueReportsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Blue Team Reports</span></div>
+                <div class="card-body text-tertiary">Generate defensive operations reports.</div>
+            </div>
+        `;
+    }
+
+    // ========================================
+    // White Team Content Functions
+    // ========================================
+
+    function renderWhiteDashboardContent() {
+        return `
+            <div class="grid grid-3 mb-4">
+                <div class="stat-card"><div class="stat-value">87%</div><div class="stat-label">Compliance Score</div></div>
+                <div class="stat-card"><div class="stat-value">12</div><div class="stat-label">Open Risks</div></div>
+                <div class="stat-card"><div class="stat-value">98%</div><div class="stat-label">Training Complete</div></div>
+            </div>
+        `;
+    }
+
+    function renderComplianceContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Compliance Frameworks</span></div>
+                <div class="card-body">
+                    <div class="grid grid-3">
+                        <div class="card"><div class="card-header">SOC 2</div><div class="card-body">Score: 85%</div></div>
+                        <div class="card"><div class="card-header">ISO 27001</div><div class="card-body">Score: 78%</div></div>
+                        <div class="card"><div class="card-header">PCI-DSS</div><div class="card-body">Score: 92%</div></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderRiskContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Risk Register</span><button class="btn btn-sm btn-primary">+ Add Risk</button></div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Status</th></tr></thead>
+                        <tbody>
+                            <tr><td>Data Breach</td><td>High</td><td>Critical</td><td>Open</td></tr>
+                            <tr><td>Supply Chain</td><td>Medium</td><td>High</td><td>Mitigated</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderPoliciesContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Security Policies</span><button class="btn btn-sm btn-primary">+ New Policy</button></div>
+                <div class="card-body text-tertiary">Manage security policies and procedures.</div>
+            </div>
+        `;
+    }
+
+    function renderVendorsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Vendor Risk Management</span></div>
+                <div class="card-body text-tertiary">Third-party vendor assessment and monitoring.</div>
+            </div>
+        `;
+    }
+
+    function renderTrainingContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Security Training</span></div>
+                <div class="card-body text-tertiary">Security awareness training and skills management.</div>
+            </div>
+        `;
+    }
+
+    function renderMetricsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">Security Metrics</span></div>
+                <div class="card-body">
+                    <div class="grid grid-3">
+                        <div class="stat-card"><div class="stat-value">48h</div><div class="stat-label">MTTR</div></div>
+                        <div class="stat-card"><div class="stat-value">87%</div><div class="stat-label">Patch Rate</div></div>
+                        <div class="stat-card"><div class="stat-value">12</div><div class="stat-label">Phish Rate</div></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderWhiteReportsContent() {
+        return `
+            <div class="card mb-4">
+                <div class="card-header"><span class="card-title">White Team Reports</span></div>
+                <div class="card-body text-tertiary">Executive and compliance reporting.</div>
+            </div>
+        `;
+    }
+
+    // ========================================
     // Web Scanner
     // ========================================
 
@@ -1241,6 +1802,7 @@
                 (state.data.authProfiles || []).map(p =>
                     `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
                 ).join('');
+            createCustomSelect(authSel);
         }
 
         const outputDir = $('#outputDir');
@@ -2508,6 +3070,7 @@
                 (state.data.authProfiles || []).map(p =>
                     `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
                 ).join('');
+            createCustomSelect(authSel);
         }
 
         const outputDir = $('#outputDir');
@@ -2594,6 +3157,7 @@
                 state.data.authProfiles.map(p =>
                     `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
                 ).join('');
+            createCustomSelect(webAuthSel);
         }
     }
 
@@ -4453,6 +5017,7 @@
                 `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
             ).join('');
         if (current) sel.value = current;
+        createCustomSelect(sel);
     }
 
     function importTargets() {
@@ -7957,7 +8522,7 @@
             const id = target.id;
 
             if (id === 'newOpBtn') {
-                state.section = `${state.team === 'red' ? 'red-web' : state.team === 'blue' ? 'blue-hunt' : state.team + '-dashboard'}`;
+                state.section = state.team === 'red' ? 'red-web' : state.team === 'blue' ? 'blue-hunt' : state.team === 'white' ? 'white-compliance' : 'gray-matrix';
                 renderContent();
             } else if (id === 'refreshDashBtn') {
                 renderContent();
