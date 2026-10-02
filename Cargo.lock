@@ -1955,6 +1955,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52051878f80a721bb68ebfbc930e07b65ba72f2da88968ea5c06fd6ca3d3a127"
 
 [[package]]
+name = "findings"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "db",
+ "rusqlite",
+ "scanner",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6312,6 +6328,7 @@ dependencies = [
  "db",
  "dirs",
  "exporter",
+ "findings",
  "gray-team",
  "headless_chrome",
  "http-proxy",

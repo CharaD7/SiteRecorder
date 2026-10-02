@@ -54,15 +54,47 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum AssetType {
     Domain,
     Ip,
+    #[serde(rename = "ip_range")]
     Range,
     App,
+    #[serde(rename = "cloud_account")]
     CloudAccount,
     Repo,
     Device,
+}
+
+impl AssetType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AssetType::Domain => "domain",
+            AssetType::Ip => "ip",
+            AssetType::Range => "ip_range",
+            AssetType::App => "app",
+            AssetType::CloudAccount => "cloud_account",
+            AssetType::Repo => "repo",
+            AssetType::Device => "device",
+        }
+    }
+}
+
+impl std::str::FromStr for AssetType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "domain" => Ok(AssetType::Domain),
+            "ip" => Ok(AssetType::Ip),
+            "ip_range" => Ok(AssetType::Range),
+            "app" => Ok(AssetType::App),
+            "cloud_account" => Ok(AssetType::CloudAccount),
+            "repo" => Ok(AssetType::Repo),
+            "device" => Ok(AssetType::Device),
+            other => Err(format!("unknown asset type: {}", other)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,9 +102,22 @@ pub enum AssetType {
 pub enum Environment {
     Production,
     Staging,
+    #[serde(rename = "dev")]
     Development,
     Test,
     Unknown,
+}
+
+impl Environment {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Environment::Production => "production",
+            Environment::Staging => "staging",
+            Environment::Development => "dev",
+            Environment::Test => "test",
+            Environment::Unknown => "unknown",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,15 +129,20 @@ pub enum Criticality {
     Low,
 }
 
-impl std::fmt::Display for Criticality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
+impl Criticality {
+    pub fn as_str(&self) -> &'static str {
+        match self {
             Criticality::Critical => "critical",
             Criticality::High => "high",
             Criticality::Medium => "medium",
             Criticality::Low => "low",
-        };
-        write!(f, "{}", s)
+        }
+    }
+}
+
+impl std::fmt::Display for Criticality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

@@ -226,6 +226,33 @@ async fn run_vulnerability_scan(
         warn!("Could not persist scan report: {}", e);
     }
 
+    // Wave 2.3: convert the report into queryable findings. Failure here must
+    // not fail the scan -- the report is still returned and still persisted.
+    let operator = state.operator_id.lock().await.clone();
+    let db_guard = state.database.lock().await;
+    if let Some(database) = db_guard.as_ref() {
+        match findings::ingest::ingest_report(
+            database.conn(),
+            &report,
+            operator.as_deref(),
+        ) {
+            Ok(outcome) => {
+                info!(
+                    "Ingested {} findings from scan {} ({} checks, {} skipped)",
+                    outcome.findings_written,
+                    outcome.scan_id,
+                    outcome.checks_considered,
+                    outcome.checks_skipped
+                );
+            }
+            Err(e) => warn!("Could not ingest scan findings: {}", e),
+        }
+    } else {
+        warn!("Database unavailable; scan findings were not ingested");
+    }
+    drop(db_guard);
+    drop(operator);
+
     let mut scan_results = state.scan_results.lock().await;
     *scan_results = Some(report.clone());
 
@@ -462,6 +489,96 @@ async fn list_audit_entries(
 ) -> Result<Vec<auth_profiles::AuditEntry>, String> {
     let manager = state.auth_manager.lock().await;
     manager.list_audit_entries(limit).map_err(|e| e.to_string())
+}
+
+// ==================== FINDINGS COMMANDS (Wave 2) ====================
+
+#[tauri::command]
+async fn list_findings(
+    severity: Option<String>,
+    status: Option<String>,
+    category: Option<String>,
+    asset_id: Option<String>,
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<db::models::Finding>, String> {
+    use std::str::FromStr;
+
+    let filter = findings::FindingFilter {
+        severity: match severity.as_deref() {
+            Some(s) => Some(db::models::Severity::from_str(s).map_err(|e| e.to_string())?),
+            None => None,
+        },
+        status: match status.as_deref() {
+            Some(s) => Some(db::models::FindingStatus::from_str(s).map_err(|e| e.to_string())?),
+            None => None,
+        },
+        category,
+        asset_id,
+        scan_id: None,
+        limit,
+    };
+
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::list(db.conn(), &filter).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_finding(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<db::models::Finding>, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::get(db.conn(), &id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_finding_status(
+    id: String,
+    status: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    use std::str::FromStr;
+
+    let new_status = db::models::FindingStatus::from_str(&status).map_err(|e| e.to_string())?;
+
+    let operator = state.operator_id.lock().await.clone();
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+
+    findings::set_status(db.conn(), &id, new_status).map_err(|e| e.to_string())?;
+
+    if let Some(actor) = operator {
+        let _ = db::audit::append(
+            db.conn(),
+            db::audit::NewAuditEntry {
+                actor,
+                action: "finding_status_changed".to_string(),
+                target: Some(id.clone()),
+                details: Some(format!("new status: {}", new_status)),
+                ip_address: None,
+            },
+        );
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn findings_severity_breakdown(
+    state: State<'_, AppState>,
+) -> Result<findings::SeverityBreakdown, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::severity_breakdown(db.conn()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn findings_by_category(state: State<'_, AppState>) -> Result<Vec<(String, i64)>, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::by_category(db.conn()).map_err(|e| e.to_string())
 }
 
 // ==================== PERSISTENCE / AUDIT COMMANDS (Wave 1) ====================
@@ -1957,6 +2074,13 @@ fn run_gui_mode() {
             lock_vault,
             is_vault_locked,
             list_audit_entries,
+            // Persistence + tamper-evident audit (Wave 1)
+            // Findings (Wave 2)
+            list_findings,
+            get_finding,
+            update_finding_status,
+            findings_severity_breakdown,
+            findings_by_category,
             // Persistence + tamper-evident audit (Wave 1)
             get_database_status,
             list_chained_audit_entries,
