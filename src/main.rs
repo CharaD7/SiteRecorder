@@ -641,6 +641,17 @@ async fn findings_severity_breakdown(
     findings::severity_breakdown(db.conn()).map_err(|e| e.to_string())
 }
 
+/// §5.6 metrics over stored findings.
+#[tauri::command]
+async fn metrics_report(
+    window_days: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<findings::metrics::MetricsReport, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::metrics_report(db.conn(), window_days.unwrap_or(30)).map_err(|e| e.to_string())
+}
+
 /// Compliance assessment (§5.1) over stored findings.
 #[tauri::command]
 async fn compliance_assessment(
@@ -2180,6 +2191,7 @@ fn run_gui_mode() {
             findings_by_category,
             findings_attack_coverage,
             compliance_assessment,
+            metrics_report,
             // Persistence + tamper-evident audit (Wave 1)
             get_database_status,
             list_chained_audit_entries,

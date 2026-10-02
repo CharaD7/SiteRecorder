@@ -520,6 +520,39 @@
         }
     }
 
+    // §5.6 metrics. Headline figures that cannot be derived from real data are
+    // listed with a reason instead of being approximated.
+    async function loadMetrics() {
+        const el = $('#metricsStatus');
+        if (!el) return;
+        try {
+            const m = await invoke('metrics_report', { windowDays: 30 });
+            const v = m.vulnerability;
+            const pct = (x) => `${(x * 100).toFixed(0)}%`;
+            el.innerHTML = `
+                <div class="grid grid-4 mb-3">
+                    <div class="stat-card"><div class="stat-value">${v.open}</div><div class="stat-label">Open findings</div></div>
+                    <div class="stat-card"><div class="stat-value">${v.aging.total()}</div><div class="stat-label">In aging buckets</div></div>
+                    <div class="stat-card"><div class="stat-value">${pct(v.false_positive_rate)}</div><div class="stat-label">False positive rate</div></div>
+                    <div class="stat-card"><div class="stat-value">${pct(v.remediation_rate)}</div><div class="stat-label">Remediation rate</div></div>
+                </div>
+                <div class="text-sm text-secondary mb-2">
+                    Aging: ${v.aging.d0_30} open 0-30d · ${v.aging.d31_60} at 31-60d ·
+                    ${v.aging.d61_90} at 61-90d · ${v.aging.d90_plus} over 90d${v.aging.oldest_open_days !== null ? ` (oldest ${v.aging.oldest_open_days}d)` : ''}
+                </div>
+                ${m.unavailable?.length ? `
+                    <details>
+                        <summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">
+                            ${m.unavailable.length} metric(s) not computed — and why</summary>
+                        <ul class="text-sm" style="margin-top:6px;">
+                            ${m.unavailable.map(u => `<li style="padding:2px 0;"><strong>${escapeHtml(u.name)}</strong> — ${escapeHtml(u.reason)}</li>`).join('')}
+                        </ul>
+                    </details>` : ''}`;
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">Metrics unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     // ========================================
     // Custom Select Component
     // ========================================
@@ -4805,6 +4838,7 @@
 
     function setupWhiteCompliance() {
         loadCompliance();
+        loadMetrics();
     }
 
     async function loadCompliance() {

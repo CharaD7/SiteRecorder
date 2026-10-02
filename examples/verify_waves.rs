@@ -258,6 +258,34 @@ async fn main() {
         );
     }
 
+    // ---- Wave 4.3.7: §5.6 metrics from a real scan ----
+    if let Some(report) = &last_report {
+        let database = db::Db::open_in_memory().unwrap();
+        ingest::ingest_report(database.conn(), report, None).unwrap();
+
+        // Age one finding so the aging buckets have more than one bucket.
+        database.conn().execute(
+            "UPDATE findings SET created_at = '2025-06-01T00:00:00Z' WHERE rowid = 1",
+            [],
+        ).unwrap();
+        findings::set_status(database.conn(),
+            &findings::list(database.conn(), &findings::FindingFilter::default())
+                .unwrap()[1].id, db::models::FindingStatus::Remediated).unwrap();
+
+        let m = findings::metrics_report(database.conn(), 30).unwrap();
+        println!("  metrics: {}", m.describe());
+        println!("    open={} aging={:?}", m.vulnerability.open, m.vulnerability.aging);
+        println!("    unavailable: {}", m.unavailable.iter().map(|u| u.name.clone()).collect::<Vec<_>>().join(", "));
+        check("wave4.3.7 metrics computed", m.vulnerability.total > 0,
+              format!("{} findings measured", m.vulnerability.total));
+        check("wave4.3.7 headline metrics refused",
+              m.unavailable.iter().any(|u| u.name.contains("MTTD")),
+              "MTTD reported unavailable with a reason".into());
+        check("wave4.3.7 every refusal has a reason",
+              m.unavailable.iter().all(|u| !u.reason.is_empty()),
+              "no unexplained refusals".into());
+    }
+
     // ---- Wave 3.1: real TLS against a live host ----
     match NetworkScanner::check_ssl("example.com", 443).await {
         Ok(info) => {

@@ -7,6 +7,7 @@
 
 pub mod attack;
 pub mod compliance;
+pub mod metrics;
 pub mod ingest;
 
 use db::models::{AssetType, Finding, FindingStatus, Severity};
@@ -353,7 +354,7 @@ pub fn attack_coverage(conn: &rusqlite::Connection) -> Result<attack::CoverageRe
 /// workflow state, not current posture.
 pub fn project_findings(conn: &rusqlite::Connection) -> Result<Vec<compliance::FindingProjection>> {
     let mut stmt = conn
-        .prepare("SELECT id, cwe_id, severity, status FROM findings")
+        .prepare("SELECT id, cwe_id, severity, status, created_at, updated_at, asset_id FROM findings")
         .map_err(map_err)?;
 
     let rows = stmt
@@ -363,22 +364,26 @@ pub fn project_findings(conn: &rusqlite::Connection) -> Result<Vec<compliance::F
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, String>(2)?,
                 r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+                r.get::<_, Option<String>>(6)?,
             ))
         })
         .map_err(map_err)?;
 
     let mut out = Vec::new();
     for row in rows {
-        let (id, cwe_id, severity, status) = row.map_err(map_err)?;
-        let counts = !matches!(
-            status.parse::<FindingStatus>().map(|s| s.to_string()).unwrap_or_default().as_str(),
-            "false_positive" | "accepted"
-        );
+        let (id, cwe_id, severity, status, created_at, updated_at, asset_id) = row.map_err(map_err)?;
+        let counts = !matches!(status.as_str(), "false_positive" | "accepted");
         out.push(compliance::FindingProjection {
             id,
             cwe_id,
             severity,
+            status,
             counts_against_posture: counts,
+            created_at,
+            updated_at,
+            asset_id,
         });
     }
     Ok(out)
@@ -391,6 +396,21 @@ pub fn assess_all(conn: &rusqlite::Connection) -> Result<Vec<compliance::Control
         .iter()
         .map(|fw| compliance::assess(fw, &projected))
         .collect())
+}
+
+/// §5.6 metrics over stored findings.
+pub fn metrics_report(
+    conn: &rusqlite::Connection,
+    window_days: i64,
+) -> Result<metrics::MetricsReport> {
+    let projected = project_findings(conn)?;
+    let now = chrono::Utc::now();
+    let incidents = metrics::count_rows(conn, "incidents").unwrap_or(0);
+
+    let mut report = metrics::build(now, &projected, by_category(conn)?);
+    report.discovery_trend = metrics::discovery_trend(&projected, now, window_days);
+    report.unavailable = metrics::unavailable_metrics(incidents);
+    Ok(report)
 }
 
 pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {

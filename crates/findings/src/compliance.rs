@@ -234,8 +234,13 @@ pub struct FindingProjection {
     pub id: String,
     pub cwe_id: Option<String>,
     pub severity: String,
+    /// Workflow status: new, confirmed, false_positive, remediated, accepted.
+    pub status: String,
     /// False positives and accepted risks are excluded from the posture.
     pub counts_against_posture: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub asset_id: Option<String>,
 }
 
 /// Evaluate findings against a framework.
@@ -316,7 +321,11 @@ mod tests {
             id: "f1".into(),
             cwe_id: cwe.map(|s| s.to_string()),
             severity: sev.into(),
+            status: if counts { "new".into() } else { "false_positive".into() },
             counts_against_posture: counts,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            asset_id: None,
         }
     }
 
