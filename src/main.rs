@@ -641,6 +641,19 @@ async fn findings_severity_breakdown(
     findings::severity_breakdown(db.conn()).map_err(|e| e.to_string())
 }
 
+/// ATT&CK coverage over stored findings.
+///
+/// Deliberately returns `score: None` while any finding is unmapped, so the UI
+/// shows "incomplete" instead of a percentage that would look measured.
+#[tauri::command]
+async fn findings_attack_coverage(
+    state: State<'_, AppState>,
+) -> Result<findings::attack::CoverageReport, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::attack_coverage(db.conn()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn findings_by_category(state: State<'_, AppState>) -> Result<Vec<(String, i64)>, String> {
     let db_guard = state.database.lock().await;
@@ -2149,6 +2162,7 @@ fn run_gui_mode() {
             update_finding_status,
             findings_severity_breakdown,
             findings_by_category,
+            findings_attack_coverage,
             // Persistence + tamper-evident audit (Wave 1)
             get_database_status,
             list_chained_audit_entries,

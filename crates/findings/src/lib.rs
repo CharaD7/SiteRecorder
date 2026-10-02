@@ -5,6 +5,7 @@
 //! every compliance figure, risk score and MTTD metric is an aggregate over
 //! stored findings.
 
+pub mod attack;
 pub mod ingest;
 
 use db::models::{AssetType, Finding, FindingStatus, Severity};
@@ -307,6 +308,44 @@ pub fn severity_breakdown(conn: &rusqlite::Connection) -> Result<SeverityBreakdo
 }
 
 /// Findings grouped by category.
+/// ATT&CK coverage over stored findings.
+///
+/// Returns an incomplete report (no percentage) when any finding is unmapped,
+/// rather than a number that looks measured but is not.
+pub fn attack_coverage(conn: &rusqlite::Connection) -> Result<attack::CoverageReport> {
+    let mut stmt = conn
+        .prepare("SELECT mitre_techniques FROM findings")
+        .map_err(map_err)?;
+
+    let mut techniques: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut unmapped: Vec<String> = Vec::new();
+    let mut total = 0usize;
+    let _ = total;
+
+    let rows = stmt
+        .query_map([], |r| r.get::<_, String>(0))
+        .map_err(map_err)?;
+
+    for row in rows {
+        let raw = row.map_err(map_err)?;
+        total += 1;
+        let ids: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+        if ids.is_empty() {
+            unmapped.push("one or more findings".to_string());
+        } else {
+            techniques.extend(ids);
+        }
+    }
+
+    let complete = unmapped.is_empty();
+    Ok(attack::CoverageReport {
+        techniques: techniques.into_iter().collect(),
+        unmapped,
+        score: if complete { Some(100.0) } else { None },
+        complete,
+    })
+}
+
 pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {
     let mut stmt = conn
         .prepare("SELECT category, COUNT(*) FROM findings GROUP BY category ORDER BY COUNT(*) DESC")

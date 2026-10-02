@@ -2243,6 +2243,7 @@
                         <span class="badge badge-${fSeverity}">${f.severity || 'INFO'}</span>
                         <span class="font-medium text-sm">${escapeHtml(f.title || '')}</span>
                         ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
+                        ${(f.mitre_techniques || []).map(t => `<span class="badge badge-info" title="MITRE ATT&CK">${escapeHtml(t)}</span>`).join('')}
                     </div>
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description || '')}</div>
                     ${f.remediation ? `<div class="finding-remediation">
@@ -5502,6 +5503,28 @@
         return { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', INFO: '🟢' }[s] || '🟢';
     }
 
+    // ATT&CK coverage. Shows "incomplete" rather than a percentage whenever any
+    // finding is unmapped, because a score over a partial mapping would look
+    // measured without being so.
+    async function loadAttackCoverage() {
+        const el = $('#attackCoverageStatus');
+        if (!el) return;
+        try {
+            const cov = await invoke('findings_attack_coverage');
+            if (!cov.complete) {
+                el.innerHTML = `<div class="advisory-inline">
+                    ⚠️ ATT&CK coverage incomplete — ${cov.techniques.length} technique(s) observed,
+                    ${cov.unmapped.length} finding(s) unmapped. No percentage is shown because the
+                    mapping does not cover every finding.</div>`;
+            } else {
+                el.innerHTML = `<div class="advisory-inline" style="color:var(--text-tertiary);">
+                    🗺 ATT&CK: ${cov.techniques.map(t => escapeHtml(t)).join(', ') || 'none observed'}</div>`;
+            }
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">🗺 ATT&CK coverage unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     async function loadFindings() {
         const container = $('#findingsList');
         const search = ($('#findingSearch')?.value || '').trim().toLowerCase();
@@ -5537,6 +5560,7 @@
         });
 
         setFindingsCounts(findings, findings.length - visible.length);
+        loadAttackCoverage();
 
         if (!container) return;
 

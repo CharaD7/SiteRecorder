@@ -75,7 +75,10 @@ pub fn convert(report: &ScanReport, asset_id: Option<String>, user_id: Option<St
                 remediation: "See the scanner check documentation for remediation guidance."
                     .to_string(),
                 references: vec![],
-                mitre_techniques: vec![],
+                mitre_techniques: crate::attack::techniques_for_check(&result.check_name)
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 evidence: vec![Evidence {
                     kind: "check_result".to_string(),
                     description: format!(
@@ -109,7 +112,10 @@ pub fn convert(report: &ScanReport, asset_id: Option<String>, user_id: Option<St
                 description: vf.description.clone(),
                 remediation: vf.remediation.clone(),
                 references: vf.references.clone(),
-                mitre_techniques: vec![],
+                mitre_techniques: crate::attack::techniques_for_check(&result.check_name)
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 evidence: vec![Evidence {
                     kind: "scanner_detail".to_string(),
                     description: vf.details.join("; "),
@@ -347,6 +353,79 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM findings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(total, 1, "deterministic ids must upsert");
+    }
+
+    #[test]
+    fn findings_carry_attack_techniques() {
+        let r = report(vec![result(
+            "SQL Injection Detection",
+            ScanStatus::Vulnerable,
+            ScanSev::Critical,
+            vec![finding("SQLi", ScanSev::Critical)],
+        )]);
+        let out = convert(&r, None, None);
+        assert_eq!(out[0].mitre_techniques, vec!["T1190".to_string()]);
+    }
+
+    #[test]
+    fn xss_maps_to_javascript_technique() {
+        let r = report(vec![result(
+            "Cross-Site Scripting (XSS) Detection",
+            ScanStatus::Vulnerable,
+            ScanSev::High,
+            vec![finding("XSS", ScanSev::High)],
+        )]);
+        let out = convert(&r, None, None);
+        assert_eq!(out[0].mitre_techniques, vec!["T1059.007".to_string()]);
+    }
+
+    #[test]
+    fn unmapped_checks_yield_empty_techniques() {
+        let r = report(vec![result(
+            "Clickjacking Detection",
+            ScanStatus::Vulnerable,
+            ScanSev::Medium,
+            vec![finding("Missing frame options", ScanSev::Medium)],
+        )]);
+        let out = convert(&r, None, None);
+        assert!(
+            out[0].mitre_techniques.is_empty(),
+            "hardening gaps must not be forced into the ATT&CK matrix"
+        );
+    }
+
+    #[test]
+    fn coverage_is_complete_when_everything_maps() {
+        let db = Db::open_in_memory().unwrap();
+        let r = report(vec![result(
+            "SQL Injection Detection",
+            ScanStatus::Vulnerable,
+            ScanSev::Critical,
+            vec![finding("SQLi", ScanSev::Critical)],
+        )]);
+        ingest_report(db.conn(), &r, None).unwrap();
+
+        let cov = crate::attack_coverage(db.conn()).unwrap();
+        assert!(cov.complete);
+        assert_eq!(cov.techniques, vec!["T1190".to_string()]);
+        assert_eq!(cov.score, Some(100.0));
+    }
+
+    #[test]
+    fn coverage_reports_no_score_when_any_finding_unmapped() {
+        let db = Db::open_in_memory().unwrap();
+        let r = report(vec![
+            result("SQL Injection Detection", ScanStatus::Vulnerable, ScanSev::Critical,
+                   vec![finding("SQLi", ScanSev::Critical)]),
+            result("Clickjacking Detection", ScanStatus::Vulnerable, ScanSev::Medium,
+                   vec![finding("frame", ScanSev::Medium)]),
+        ]);
+        ingest_report(db.conn(), &r, None).unwrap();
+
+        let cov = crate::attack_coverage(db.conn()).unwrap();
+        assert!(!cov.complete);
+        assert_eq!(cov.score, None, "no percentage over a partial mapping");
+        assert!(cov.describe().contains("INCOMPLETE"));
     }
 
     #[test]

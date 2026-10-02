@@ -78,6 +78,7 @@ async fn main() {
         }
     };
 
+    let last_report = scanned.clone();
     if let Some(report) = scanned {
         let database = db::Db::open_in_memory().unwrap();
         let outcome = ingest::ingest_report(database.conn(), &report, None).unwrap();
@@ -174,6 +175,63 @@ async fn main() {
         )
         .unwrap();
         check("wave2 status transition", fp.len() == 1, "1 false_positive".into());
+    }
+
+    // ---- Wave 4 prerequisite: ATT&CK coverage from a real scan ----
+    if let Some(report) = &last_report {
+        let database = db::Db::open_in_memory().unwrap();
+        ingest::ingest_report(database.conn(), report, None).unwrap();
+        let cov = findings::attack_coverage(database.conn()).unwrap();
+        println!("  ATT&CK: {} techniques, complete={}, score={:?}", cov.techniques.len(), cov.complete, cov.score);
+        println!("  {}", cov.describe());
+        // Against a well-configured target the only findings are hardening gaps
+        // (headers, clickjacking), which are deliberately unmapped. The correct
+        // behaviour is therefore an INCOMPLETE report with no percentage -- not
+        // a fabricated 100%. Assert that honesty rather than non-emptiness.
+        check(
+            "wave4 refuses to score an incomplete mapping",
+            !cov.complete && cov.score.is_none(),
+            format!(
+                "{} techniques, complete={}, score={:?} (no percentage over a partial mapping)",
+                cov.techniques.len(),
+                cov.complete,
+                cov.score
+            ),
+        );
+
+        // And prove the mapping itself applies when a mapped check does fire.
+        let mapped = ingest::convert(
+            &scanner::ScanReport {
+                url: report.url.clone(),
+                scan_id: "mapped-probe".into(),
+                timestamp: report.timestamp.clone(),
+                summary: report.summary.clone(),
+                results: vec![scanner::ScanResult {
+                    check_name: "SQL Injection Detection".into(),
+                    status: scanner::ScanStatus::Vulnerable,
+                    severity: scanner::Severity::Critical,
+                    findings: vec![scanner::VulnerabilityFinding {
+                        title: "probe".into(),
+                        severity: scanner::Severity::Critical,
+                        status: scanner::ScanStatus::Vulnerable,
+                        description: String::new(),
+                        details: vec![],
+                        remediation: String::new(),
+                        cwe_id: Some("CWE-89".into()),
+                        references: vec![],
+                    }],
+                    scan_duration_ms: 1,
+                    timestamp: report.timestamp.clone(),
+                }],
+            },
+            None,
+            None,
+        );
+        check(
+            "wave4 mapping yields techniques",
+            mapped.first().map(|f| f.mitre_techniques.as_slice()) == Some(&["T1190".to_string()][..]),
+            format!("{:?}", mapped.first().map(|f| f.mitre_techniques.clone())),
+        );
     }
 
     // ---- Wave 3.1: real TLS against a live host ----
