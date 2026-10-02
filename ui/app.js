@@ -480,6 +480,46 @@
         notifBadge: () => $('#notifBadge'),
     };
 
+    // Compliance (§5.1). Reports per-framework posture derived from real
+    // findings, and refuses to show a readiness score while the CWE mapping is
+    // incomplete. Frameworks not yet modelled are listed as pending rather than
+    // approximated.
+    async function loadCompliance() {
+        const el = $('#complianceStatus');
+        if (!el) return;
+        try {
+            const data = await invoke('compliance_assessment');
+            const rows = (data.assessments || []).map(a => `
+                <div style="padding:10px 0; border-bottom:1px solid var(--border-secondary);">
+                    <div class="flex items-center gap-2">
+                        <span style="font-weight:500;">${escapeHtml(a.framework_id)}</span>
+                        ${a.readiness_score !== null && a.readiness_score !== undefined
+                            ? `<span class="badge badge-${a.readiness_score >= 80 ? 'success' : a.readiness_score >= 50 ? 'warning' : 'critical'}">${a.readiness_score.toFixed(0)}% ready</span>`
+                            : '<span class="badge badge-warning">no score — mapping incomplete</span>'}
+                    </div>
+                    <div class="text-sm text-tertiary" style="margin-top:4px;">
+                        ${a.controls_with_findings.length} of 10 categories with findings ·
+                        ${a.unmapped_findings} finding(s) unmapped ·
+                        ${a.open_findings} open
+                    </div>
+                    <ul class="text-sm" style="margin-top:6px;">
+                        ${a.controls_with_findings.map(c => `<li>• ${escapeHtml(c)}</li>`).join('') || '<li class="text-tertiary">No mapped findings</li>'}
+                    </ul>
+                    ${a.notes.map(n => `<div class="advisory-inline" style="margin-top:6px;">${escapeHtml(n)}</div>`).join('')}
+                </div>`).join('');
+
+            el.innerHTML = `
+                ${rows || '<div class="text-tertiary">No frameworks modelled.</div>'}
+                <details class="mt-3">
+                    <summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">
+                        Frameworks in the spec but not yet modelled (${(data.frameworks_pending || []).length})</summary>
+                    <div class="code-block mt-2" style="font-size:0.75rem;">${(data.frameworks_pending || []).map(escapeHtml).join('\n')}</div>
+                </details>`;
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">Compliance assessment unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     // ========================================
     // Custom Select Component
     // ========================================
@@ -5561,6 +5601,7 @@
 
         setFindingsCounts(findings, findings.length - visible.length);
         loadAttackCoverage();
+        loadCompliance();
 
         if (!container) return;
 

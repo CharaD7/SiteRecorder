@@ -234,6 +234,30 @@ async fn main() {
         );
     }
 
+    // ---- Wave 4.3.1: compliance assessment from a real scan ----
+    if let Some(report) = &last_report {
+        let database = db::Db::open_in_memory().unwrap();
+        ingest::ingest_report(database.conn(), report, None).unwrap();
+        let assessments = findings::assess_all(database.conn()).unwrap();
+        for a in &assessments {
+            println!("  compliance {}: {}", a.framework_id, a.describe());
+            println!("    categories with findings: {:?}", a.controls_with_findings);
+        }
+        check(
+            "wave4.3.1 compliance assessment runs on real findings",
+            !assessments.is_empty(),
+            format!("{} framework(s) assessed", assessments.len()),
+        );
+        check(
+            "wave4.3.1 never claims compliance from absence",
+            assessments.iter().all(|a| a
+                .notes
+                .iter()
+                .any(|n| n.contains("NOT evidence of compliance"))),
+            "absence disclaimer present on every assessment".into(),
+        );
+    }
+
     // ---- Wave 3.1: real TLS against a live host ----
     match NetworkScanner::check_ssl("example.com", 443).await {
         Ok(info) => {

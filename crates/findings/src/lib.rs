@@ -6,6 +6,7 @@
 //! stored findings.
 
 pub mod attack;
+pub mod compliance;
 pub mod ingest;
 
 use db::models::{AssetType, Finding, FindingStatus, Severity};
@@ -344,6 +345,52 @@ pub fn attack_coverage(conn: &rusqlite::Connection) -> Result<attack::CoverageRe
         score: if complete { Some(100.0) } else { None },
         complete,
     })
+}
+
+/// Project stored findings into the shape the compliance mapper needs.
+///
+/// Findings marked false positive or accepted are excluded: they are recorded
+/// workflow state, not current posture.
+pub fn project_findings(conn: &rusqlite::Connection) -> Result<Vec<compliance::FindingProjection>> {
+    let mut stmt = conn
+        .prepare("SELECT id, cwe_id, severity, status FROM findings")
+        .map_err(map_err)?;
+
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(map_err)?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, cwe_id, severity, status) = row.map_err(map_err)?;
+        let counts = !matches!(
+            status.parse::<FindingStatus>().map(|s| s.to_string()).unwrap_or_default().as_str(),
+            "false_positive" | "accepted"
+        );
+        out.push(compliance::FindingProjection {
+            id,
+            cwe_id,
+            severity,
+            counts_against_posture: counts,
+        });
+    }
+    Ok(out)
+}
+
+/// Evaluate every modelled framework against stored findings.
+pub fn assess_all(conn: &rusqlite::Connection) -> Result<Vec<compliance::ControlAssessment>> {
+    let projected = project_findings(conn)?;
+    Ok(compliance::available_frameworks()
+        .iter()
+        .map(|fw| compliance::assess(fw, &projected))
+        .collect())
 }
 
 pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {

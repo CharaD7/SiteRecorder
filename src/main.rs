@@ -641,6 +641,22 @@ async fn findings_severity_breakdown(
     findings::severity_breakdown(db.conn()).map_err(|e| e.to_string())
 }
 
+/// Compliance assessment (§5.1) over stored findings.
+#[tauri::command]
+async fn compliance_assessment(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    let assessments = findings::assess_all(db.conn()).map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "assessments": assessments,
+        "frameworks_pending": findings::compliance::SPEC_FRAMEWORKS_PENDING,
+        "mapping_confidence": findings::compliance::MAPPING_CONFIDENCE,
+    }))
+}
+
 /// ATT&CK coverage over stored findings.
 ///
 /// Deliberately returns `score: None` while any finding is unmapped, so the UI
@@ -2163,6 +2179,7 @@ fn run_gui_mode() {
             findings_severity_breakdown,
             findings_by_category,
             findings_attack_coverage,
+            compliance_assessment,
             // Persistence + tamper-evident audit (Wave 1)
             get_database_status,
             list_chained_audit_entries,
