@@ -1213,12 +1213,15 @@
     <div class="advisory-banner">
         <span class="advisory-banner-icon">⚠️</span>
         <div>
-            <div class="advisory-banner-title">Reference checklist — not a measurement of your system</div>
+            <div class="advisory-banner-title">Reads this machine — run it where you are authorised</div>
             <div class="advisory-banner-body">
-                This module returns a <strong>fixed advisory checklist</strong>. It does not inspect the
-                local or remote machine, so these are <em>things to check</em>, not confirmed
-                vulnerabilities. Run the commands listed in each finding yourself (many need root) to
-                verify. Real inspection of a live target is not implemented yet.
+                On Linux this enumerates the <strong>local host</strong>: SUID binaries, cron targets,
+                <code>sshd_config</code>, private key permissions and container runtime. Findings are
+                marked <em>verified</em> because they were observed, not asserted. Anything that could
+                not be read (unreadable directories, missing <code>/proc</code>) is listed as
+                <strong>not checked</strong> rather than counted as clean. Windows and macOS are not
+                measured yet and return reference material. Run with care and only on hosts you own
+                or are authorised to test.
             </div>
         </div>
     </div>

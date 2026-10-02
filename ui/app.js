@@ -3704,6 +3704,15 @@
         }
     }
 
+    // The OS scanner now measures the host. Say which it did, rather than
+    // always claiming the output is reference material.
+    function osScanProvenanceNote(result) {
+        if (result.scanned_local) {
+            return advisoryNote('Measured on this host. Findings are marked verified because they were observed.');
+        }
+        return advisoryNote('Fixed advisory checklist — this platform is not measured yet, so nothing below was verified.');
+    }
+
     function displayOsScanResults(result) {
         const container = $('#osScanResults');
         if (!container) return;
@@ -3742,7 +3751,9 @@
                     </span>
                 </div>
                 <div class="card-body">
-                    ${advisoryNote('Fixed advisory checklist — no local or remote system was inspected.')}
+                    ${osScanProvenanceNote(result)}
+                    ${result.paths_inspected?.length ? `<details class="mb-3"><summary style="cursor:pointer; font-size:0.8rem; color:var(--text-tertiary);">Inspected paths (${result.paths_inspected.length})</summary><div class="code-block mt-2" style="font-size:0.75rem;">${result.paths_inspected.map(escapeHtml).join('\n')}</div></details>` : ''}
+                    ${result.skipped_checks?.length ? `<div class="advisory-inline">⚠️ Not checked: ${result.skipped_checks.map(escapeHtml).join('; ')}</div>` : ''}
                     <div class="grid grid-5 mb-4">
                         <div class="severity-card critical"><div class="severity-card-count">${severityCounts.CRITICAL}</div><div class="severity-card-label">Critical</div></div>
                         <div class="severity-card high"><div class="severity-card-count">${severityCounts.HIGH}</div><div class="severity-card-label">High</div></div>
