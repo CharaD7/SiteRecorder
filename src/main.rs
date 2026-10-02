@@ -9,6 +9,7 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use browser::{Browser, NavigationOptions, ScrollBehavior};
+use db::Db;
 use crawler::{CrawlConfig, Crawler};
 use exporter::{Exporter, RecordingData};
 use notifier::{Notifier, NotificationConfig};
@@ -141,6 +142,11 @@ struct AppState {
     http_proxy: Arc<Mutex<Option<HttpProxy>>>,
     packet_capture: Arc<Mutex<Option<PacketCapture>>>,
     auth_engine: Arc<AuthEngine>,
+    /// Shared persistence layer (Wave 1). Every crate that stores domain data
+    /// goes through this connection rather than opening its own.
+    database: Arc<Mutex<Option<Db>>>,
+    /// Resolvable actor for audit entries and domain rows.
+    operator_id: Arc<Mutex<Option<String>>>,
 }
 
 #[tauri::command]
@@ -456,6 +462,49 @@ async fn list_audit_entries(
 ) -> Result<Vec<auth_profiles::AuditEntry>, String> {
     let manager = state.auth_manager.lock().await;
     manager.list_audit_entries(limit).map_err(|e| e.to_string())
+}
+
+// ==================== PERSISTENCE / AUDIT COMMANDS (Wave 1) ====================
+
+/// True when the shared database is available. The UI uses this to warn that
+/// work is not being persisted rather than silently discarding it.
+#[tauri::command]
+async fn get_database_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let database = state.database.lock().await;
+    let operator = state.operator_id.lock().await;
+
+    match database.as_ref() {
+        Some(db) => Ok(serde_json::json!({
+            "available": true,
+            "schema_version": db.version().unwrap_or(0),
+            "path": db::paths::database_path().to_string_lossy(),
+            "operator_id": operator.clone(),
+        })),
+        None => Ok(serde_json::json!({
+            "available": false,
+            "path": db::paths::database_path().to_string_lossy(),
+            "operator_id": operator.clone(),
+        })),
+    }
+}
+
+/// List entries from the hash-chained audit log (Wave 1.5).
+#[tauri::command]
+async fn list_chained_audit_entries(
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<db::audit::AuditEntry>, String> {
+    let database = state.database.lock().await;
+    let db = database.as_ref().ok_or("Database unavailable")?;
+    db::audit::list(db.conn(), limit).map_err(|e| e.to_string())
+}
+
+/// Recompute the audit chain and report the first invalid entry.
+#[tauri::command]
+async fn verify_audit_integrity(state: State<'_, AppState>) -> Result<db::audit::IntegrityReport, String> {
+    let database = state.database.lock().await;
+    let db = database.as_ref().ok_or("Database unavailable")?;
+    db::audit::verify_integrity(db.conn()).map_err(|e| e.to_string())
 }
 
 // ==================== NETWORK SCANNER COMMANDS ====================
@@ -1779,16 +1828,47 @@ fn main() {
 fn run_gui_mode() {
     info!("SiteRecorder GUI starting...");
 
-    let data_dir = dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("siterecorder-cyberops");
+    let data_dir = db::paths::data_dir();
     std::fs::create_dir_all(&data_dir).ok();
 
-    let auth_manager = AuthProfileManager::new(&data_dir.join("auth.db"))
+    let auth_manager = AuthProfileManager::new(&db::paths::auth_db_path())
         .unwrap_or_else(|_| AuthProfileManager::new_in_memory().unwrap());
 
-    let vault_path = data_dir.join("credentials.vault");
-    let credential_vault = CredentialVault::with_path(vault_path);
+    let credential_vault = CredentialVault::with_path(db::paths::vault_path());
+
+    // Wave 1 persistence spine. A failure here degrades the app to
+    // non-persistent operation rather than preventing startup: losing the
+    // database must not stop an in-flight recording.
+    let (database, operator_id) = match db::paths::open_database() {
+        Ok(database) => {
+            let operator = db::users::ensure_default_operator(database.conn())
+                .ok()
+                .map(|u| u.id);
+            if let Some(op) = &operator {
+                if let Err(e) = db::audit::append(
+                    database.conn(),
+                    db::audit::NewAuditEntry {
+                        actor: op.clone(),
+                        action: "app_start".to_string(),
+                        target: None,
+                        details: Some("database opened".to_string()),
+                        ip_address: None,
+                    },
+                ) {
+                    warn!("Could not write startup audit entry: {}", e);
+                }
+            }
+            (Some(database), operator)
+        }
+        Err(e) => {
+            warn!(
+                "Could not open database at {}: {}. Running without persistence.",
+                db::paths::database_path().display(),
+                e
+            );
+            (None, None)
+        }
+    };
 
     let app_state = AppState {
         status: Arc::new(Mutex::new(CrawlStatus::default())),
@@ -1799,6 +1879,8 @@ fn run_gui_mode() {
         http_proxy: Arc::new(Mutex::new(None)),
         packet_capture: Arc::new(Mutex::new(None)),
         auth_engine: Arc::new(AuthEngine::new().unwrap()),
+        database: Arc::new(Mutex::new(database)),
+        operator_id: Arc::new(Mutex::new(operator_id)),
     };
 
     use tauri::{CustomMenuItem, SystemTray, SystemTrayMenu, SystemTrayEvent, Manager};
@@ -1875,6 +1957,10 @@ fn run_gui_mode() {
             lock_vault,
             is_vault_locked,
             list_audit_entries,
+            // Persistence + tamper-evident audit (Wave 1)
+            get_database_status,
+            list_chained_audit_entries,
+            verify_audit_integrity,
             // Network scanner commands
             network_port_scan,
             network_dns_lookup,

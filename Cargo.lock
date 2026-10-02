@@ -1434,6 +1434,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d7439c3735f405729d52c3fbbe4de140eaf938a1fe47d227c27f8254d4302a5"
 
 [[package]]
+name = "db"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "base64 0.21.7",
+ "chrono",
+ "dirs",
+ "rand 0.8.5",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6291,6 +6309,7 @@ dependencies = [
  "credentials",
  "cross-team",
  "ctrlc",
+ "db",
  "dirs",
  "exporter",
  "gray-team",
