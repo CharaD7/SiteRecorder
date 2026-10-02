@@ -465,6 +465,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "totp-rs",
+ "uuid",
  "zeroize",
 ]
 

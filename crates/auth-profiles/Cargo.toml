@@ -13,6 +13,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = "0.4"
 totp-rs = { version = "5.5", features = ["qr"] }
 rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
 base64 = "0.21"
 aes-gcm = "0.10"
 zeroize = { version = "1.7", features = ["derive"] }

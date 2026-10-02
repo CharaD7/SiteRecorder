@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -428,7 +428,7 @@ impl AuthProfileManager {
         cookies_json: Option<&str>,
         ttl_minutes: i64,
     ) -> Result<String> {
-        let session_id = format!("sess_{}", Utc::now().timestamp_millis());
+        let session_id = format!("sess_{}_{}", Utc::now().timestamp_millis(), uuid::Uuid::new_v4());
         let now = Utc::now();
         let expires = now + chrono::Duration::minutes(ttl_minutes);
 
@@ -670,7 +670,7 @@ mod tests {
             let profile = AuthProfile {
                 id: format!("test_{}", i),
                 name: format!("Profile {}", i),
-                target_url: format("https://example{}.com", i),
+                target_url: format!("https://example{}.com", i),
                 auth_type: AuthType::Form,
                 username: None,
                 encrypted_password: None,
@@ -694,6 +694,26 @@ mod tests {
     #[test]
     fn test_session_management() {
         let manager = AuthProfileManager::new_in_memory().unwrap();
+
+        // auth_sessions.profile_id has a FK to auth_profiles.id, so seed the profile.
+        let profile = AuthProfile {
+            id: "profile_1".to_string(),
+            name: "Session Profile".to_string(),
+            target_url: "https://example.com".to_string(),
+            auth_type: AuthType::None,
+            username: None,
+            encrypted_password: None,
+            login_url: None,
+            mfa_config: None,
+            custom_headers: None,
+            login_script: None,
+            session_ttl_minutes: 30,
+            reauth_strategy: ReauthStrategy::Automatic,
+            created_at: Utc::now().to_rfc3339(),
+            updated_at: Utc::now().to_rfc3339(),
+            last_used: None,
+        };
+        manager.create_profile(&profile).unwrap();
 
         let session_id = manager.create_session(
             "profile_1",
