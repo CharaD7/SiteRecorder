@@ -626,10 +626,18 @@ impl NetworkScanner {
         let mut info = Self::parse_certificate(&cert_pem)?;
         info.hostname = hostname.to_string();
 
-        // Session parameters live in stderr for s_client.
-        info.protocol_version = Self::match_field(&combined, "Protocol  :");
-        info.cipher_suite = Self::match_field(&combined, "Cipher    :");
-        info.key_exchange = Self::match_field(&combined, "Server Temp Key:");
+        // Session parameters. TLS 1.3 and earlier use different output shapes:
+        //   TLS 1.3: "New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384"
+        //   TLS <=1.2: a "Protocol : / Cipher : / Server Temp Key:" block
+        // Both must be handled, or a modern host reports no cipher at all.
+        if let Some((proto, cipher)) = Self::match_new_line(&combined) {
+            info.protocol_version = Some(proto);
+            info.cipher_suite = Some(cipher);
+        } else {
+            info.protocol_version = Self::match_field(&combined, "Protocol  :");
+            info.cipher_suite = Self::match_field(&combined, "Cipher    :");
+            info.key_exchange = Self::match_field(&combined, "Server Temp Key:");
+        }
 
         if let Some(proto) = &info.protocol_version {
             if proto.contains("TLSv1.0") || proto.contains("SSLv3") {
@@ -715,6 +723,36 @@ impl NetworkScanner {
         } else {
             Some(text)
         }
+    }
+
+    /// Parse the TLS 1.3 "New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384" line.
+    ///
+    /// Returns (protocol, cipher). TLS 1.3 drops the legacy
+    /// "Protocol : / Cipher :" block entirely, so without this a modern host
+    /// reports no cipher suite at all.
+    fn match_new_line(text: &str) -> Option<(String, String)> {
+        let line = text.lines().find(|l| {
+            let t = l.trim();
+            t.starts_with("New,") && t.contains("TLS") && t.contains("Cipher is")
+        })?;
+
+        let parts: Vec<&str> = line.trim().split(',').map(|p| p.trim()).collect();
+        if parts.len() < 3 {
+            return None;
+        }
+
+        let proto = parts[1].to_string();
+        let cipher_part = parts[2];
+        let cipher = cipher_part
+            .strip_prefix("Cipher is ")
+            .unwrap_or(cipher_part)
+            .trim()
+            .to_string();
+
+        if proto.is_empty() || cipher.is_empty() {
+            return None;
+        }
+        Some((proto, cipher))
     }
 
     /// Pull a whitespace-delimited value following `prefix` from s_client output.
@@ -892,6 +930,38 @@ mod tests {
     #[test]
     fn absent_field_yields_none() {
         assert_eq!(NetworkScanner::match_field("nothing here", "Protocol  :"), None);
+    }
+
+    // Regression: TLS 1.3 dropped the legacy "Protocol : / Cipher :" block, so
+    // a modern host reported no cipher suite at all until this was handled.
+
+    #[test]
+    fn parses_tls13_new_line() {
+        let text = "    New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384\n    Server public key is 256 bit";
+        assert_eq!(
+            NetworkScanner::match_new_line(text),
+            Some((
+                "TLSv1.3".to_string(),
+                "TLS_AES_256_GCM_SHA384".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn tls12_output_has_no_new_line() {
+        let text = "    Protocol  : TLSv1.2\n    Cipher    : ECDHE-RSA-AES256-GCM-SHA384";
+        assert_eq!(NetworkScanner::match_new_line(text), None);
+        // ...and the legacy parser still handles it.
+        assert_eq!(
+            NetworkScanner::match_field(text, "Cipher    :"),
+            Some("ECDHE-RSA-AES256-GCM-SHA384".to_string())
+        );
+    }
+
+    #[test]
+    fn malformed_new_line_yields_none() {
+        assert_eq!(NetworkScanner::match_new_line("New, TLSv1.3"), None);
+        assert_eq!(NetworkScanner::match_new_line("New, , Cipher is X"), None);
     }
 
     #[test]

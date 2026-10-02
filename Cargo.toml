@@ -95,6 +95,9 @@ argon2 = "0.5"
 # Paths
 dirs = "5.0"
 
+[dev-dependencies]
+tempfile = "3.10"
+
 [build-dependencies]
 tauri-build = "1.5"
 
