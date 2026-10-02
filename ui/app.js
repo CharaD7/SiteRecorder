@@ -2634,21 +2634,70 @@
         $('#auditSearch')?.addEventListener('input', filterAuditLog);
     }
 
+    // Prefer the hash-chained audit log (Wave 1.5). It carries integrity hashes,
+    // which the older auth-profile log does not.
     async function loadAuditLog() {
+        let entries = [];
         try {
-            const entries = await invoke('list_audit_entries');
-            state.data.auditEntries = entries || [];
-            renderAuditLog(state.data.auditEntries);
-            updateAuditStats(state.data.auditEntries);
+            entries = await invoke('list_chained_audit_entries', { limit: 500 });
         } catch (e) {
-            showToast('error', 'Load Failed', String(e));
+            showToast('error', 'Load Failed', `Chained audit log unavailable: ${e}`);
+        }
+
+        if (!entries.length) {
+            try {
+                entries = await invoke('list_audit_entries');
+            } catch (_) { /* fall through to empty */ }
+        }
+
+        // Normalise the two shapes (chained uses actor/details/ip_address).
+        const normalised = entries.map(e => ({
+            timestamp: e.timestamp,
+            user: e.actor ?? e.user ?? 'system',
+            action: e.action,
+            description: e.details ?? e.description ?? '',
+            target: e.target,
+            ip: e.ip_address ?? e.ip,
+            hash: e.hash,
+            prev_hash: e.prev_hash,
+        }));
+
+        state.data.auditEntries = normalised;
+        renderAuditLog(normalised);
+        updateAuditStats(normalised);
+        await verifyAuditChain();
+    }
+
+    async function verifyAuditChain() {
+        const el = $('#auditChainStatus');
+        if (!el) return;
+        try {
+            const report = await invoke('verify_audit_integrity');
+            if (report.valid) {
+                el.innerHTML = `<div class="advisory-inline" style="color:var(--severity-high);">
+                    🔒 Chain verified — ${report.entries_checked} entries intact.</div>`;
+            } else {
+                el.innerHTML = `<div class="advisory-banner" style="margin:0">
+                    <span class="advisory-banner-icon">🚨</span>
+                    <div>
+                        <div class="advisory-banner-title">Audit log integrity failure</div>
+                        <div class="advisory-banner-body">${escapeHtml(report.reason || 'unknown')}
+                        (first bad entry: ${report.first_invalid_seq ?? 'n/a'})</div>
+                    </div></div>`;
+            }
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">🔒 Chain not verified: ${escapeHtml(String(e))}</div>`;
         }
     }
 
     function updateAuditStats(entries) {
-        const today = new Date().setHours(0, 0, 0, 0);
-        const todayEntries = entries.filter(e => e.timestamp >= today).length;
-        const criticalEntries = entries.filter(e => e.action.includes('deleted') || e.action.includes('settings_changed')).length;
+        const dayMs = 86400000;
+        const todayEntries = entries.filter(e => {
+            const t = Date.parse(e.timestamp);
+            return Number.isFinite(t) && (Date.now() - t) < dayMs;
+        }).length;
+        const criticalEntries = entries.filter(e =>
+            (e.action || '').includes('delete') || (e.action || '').includes('settings_changed')).length;
         const uniqueUsers = new Set(entries.map(e => e.user)).size;
 
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -5309,7 +5358,9 @@
         $('#cancelFindingBtn')?.addEventListener('click', () => {
             $('#findingForm').style.display = 'none';
         });
-        $('#findingSearch')?.addEventListener('input', (e) => filterFindingsList(e.target.value));
+        // Re-query the database rather than filtering a stale in-memory array.
+        $('#findingSearch')?.addEventListener('input', () => loadFindings());
+        $('#findingStatusFilter')?.addEventListener('change', () => loadFindings());
     }
 
     function exportFindings() {
@@ -5436,41 +5487,430 @@
         }, 100);
     }
 
-    function loadFindings() {
-        const findings = state.data.findings || [];
-        $('#findingsCritical').textContent = findings.filter(f => f.severity === 'critical').length;
-        $('#findingsHigh').textContent = findings.filter(f => f.severity === 'high').length;
-        $('#findingsMedium').textContent = findings.filter(f => f.severity === 'medium').length;
-        $('#findingsLow').textContent = findings.filter(f => f.severity === 'low').length;
-        $('#findingsInfo').textContent = findings.filter(f => f.severity === 'info').length;
+    // Findings come from the database (Wave 2), not from `state.data`, so they
+    // survive a restart. Severity arrives uppercase from the Rust enum.
+    function severityClass(sev) {
+        const s = String(sev || '').toUpperCase();
+        return {
+            CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'warning',
+            LOW: 'info', INFO: 'success',
+        }[s] || 'info';
+    }
 
+    function severityIcon(sev) {
+        const s = String(sev || '').toUpperCase();
+        return { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', INFO: '🟢' }[s] || '🟢';
+    }
+
+    async function loadFindings() {
         const container = $('#findingsList');
-        if (!container) return;
+        const search = ($('#findingSearch')?.value || '').trim().toLowerCase();
+        const statusFilter = $('#findingStatusFilter')?.value || '';
 
-        if (findings.length === 0) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">No Findings</div><div class="empty-state-text">Findings will appear here when discovered.</div></div>';
+        let findings = [];
+        try {
+            findings = await invoke('list_findings', { limit: 500 });
+        } catch (e) {
+            if (container) {
+                container.innerHTML = `<div class="advisory-banner" style="margin:0">
+                    <span class="advisory-banner-icon">⚠️</span>
+                    <div>
+                        <div class="advisory-banner-title">Findings could not be loaded</div>
+                        <div class="advisory-banner-body">${escapeHtml(String(e))}. Findings are read
+                        from the shared database; if it is unavailable, nothing is being persisted.</div>
+                    </div>
+                </div>`;
+            }
+            setFindingsCounts([], 0);
             return;
         }
 
-        container.innerHTML = findings.map(f => `
+        // Apply client-side search/filter on top of the server result.
+        const visible = findings.filter(f => {
+            if (statusFilter && String(f.status || '').toLowerCase() !== statusFilter.toLowerCase()) {
+                return false;
+            }
+            if (!search) return true;
+            return [f.title, f.category, f.cwe_id, f.description]
+                .filter(Boolean)
+                .some(v => String(v).toLowerCase().includes(search));
+        });
+
+        setFindingsCounts(findings, findings.length - visible.length);
+
+        if (!container) return;
+
+        if (findings.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Findings</div>
+                <div class="empty-state-text">Run a vulnerability scan to populate this list, or add one manually.</div></div>`;
+            return;
+        }
+
+        if (visible.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div>
+                <div class="empty-state-title">No matches</div>
+                <div class="empty-state-text">${findings.length} finding(s) hidden by the current filter.</div></div>`;
+            return;
+        }
+
+        container.innerHTML = visible.map(f => `
             <div class="finding-card">
                 <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
                     <div class="flex items-center gap-3">
-                        <span class="status-icon">${f.severity === 'critical' ? '🔴' : f.severity === 'high' ? '🟠' : f.severity === 'medium' ? '🟡' : f.severity === 'low' ? '🔵' : '🟢'}</span>
+                        <span class="status-icon">${severityIcon(f.severity)}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
-                        <span class="badge badge-${f.severity === 'critical' ? 'critical' : f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'warning' : f.severity === 'low' ? 'info' : 'success'}">${escapeHtml(f.severity)}</span>
+                        <span class="badge badge-${severityClass(f.severity)}">${escapeHtml(f.severity)}</span>
                         <span class="badge badge-info">${escapeHtml(f.category || 'other')}</span>
+                        ${f.status && f.status !== 'new' ? `<span class="badge badge-warning">${escapeHtml(f.status)}</span>` : ''}
+                        ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
                     </div>
                     <span class="text-tertiary text-sm">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description || '')}</div>
-                    <div class="text-sm mb-2"><strong>Target:</strong> <code>${escapeHtml(f.target || 'N/A')}</code></div>
                     ${f.remediation ? `<div class="finding-remediation"><strong>Remediation:</strong> ${escapeHtml(f.remediation)}</div>` : ''}
-                    <div class="text-sm text-tertiary mt-2">Discovered: ${f.discoveredAt ? new Date(f.discoveredAt).toLocaleDateString() : 'N/A'}</div>
+                    ${f.cve_ids?.length ? `<div class="text-sm mt-2"><strong>CVE:</strong> ${f.cve_ids.map(escapeHtml).join(', ')}</div>` : ''}
+                    ${f.evidence?.length ? `<details class="mt-2"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">Evidence (${f.evidence.length})</summary>${f.evidence.map(e => `<div class="code-block mt-1" style="font-size:0.75rem;">${escapeHtml(e.description || '')}</div>`).join('')}</details>` : ''}
+                    <div class="text-sm text-tertiary mt-2">Discovered: ${f.created_at ? new Date(f.created_at).toLocaleString() : 'N/A'}${f.scan_id ? ` · scan <code>${escapeHtml(f.scan_id)}</code>` : ''}</div>
+                    <div class="flex gap-2 mt-3">
+                        ${statusActionButton(f, 'confirmed', 'Confirm')}
+                        ${statusActionButton(f, 'false_positive', 'False positive')}
+                        ${statusActionButton(f, 'remediated', 'Remediated')}
+                        ${statusActionButton(f, 'accepted', 'Accept risk')}
+                    </div>
                 </div>
             </div>
         `).join('');
+
+        // Status transitions persist to the database and are audited.
+        container.querySelectorAll('[data-finding-status]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.findingId;
+                const next = btn.dataset.findingStatus;
+                btn.disabled = true;
+                try {
+                    await invoke('update_finding_status', { id, status: next });
+                    showToast('success', 'Finding updated', `Marked as ${next.replace('_', ' ')}.`);
+                    await loadFindings();
+                } catch (err) {
+                    btn.disabled = false;
+                    showToast('error', 'Update failed', String(err));
+                }
+            });
+        });
+    }
+
+    function statusActionButton(f, status, label) {
+        if (String(f.status || '').toLowerCase() === status) return '';
+        return `<button class="btn btn-sm btn-secondary" data-finding-id="${escapeHtml(f.id)}"
+            data-finding-status="${status}">${label}</button>`;
+    }
+
+    function setFindingsCounts(findings, hidden) {
+        const count = (sev) => findings.filter(f => String(f.severity || '').toUpperCase() === sev).length;
+        const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+        set('#findingsCritical', count('CRITICAL'));
+        set('#findingsHigh', count('HIGH'));
+        set('#findingsMedium', count('MEDIUM'));
+        set('#findingsLow', count('LOW'));
+        set('#findingsInfo', count('INFO'));
+        set('#findingsTotal', findings.length + (hidden ? ` (${hidden} hidden)` : ''));
+    }
+
+    async function saveFinding() {
+        const title = $('#findingTitle')?.value?.trim();
+        const severity = $('#findingSeverity')?.value || 'MEDIUM';
+        const category = $('#findingCategory')?.value || 'manual';
+        const description = $('#findingDesc')?.value?.trim() || '';
+        const remediation = $('#findingRemediation')?.value?.trim() || '';
+        const cweId = $('#findingCwe')?.value?.trim() || null;
+
+        if (!title) {
+            showToast('error', 'Missing Title', 'Please enter a finding title.');
+            return;
+        }
+
+        try {
+            // Persist, rather than pushing to `state.data` where it would be
+            // lost on restart (this was the original Wave 2 defect).
+            await invoke('create_finding', {
+                title,
+                severity: String(severity).toUpperCase(),
+                category,
+                description,
+                remediation,
+                cweId,
+                assetId: null,
+            });
+
+            $('#findingForm').style.display = 'none';
+            ['findingTitle', 'findingDesc', 'findingRemediation', 'findingCwe']
+                .forEach(id => { const el = $(`#${id}`); if (el) el.value = ''; });
+
+            await loadFindings();
+            showToast('success', 'Finding Added', `"${title}" has been recorded.`);
+            addActivity(`Finding added: ${title}`);
+        } catch (e) {
+            showToast('error', 'Could Not Save', String(e));
+        }
+    }
+
+    function exportFindings() {
+        const findings = state.data.findings || [];
+        if (findings.length === 0) {
+            showToast('warning', 'No Findings', 'There are no findings to export.');
+            return;
+        }
+
+        showModal({
+            title: '📤 Export Findings',
+            body: `
+                <div class="form-group">
+                    <label class="form-label">Export Format</label>
+                    <select class="input" id="exportFormat">
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Severity Filter</label>
+                    <select class="input" id="exportSeverityFilter">
+                        <option value="all">All Severities</option>
+                        <option value="critical">Critical Only</option>
+                        <option value="critical-high">Critical & High</option>
+                        <option value="medium-low">Medium & Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Include Fields</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <label class="checkbox"><input type="checkbox" id="expTitle" checked> Title</label>
+                        <label class="checkbox"><input type="checkbox" id="expSeverity" checked> Severity</label>
+                        <label class="checkbox"><input type="checkbox" id="expCategory" checked> Category</label>
+                        <label class="checkbox"><input type="checkbox" id="expTarget" checked> Target</label>
+                        <label class="checkbox"><input type="checkbox" id="expDescription" checked> Description</label>
+                        <label class="checkbox"><input type="checkbox" id="expRemediation"> Remediation</label>
+                        <label class="checkbox"><input type="checkbox" id="expDate" checked> Date</label>
+                    </div>
+                </div>
+            `,
+            actions: [
+                '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>',
+                '<button class="btn btn-primary" id="processExportFindingsBtn">Export</button>',
+            ],
+        });
+
+        setTimeout(() => {
+            $('#processExportFindingsBtn')?.addEventListener('click', () => {
+                const format = $('#exportFormat')?.value;
+                const severityFilter = $('#exportSeverityFilter')?.value;
+                const fields = {
+                    title: $('#expTitle')?.checked,
+                    severity: $('#expSeverity')?.checked,
+                    category: $('#expCategory')?.checked,
+                    target: $('#expTarget')?.checked,
+                    description: $('#expDescription')?.checked,
+                    remediation: $('#expRemediation')?.checked,
+                    date: $('#expDate')?.checked,
+                };
+
+                let filtered = [...findings];
+                if (severityFilter === 'critical') {
+                    filtered = filtered.filter(f => f.severity === 'critical');
+                } else if (severityFilter === 'critical-high') {
+                    filtered = filtered.filter(f => f.severity === 'critical' || f.severity === 'high');
+                } else if (severityFilter === 'medium-low') {
+                    filtered = filtered.filter(f => f.severity === 'medium' || f.severity === 'low' || f.severity === 'info');
+                }
+
+                if (filtered.length === 0) {
+                    showToast('warning', 'No Results', 'No findings match the selected filter.');
+                    return;
+                }
+
+                let output = '';
+                const selectedFields = Object.entries(fields).filter(([, v]) => v).map(([k]) => k);
+
+                if (format === 'csv') {
+                    output = selectedFields.join(',') + '\n';
+                    for (const f of filtered) {
+                        const row = selectedFields.map(field => {
+                            let val = '';
+                            switch(field) {
+                                case 'title': val = f.title || ''; break;
+                                case 'severity': val = f.severity || ''; break;
+                                case 'category': val = f.category || ''; break;
+                                case 'target': val = f.target || ''; break;
+                                case 'description': val = (f.description || '').replace(/,/g, ';').replace(/\n/g, ' '); break;
+                                case 'remediation': val = (f.remediation || '').replace(/,/g, ';').replace(/\n/g, ' '); break;
+                                case 'date': val = f.discoveredAt ? new Date(f.discoveredAt).toISOString() : ''; break;
+                            }
+                            return `"${val}"`;
+                        });
+                        output += row.join(',') + '\n';
+                    }
+                } else {
+                    const jsonObj = filtered.map(f => {
+                        const obj = {};
+                        if (fields.title) obj.title = f.title;
+                        if (fields.severity) obj.severity = f.severity;
+                        if (fields.category) obj.category = f.category;
+                        if (fields.target) obj.target = f.target;
+                        if (fields.description) obj.description = f.description;
+                        if (fields.remediation) obj.remediation = f.remediation;
+                        if (fields.date) obj.discoveredAt = f.discoveredAt ? new Date(f.discoveredAt).toISOString() : null;
+                        return obj;
+                    });
+                    output = JSON.stringify(jsonObj, null, 2);
+                }
+
+                const blob = new Blob([output], { type: format === 'csv' ? 'text/csv' : 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `findings_export_${new Date().toISOString().slice(0, 10)}.${format}`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                $('.modal-overlay').remove();
+                showToast('success', 'Export Complete', `${filtered.length} findings exported to ${format.toUpperCase()}.`);
+                addActivity(`Exported ${filtered.length} findings to ${format.toUpperCase()}`);
+            });
+        }, 100);
+    }
+
+    // Findings come from the database (Wave 2), not from `state.data`, so they
+    // survive a restart. Severity arrives uppercase from the Rust enum.
+    function severityClass(sev) {
+        const s = String(sev || '').toUpperCase();
+        return {
+            CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'warning',
+            LOW: 'info', INFO: 'success',
+        }[s] || 'info';
+    }
+
+    function severityIcon(sev) {
+        const s = String(sev || '').toUpperCase();
+        return { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', INFO: '🟢' }[s] || '🟢';
+    }
+
+    async function loadFindings() {
+        const container = $('#findingsList');
+        const search = ($('#findingSearch')?.value || '').trim().toLowerCase();
+        const statusFilter = $('#findingStatusFilter')?.value || '';
+
+        let findings = [];
+        try {
+            findings = await invoke('list_findings', { limit: 500 });
+        } catch (e) {
+            if (container) {
+                container.innerHTML = `<div class="advisory-banner" style="margin:0">
+                    <span class="advisory-banner-icon">⚠️</span>
+                    <div>
+                        <div class="advisory-banner-title">Findings could not be loaded</div>
+                        <div class="advisory-banner-body">${escapeHtml(String(e))}. Findings are read
+                        from the shared database; if it is unavailable, nothing is being persisted.</div>
+                    </div>
+                </div>`;
+            }
+            setFindingsCounts([], 0);
+            return;
+        }
+
+        // Apply client-side search/filter on top of the server result.
+        const visible = findings.filter(f => {
+            if (statusFilter && String(f.status || '').toLowerCase() !== statusFilter.toLowerCase()) {
+                return false;
+            }
+            if (!search) return true;
+            return [f.title, f.category, f.cwe_id, f.description]
+                .filter(Boolean)
+                .some(v => String(v).toLowerCase().includes(search));
+        });
+
+        setFindingsCounts(findings, findings.length - visible.length);
+
+        if (!container) return;
+
+        if (findings.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Findings</div>
+                <div class="empty-state-text">Run a vulnerability scan to populate this list, or add one manually.</div></div>`;
+            return;
+        }
+
+        if (visible.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div>
+                <div class="empty-state-title">No matches</div>
+                <div class="empty-state-text">${findings.length} finding(s) hidden by the current filter.</div></div>`;
+            return;
+        }
+
+        container.innerHTML = visible.map(f => `
+            <div class="finding-card">
+                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="flex items-center gap-3">
+                        <span class="status-icon">${severityIcon(f.severity)}</span>
+                        <span class="font-medium">${escapeHtml(f.title)}</span>
+                        <span class="badge badge-${severityClass(f.severity)}">${escapeHtml(f.severity)}</span>
+                        <span class="badge badge-info">${escapeHtml(f.category || 'other')}</span>
+                        ${f.status && f.status !== 'new' ? `<span class="badge badge-warning">${escapeHtml(f.status)}</span>` : ''}
+                        ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
+                    </div>
+                    <span class="text-tertiary text-sm">▼</span>
+                </div>
+                <div class="finding-card-body hidden">
+                    <div class="text-sm text-secondary mb-2">${escapeHtml(f.description || '')}</div>
+                    ${f.remediation ? `<div class="finding-remediation"><strong>Remediation:</strong> ${escapeHtml(f.remediation)}</div>` : ''}
+                    ${f.cve_ids?.length ? `<div class="text-sm mt-2"><strong>CVE:</strong> ${f.cve_ids.map(escapeHtml).join(', ')}</div>` : ''}
+                    ${f.evidence?.length ? `<details class="mt-2"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">Evidence (${f.evidence.length})</summary>${f.evidence.map(e => `<div class="code-block mt-1" style="font-size:0.75rem;">${escapeHtml(e.description || '')}</div>`).join('')}</details>` : ''}
+                    <div class="text-sm text-tertiary mt-2">Discovered: ${f.created_at ? new Date(f.created_at).toLocaleString() : 'N/A'}${f.scan_id ? ` · scan <code>${escapeHtml(f.scan_id)}</code>` : ''}</div>
+                    <div class="flex gap-2 mt-3">
+                        ${statusActionButton(f, 'confirmed', 'Confirm')}
+                        ${statusActionButton(f, 'false_positive', 'False positive')}
+                        ${statusActionButton(f, 'remediated', 'Remediated')}
+                        ${statusActionButton(f, 'accepted', 'Accept risk')}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        // Status transitions persist to the database and are audited.
+        container.querySelectorAll('[data-finding-status]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.findingId;
+                const next = btn.dataset.findingStatus;
+                btn.disabled = true;
+                try {
+                    await invoke('update_finding_status', { id, status: next });
+                    showToast('success', 'Finding updated', `Marked as ${next.replace('_', ' ')}.`);
+                    await loadFindings();
+                } catch (err) {
+                    btn.disabled = false;
+                    showToast('error', 'Update failed', String(err));
+                }
+            });
+        });
+    }
+
+    function statusActionButton(f, status, label) {
+        if (String(f.status || '').toLowerCase() === status) return '';
+        return `<button class="btn btn-sm btn-secondary" data-finding-id="${escapeHtml(f.id)}"
+            data-finding-status="${status}">${label}</button>`;
+    }
+
+    function setFindingsCounts(findings, hidden) {
+        const count = (sev) => findings.filter(f => String(f.severity || '').toUpperCase() === sev).length;
+        const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+        set('#findingsCritical', count('CRITICAL'));
+        set('#findingsHigh', count('HIGH'));
+        set('#findingsMedium', count('MEDIUM'));
+        set('#findingsLow', count('LOW'));
+        set('#findingsInfo', count('INFO'));
+        set('#findingsTotal', findings.length + (hidden ? ` (${hidden} hidden)` : ''));
     }
 
     function saveFinding() {
@@ -8531,9 +8971,37 @@
     // Initialization
     // ========================================
 
+    async function refreshDatabaseStatus() {
+        const el = $('#dbStatusBanner');
+        if (!el) return;
+        try {
+            const st = await invoke('get_database_status');
+            if (st.available) {
+                el.innerHTML = `<div class="advisory-inline" style="color:var(--text-tertiary);">
+                    💾 Persisting to <code>${escapeHtml(st.path)}</code> (schema v${st.schema_version})</div>`;
+            } else {
+                el.innerHTML = `<div class="advisory-banner" style="margin:0">
+                    <span class="advisory-banner-icon">🚨</span>
+                    <div>
+                        <div class="advisory-banner-title">Not persisting — database unavailable</div>
+                        <div class="advisory-banner-body">Findings, assets and audit entries will be lost
+                        when this session ends. Expected location:
+                        <code>${escapeHtml(st.path)}</code></div>
+                    </div></div>`;
+            }
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">💾 Persistence status unknown: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     async function init() {
         initTauri();
         loadTheme();
+
+        // Surface persistence health immediately. If the shared database failed
+        // to open, findings and scans are not being stored, and the operator
+        // must know before they start a scan rather than after.
+        refreshDatabaseStatus();
 
         setupKeyboardShortcuts();
         initCustomSelects();

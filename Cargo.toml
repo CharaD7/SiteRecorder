@@ -88,6 +88,7 @@ totp-rs = { version = "5.5", features = ["qr"] }
 
 # Crypto utilities
 rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
 base64 = "0.21"
 aes-gcm = "0.10"
 argon2 = "0.5"

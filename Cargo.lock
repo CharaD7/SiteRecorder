@@ -6358,6 +6358,7 @@ dependencies = [
  "totp-rs",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "web3",
  "white-team",
 ]

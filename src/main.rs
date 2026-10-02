@@ -565,6 +565,73 @@ async fn update_finding_status(
     Ok(())
 }
 
+/// Create a finding entered by an analyst (as opposed to one produced by a scan).
+#[tauri::command]
+async fn create_finding(
+    title: String,
+    severity: String,
+    category: String,
+    description: String,
+    remediation: String,
+    cwe_id: Option<String>,
+    asset_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<db::models::Finding, String> {
+    use db::models::{Finding, FindingStatus, Severity};
+    use std::str::FromStr;
+
+    if title.trim().is_empty() {
+        return Err("Finding title is required".to_string());
+    }
+
+    let severity = Severity::from_str(&severity).map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let operator = state.operator_id.lock().await.clone();
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+
+    let finding = Finding {
+        id: uuid::Uuid::new_v4().to_string(),
+        scan_id: None,
+        asset_id,
+        title: title.trim().to_string(),
+        severity,
+        status: FindingStatus::New,
+        category,
+        cwe_id,
+        cve_ids: vec![],
+        cvss_score: None,
+        description,
+        remediation,
+        references: vec![],
+        mitre_techniques: vec![],
+        evidence: vec![],
+        assignee: None,
+        due_date: None,
+        created_at: now.clone(),
+        updated_at: now,
+        user_id: operator.clone(),
+    };
+
+    findings::insert(db.conn(), &finding).map_err(|e| e.to_string())?;
+
+    if let Some(actor) = operator {
+        let _ = db::audit::append(
+            db.conn(),
+            db::audit::NewAuditEntry {
+                actor,
+                action: "finding_created".to_string(),
+                target: Some(finding.id.clone()),
+                details: Some(format!("{} ({})", finding.title, finding.severity)),
+                ip_address: None,
+            },
+        );
+    }
+
+    Ok(finding)
+}
+
 #[tauri::command]
 async fn findings_severity_breakdown(
     state: State<'_, AppState>,
@@ -2076,6 +2143,7 @@ fn run_gui_mode() {
             list_audit_entries,
             // Persistence + tamper-evident audit (Wave 1)
             // Findings (Wave 2)
+            create_finding,
             list_findings,
             get_finding,
             update_finding_status,

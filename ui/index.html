@@ -79,6 +79,7 @@
 
         <!-- ========== CONTENT AREA ========== -->
         <main class="content" id="contentArea">
+            <div id="dbStatusBanner" style="margin-bottom:12px;"></div>
             <!-- Dynamic content based on active section -->
         </main>
     </div>
@@ -2382,10 +2383,6 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Target</label>
-                    <input type="text" class="input" id="findingTarget" placeholder="https://example.com">
-                </div>
-                <div class="form-group">
                     <label class="form-label">Category</label>
                     <select class="input" id="findingCategory">
                         <option value="injection">Injection</option>
@@ -2395,6 +2392,16 @@
                         <option value="config">Configuration</option>
                         <option value="disclosure">Information Disclosure</option>
                     </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">CWE (optional)</label>
+                    <input type="text" class="input" id="findingCwe" placeholder="CWE-89">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Target URL (optional)</label>
+                    <input type="text" class="input" id="findingTarget" placeholder="https://example.com">
                 </div>
             </div>
             <div class="form-group">
@@ -2416,6 +2423,14 @@
         <div class="card-header">
             <span class="card-title">All Findings</span>
             <input type="text" class="input input-sm" placeholder="Search findings..." style="width:200px;" id="findingSearch">
+            <select class="input input-sm" id="findingStatusFilter" style="width:150px;">
+                <option value="">All statuses</option>
+                <option value="new">New</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="false_positive">False positive</option>
+                <option value="remediated">Remediated</option>
+                <option value="accepted">Accepted</option>
+            </select>
         </div>
         <div class="card-body" id="findingsList">
             <div class="empty-state">
@@ -3811,11 +3826,14 @@
             <div class="card-header">
                 <span class="card-title">Audit Entries</span>
             </div>
-            <div class="card-body" id="auditLogList">
-                <div class="empty-state">
-                    <div class="empty-state-icon">📜</div>
-                    <div class="empty-state-title">No Audit Entries</div>
-                    <div class="empty-state-text">System activity will be logged here.</div>
+            <div class="card-body">
+                <div id="auditChainStatus" class="mb-3"></div>
+                <div id="auditLogList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📜</div>
+                        <div class="empty-state-title">No Audit Entries</div>
+                        <div class="empty-state-text">System activity will be logged here.</div>
+                    </div>
                 </div>
             </div>
         </div>
