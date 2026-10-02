@@ -319,10 +319,20 @@ impl NetworkScanner {
         match connect_result {
             Ok(Ok(stream)) => {
                 let mut banner = None;
-                let service = Self::detect_service(addr.port());
+                let mut service = Self::detect_service(addr.port());
 
                 if grab_banner {
-                    banner = Self::grab_banner(stream).await;
+                    banner = Self::grab_banner(stream, addr).await;
+                }
+
+                // A banner often reveals the exact version, which the port map
+                // alone cannot know.
+                if let Some(svc) = service.as_mut() {
+                    if svc.version.is_none() {
+                        if let Some(b) = &banner {
+                            svc.version = Self::extract_version(svc, b);
+                        }
+                    }
                 }
 
                 Ok(PortResult {
@@ -394,7 +404,125 @@ impl NetworkScanner {
         })
     }
 
-    async fn grab_banner(_stream: TcpStream) -> Option<String> {
+    /// Read a service banner.
+    ///
+    /// Ports that speak HTTP get a minimal HEAD request first, because those
+    /// services stay silent until spoken to; everything else is read passively.
+    /// A banner is best-effort: silence is a legitimate result, not an error.
+    async fn grab_banner(mut stream: TcpStream, addr: SocketAddr) -> Option<String> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        const BANNER_TIMEOUT: Duration = Duration::from_secs(3);
+        const MAX_BANNER: usize = 1024;
+
+        if matches!(addr.port(), 80 | 8080 | 8000 | 8888 | 3000 | 5000) {
+            let host = addr.ip();
+            let request = format!("HEAD / HTTP/1.0\r\nHost: {}\r\nUser-Agent: siterecorder\r\n\r\n", host);
+            if timeout(Duration::from_secs(2), stream.write_all(request.as_bytes()))
+                .await
+                .is_err()
+            {
+                return None;
+            }
+        }
+
+        let mut buf = vec![0u8; MAX_BANNER];
+        match timeout(BANNER_TIMEOUT, stream.read(&mut buf)).await {
+            Ok(Ok(0)) => None,
+            Ok(Ok(n)) => {
+                let raw = String::from_utf8_lossy(&buf[..n]).to_string();
+                let cleaned: String = raw
+                    .lines()
+                    .map(|l| l.trim_end_matches('\r'))
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                let cleaned = cleaned.trim().to_string();
+                if cleaned.is_empty() {
+                    None
+                } else {
+                    Some(cleaned.chars().take(MAX_BANNER).collect())
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// A plausible product version: at least two dot-separated numeric parts.
+    ///
+    /// Rejects bare protocol numbers like "1.1" from an HTTP status line.
+    fn is_plausible_version(candidate: &str) -> bool {
+        let trimmed = candidate.trim_end_matches('.');
+        let parts: Vec<&str> = trimmed.split('.').filter(|p| !p.is_empty()).collect();
+        parts.len() >= 2
+            && trimmed.len() >= 5
+            && parts.iter().all(|p| p.chars().next().is_some_and(|c| c.is_ascii_digit()))
+    }
+
+    /// Extract a version string that follows the service name in a banner.
+    ///
+    /// Banners put the product and version in many shapes -- `nginx/1.18.0`,
+    /// `OpenSSH_8.9p1`, `MySQL 8.0.32` -- so this searches for the product
+    /// name positionally and then reads the version characters that follow,
+    /// rather than tokenising on separators that are themselves the delimiter.
+    fn extract_version(service: &ServiceInfo, banner: &str) -> Option<String> {
+        let needle = service.name.replace(' ', "");
+        if needle.is_empty() {
+            return None;
+        }
+
+        let haystack: Vec<char> = banner.chars().collect();
+        let needle_chars: Vec<char> = needle.chars().collect();
+
+        // Case-insensitive search for the product name.
+        let mut start: Option<usize> = None;
+        if needle_chars.len() <= haystack.len() {
+            'outer: for i in 0..=(haystack.len() - needle_chars.len()) {
+                for j in 0..needle_chars.len() {
+                    if haystack[i + j].to_ascii_lowercase() != needle_chars[j].to_ascii_lowercase() {
+                        continue 'outer;
+                    }
+                }
+                start = Some(i + needle_chars.len());
+                break;
+            }
+        }
+
+        if let Some(pos) = start {
+            // Skip any separator characters before the version begins.
+            let mut i = pos;
+            while i < haystack.len() && !haystack[i].is_ascii_alphanumeric() {
+                i += 1;
+            }
+            // Read the version run: alphanumerics and dots (covers "8.9p1").
+            let mut version = String::new();
+            while i < haystack.len() && (haystack[i].is_ascii_alphanumeric() || haystack[i] == '.') {
+                version.push(haystack[i]);
+                i += 1;
+            }
+            let version = version.trim_end_matches('.').to_string();
+            // Require a plausible product version, else an HTTP banner yields
+            // the protocol version ("HTTP/1.1") as if it were a product version.
+            if Self::is_plausible_version(&version) {
+                return Some(version);
+            }
+        }
+
+        // Fall back to the first dotted numeric run anywhere in the banner.
+        let mut current = String::new();
+        for c in banner.chars() {
+            if c.is_ascii_digit() || c == '.' {
+                current.push(c);
+            } else {
+                if Self::is_plausible_version(&current) {
+                    return Some(current.trim_end_matches('.').to_string());
+                }
+                current.clear();
+            }
+        }
+        if Self::is_plausible_version(&current) {
+            return Some(current.trim_end_matches('.').to_string());
+        }
+
         None
     }
 
@@ -450,32 +578,152 @@ impl NetworkScanner {
         })
     }
 
+    /// Inspect the TLS service on `hostname:port`.
+    ///
+    /// Uses the `openssl s_client` CLI rather than linking a TLS stack: the
+    /// project already shells out (ffmpeg, ffmpeg screen capture) and this
+    /// keeps the dependency footprint small. Returns a typed error when the
+    /// binary is unavailable rather than silently reporting an empty result --
+    /// an "unknown TLS posture" must never look like a clean scan.
     pub async fn check_ssl(hostname: &str, port: u16) -> Result<SslInfo> {
-        let addr = format!("{}:{}", hostname, port);
-        let timeout_dur = Duration::from_secs(5);
+        let output = tokio::process::Command::new("openssl")
+            .args([
+                "s_client",
+                "-connect",
+                &format!("{}:{}", hostname, port),
+                "-servername",
+                hostname,
+                "-showcerts",
+            ])
+            .stdin(std::process::Stdio::null())
+            .output();
 
-        let connect_result = timeout(timeout_dur, TcpStream::connect(&addr)).await;
-
-        match connect_result {
-            Ok(Ok(_stream)) => {
-                Ok(SslInfo {
-                    hostname: hostname.to_string(),
-                    issuer: None,
-                    subject: None,
-                    not_before: None,
-                    not_after: None,
-                    serial_number: None,
-                    fingerprint: None,
-                    san: Vec::new(),
-                    protocol_version: None,
-                    cipher_suite: None,
-                    key_exchange: None,
-                    vulnerabilities: Vec::new(),
-                })
+        let output = match timeout(Duration::from_secs(10), output).await {
+            Ok(Ok(out)) => out,
+            Ok(Err(e)) => {
+                return Err(NetworkError::ScanError(format!(
+                    "could not run openssl: {}. Install OpenSSL to enable TLS inspection.",
+                    e
+                )))
             }
-            Ok(Err(e)) => Err(NetworkError::IoError(e)),
-            Err(_) => Err(NetworkError::Timeout),
+            Err(_) => return Err(NetworkError::Timeout),
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let combined = format!("{}\n{}", stdout, stderr);
+
+        if combined.contains("Connection refused") || combined.contains("connect:errno") {
+            return Err(NetworkError::ScanError(format!(
+                "TCP connection to {}:{} refused",
+                hostname, port
+            )));
         }
+
+        let cert_pem = Self::extract_first_certificate(&stdout)
+            .ok_or_else(|| NetworkError::ScanError("no certificate presented by peer".into()))?;
+
+        let mut info = Self::parse_certificate(&cert_pem)?;
+        info.hostname = hostname.to_string();
+
+        // Session parameters live in stderr for s_client.
+        info.protocol_version = Self::match_field(&combined, "Protocol  :");
+        info.cipher_suite = Self::match_field(&combined, "Cipher    :");
+        info.key_exchange = Self::match_field(&combined, "Server Temp Key:");
+
+        if let Some(proto) = &info.protocol_version {
+            if proto.contains("TLSv1.0") || proto.contains("SSLv3") {
+                info.vulnerabilities
+                    .push("Deprecated protocol version in use (TLS 1.0 / SSLv3)".into());
+            }
+        }
+
+        Ok(info)
+    }
+
+    fn extract_first_certificate(pem_dump: &str) -> Option<String> {
+        let start = pem_dump.find("-----BEGIN CERTIFICATE-----")?;
+        let end = pem_dump[start..].find("-----END CERTIFICATE-----")?;
+        Some(pem_dump[start..start + end + "-----END CERTIFICATE-----".len()].to_string())
+    }
+
+    fn parse_certificate(pem: &str) -> Result<SslInfo> {
+        let issuer = Self::openssl_x509(pem, &["-issuer", "-nameopt", "RFC2253"]);
+        let subject = Self::openssl_x509(pem, &["-subject", "-nameopt", "RFC2253"]);
+        let not_before = Self::openssl_x509(pem, &["-startdate"]);
+        let not_after = Self::openssl_x509(pem, &["-enddate"]);
+        let serial = Self::openssl_x509(pem, &["-serial"]);
+        let fingerprint = Self::openssl_x509(pem, &["-fingerprint", "-sha256"]);
+        let san = Self::openssl_x509(pem, &["-ext", "subjectAltName"]);
+
+        let san_entries = san
+            .as_deref()
+            .map(|raw| {
+                raw.split(',')
+                    .map(|part| {
+                        part.split(':')
+                            .next_back()
+                            .unwrap_or("")
+                            .trim()
+                            .to_string()
+                    })
+                    .filter(|v| !v.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Ok(SslInfo {
+            hostname: String::new(),
+            issuer,
+            subject,
+            not_before,
+            not_after,
+            serial_number: serial,
+            fingerprint,
+            san: san_entries,
+            protocol_version: None,
+            cipher_suite: None,
+            key_exchange: None,
+            vulnerabilities: Vec::new(),
+        })
+    }
+
+    /// Synchronous helper used during certificate parsing.
+    fn openssl_x509(pem: &str, args: &[&str]) -> Option<String> {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("openssl")
+            .arg("x509")
+            .arg("-noout")
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .ok()?;
+
+        // Passing the PEM on stdin keeps it out of the process argument list.
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(pem.as_bytes());
+        }
+
+        let out = child.wait_with_output().ok()?;
+        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if text.is_empty() {
+            None
+        } else {
+            Some(text)
+        }
+    }
+
+    /// Pull a whitespace-delimited value following `prefix` from s_client output.
+    fn match_field<'a>(text: &'a str, prefix: &str) -> Option<String> {
+        text.lines()
+            .find(|l| l.trim_start().starts_with(prefix))
+            .and_then(|l| l.split_once(':'))
+            .map(|(_, v)| v.trim().to_string())
+            .filter(|v| !v.is_empty())
     }
 
     pub async fn dns_lookup(domain: &str) -> Result<DnsResult> {
@@ -559,5 +807,154 @@ mod tests {
         assert!(config.ports.len() > 20);
         assert!(config.ports.contains(&80));
         assert!(config.ports.contains(&443));
+    }
+
+    fn service_named(name: &str) -> ServiceInfo {
+        ServiceInfo {
+            name: name.to_string(),
+            version: None,
+            product: None,
+            extra_info: None,
+            cpe: None,
+        }
+    }
+
+    #[test]
+    fn extracts_slash_delimited_version() {
+        let svc = service_named("nginx");
+        assert_eq!(
+            NetworkScanner::extract_version(&svc, "HTTP/1.1 200 OK\r\nServer: nginx/1.18.0"),
+            Some("1.18.0".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_underscore_delimited_version() {
+        let svc = service_named("OpenSSH");
+        let banner = "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.4";
+        assert_eq!(
+            NetworkScanner::extract_version(&svc, banner),
+            Some("8.9p1".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_spaced_version() {
+        let svc = service_named("MySQL");
+        assert_eq!(
+            NetworkScanner::extract_version(&svc, "5.5.68-0ubuntu0.22.04.1"),
+            Some("5.5.68".to_string())
+        );
+    }
+
+    #[test]
+    fn no_version_in_banner_yields_none() {
+        let svc = service_named("http");
+        assert_eq!(NetworkScanner::extract_version(&svc, "HTTP/1.1 400 Bad Request"), None);
+    }
+
+    #[test]
+    fn empty_banner_yields_none() {
+        let svc = service_named("http");
+        assert_eq!(NetworkScanner::extract_version(&svc, ""), None);
+    }
+
+    #[test]
+    fn extracts_certificate_block() {
+        let dump = "some noise\n-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\ntrailing";
+        let pem = NetworkScanner::extract_first_certificate(dump).unwrap();
+        assert!(pem.starts_with("-----BEGIN CERTIFICATE-----"));
+        assert!(pem.ends_with("-----END CERTIFICATE-----"));
+    }
+
+    #[test]
+    fn missing_certificate_yields_none() {
+        assert!(NetworkScanner::extract_first_certificate("no cert here").is_none());
+    }
+
+    #[test]
+    fn parses_s_client_fields() {
+        let text = "    Protocol  : TLSv1.2\n    Cipher    : ECDHE-RSA-AES256-GCM-SHA384\n    Server Temp Key: X25519";
+        assert_eq!(
+            NetworkScanner::match_field(text, "Protocol  :"),
+            Some("TLSv1.2".to_string())
+        );
+        assert_eq!(
+            NetworkScanner::match_field(text, "Cipher    :"),
+            Some("ECDHE-RSA-AES256-GCM-SHA384".to_string())
+        );
+        assert_eq!(
+            NetworkScanner::match_field(text, "Server Temp Key:"),
+            Some("X25519".to_string())
+        );
+    }
+
+    #[test]
+    fn absent_field_yields_none() {
+        assert_eq!(NetworkScanner::match_field("nothing here", "Protocol  :"), None);
+    }
+
+    #[test]
+    fn certificate_parsing_populates_fields() {
+        if which_openssl().is_none() {
+            eprintln!("skipping: openssl not on PATH");
+            return;
+        }
+        // Self-signed throwaway cert generated in-process.
+        let pem = match signed_test_certificate() {
+            Some(p) => p,
+            None => {
+                eprintln!("skipping: could not generate a test certificate");
+                return;
+            }
+        };
+
+        let info = NetworkScanner::parse_certificate(&pem).unwrap();
+        assert!(info.issuer.is_some(), "issuer should parse");
+        assert!(info.subject.is_some(), "subject should parse");
+        assert!(info.not_before.is_some());
+        assert!(info.not_after.is_some());
+        assert!(info.serial_number.is_some());
+        assert!(info.fingerprint.is_some());
+    }
+
+    fn which_openssl() -> Option<std::path::PathBuf> {
+        std::process::Command::new("openssl")
+            .arg("version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .ok()
+            .filter(|s| s.success())
+            .map(|_| std::path::PathBuf::from("openssl"))
+    }
+
+    /// Generate a throwaway self-signed certificate for parse tests.
+    /// Returns a PEM string. Skips (rather than fails) if openssl is absent.
+    fn signed_test_certificate() -> Option<String> {
+        use std::process::{Command, Stdio};
+
+        let dir = tempfile::tempdir().ok()?;
+        let key = dir.path().join("k.pem");
+        let cert = dir.path().join("c.pem");
+
+        let out = Command::new("openssl")
+            .args([
+                "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", key.to_str()?,
+                "-out", cert.to_str()?,
+                "-days", "1", "-subj", "/CN=siterecorder-test",
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()?;
+        if !out.success() {
+            return None;
+        }
+
+        // Read before `dir` is dropped, which removes the temp directory.
+        let pem = std::fs::read_to_string(&cert).ok()?;
+        Some(pem)
     }
 }
