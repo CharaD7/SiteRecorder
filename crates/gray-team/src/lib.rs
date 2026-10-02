@@ -10,6 +10,9 @@ pub enum GrayTeamError {
     Error(String),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, GrayTeamError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

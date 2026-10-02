@@ -12,6 +12,9 @@ pub enum CrossTeamError {
     Database(#[from] rusqlite::Error),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, CrossTeamError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
-use regex::Regex;
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Client, Response};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -180,7 +180,10 @@ impl AuthEngine {
         });
         session.headers.insert(
             "Authorization".to_string(),
-            format!("Basic {}", base64::encode(format!("{}:{}", username, password))),
+            format!(
+                "Basic {}",
+                BASE64.encode(format!("{}:{}", username, password))
+            ),
         );
         session.is_authenticated = true;
         session.last_activity = Utc::now();
@@ -544,9 +547,9 @@ impl AuthEngine {
 
     pub async fn refresh_session(&self, session: &mut AuthSession) -> Result<()> {
         match &session.auth_type {
-            AuthType::OAuth2 { token_url, client_id, client_secret, grant_type, refresh_token, .. } => {
+            AuthType::OAuth2 { token_url, client_id, client_secret, refresh_token, .. } => {
                 if let Some(refresh) = refresh_token {
-                    let mut params: Vec<(String, String)> = vec![
+                    let params: Vec<(String, String)> = vec![
                         ("grant_type".to_string(), "refresh_token".to_string()),
                         ("refresh_token".to_string(), refresh.clone()),
                         ("client_id".to_string(), client_id.clone()),

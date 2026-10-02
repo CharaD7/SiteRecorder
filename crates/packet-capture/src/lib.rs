@@ -1,5 +1,5 @@
 use chrono::Utc;
-use pnet::datalink::{self, Channel, DataLinkReceiver, NetworkInterface};
+use pnet::datalink::{self, Channel, NetworkInterface};
 use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
 use pnet::packet::ipv4::Ipv4Packet;
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
 #[derive(Debug, Error)]
@@ -196,7 +196,8 @@ impl PacketCapture {
             return Err(CaptureError::Pcap("Capture already running".to_string()));
         }
 
-        let interface = Self::find_interface(interface_name)?;
+        // Validate the interface exists before recording the session.
+        Self::find_interface(interface_name)?;
         let session = CaptureSession {
             id: Uuid::new_v4().to_string(),
             interface: interface_name.to_string(),

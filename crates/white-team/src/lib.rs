@@ -1,6 +1,5 @@
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -12,6 +11,9 @@ pub enum WhiteTeamError {
     Database(#[from] rusqlite::Error),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, WhiteTeamError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

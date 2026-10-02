@@ -16,21 +16,21 @@ use recorder::{Recorder, RecordingConfig, VideoFormat};
 use scanner::{ScanConfig, VulnerabilityScanner, ScanReport};
 use session::SessionManager;
 
-use auth_engine::{AuthEngine, AuthType as EngineAuthType, AuthSession, ApiKeyLocation, OAuth2GrantType};
-use auth_profiles::{AuthProfile, AuthProfileManager, AuthType as ProfileAuthType, MfaConfig, MfaType, ReauthStrategy};
+use auth_engine::{AuthEngine, AuthType as EngineAuthType, ApiKeyLocation, OAuth2GrantType};
+use auth_profiles::{AuthProfile, AuthProfileManager};
 use credentials::CredentialVault;
-use network::{NetworkScanner, ScanConfig as NetworkScanConfig, ScanType as NetworkScanType};
-use passwords::{PasswordCracker, CrackConfig, CrackMethod, HashType};
+use network::{NetworkScanner, ScanConfig as NetworkScanConfig};
+use passwords::{PasswordCracker, CrackConfig, HashType};
 use os_pentest::{OsPentest, OsScanConfig, TargetOs};
 use mobile::{MobileAnalyzer, MobileScanConfig, MobileTarget};
 use cloud::{CloudAuditor, CloudScanConfig, CloudProvider};
 use web3::{Web3Auditor, ContractScanConfig, WalletSecurityConfig, Blockchain};
-use gray_team::{GrayTeam, AttckMatrix};
+use gray_team::GrayTeam;
 use blue_team::{BlueTeam, IncidentSeverity, IncidentCategory};
 use white_team::WhiteTeam;
 use cross_team::CrossTeam;
 use http_proxy::{HttpProxy, ProxyConfig};
-use packet_capture::{PacketCapture, CaptureFilter, FilterType};
+use packet_capture::PacketCapture;
 
 mod cli;
 use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};

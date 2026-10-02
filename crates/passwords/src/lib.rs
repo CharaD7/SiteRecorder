@@ -1,9 +1,7 @@
-use chrono::Utc;
 use md5::Md5;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
-use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,6 +14,9 @@ pub enum PasswordError {
     HashNotFound,
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, PasswordError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

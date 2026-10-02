@@ -1,7 +1,5 @@
 use chrono::Utc;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,6 +12,9 @@ pub enum MobileError {
     ParseError(String),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, MobileError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

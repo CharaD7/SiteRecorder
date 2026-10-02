@@ -1,5 +1,4 @@
 use chrono::{Duration, Utc};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -13,6 +12,9 @@ pub enum BlueTeamError {
     Database(#[from] rusqlite::Error),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, BlueTeamError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -440,7 +442,6 @@ pub struct BlueTeam;
 
 impl BlueTeam {
     pub fn get_soc_dashboard() -> SocDashboard {
-        let now = Utc::now();
         let alerts = Self::generate_sample_alerts();
 
         SocDashboard {
