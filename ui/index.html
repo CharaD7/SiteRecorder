@@ -1210,6 +1210,19 @@
         </div>
     </div>
 
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Reference checklist — not a measurement of your system</div>
+            <div class="advisory-banner-body">
+                This module returns a <strong>fixed advisory checklist</strong>. It does not inspect the
+                local or remote machine, so these are <em>things to check</em>, not confirmed
+                vulnerabilities. Run the commands listed in each finding yourself (many need root) to
+                verify. Real inspection of a live target is not implemented yet.
+            </div>
+        </div>
+    </div>
+
     <div class="card mb-4">
         <div class="card-body">
             <div class="form-row">
@@ -1246,6 +1259,19 @@
         </div>
     </div>
 
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Advisory only — your APK/IPA is not being analyzed</div>
+            <div class="advisory-banner-body">
+                No file is uploaded or opened. This returns a <strong>generic mobile security
+                checklist</strong> (OWASP MASVS categories) that is identical for every input.
+                For real results, analyze the binary with <code>jadx</code>, <code>apktool</code>
+                or <code>class-dump</code> and compare. Binary analysis is not implemented yet.
+            </div>
+        </div>
+    </div>
+
     <div class="card mb-4">
         <div class="card-body">
             <div class="form-group">
@@ -1268,6 +1294,20 @@
         <div>
             <h1 class="content-title">☁️ Cloud Security Assessment</h1>
             <p class="content-subtitle">AWS, Azure, GCP security posture and compliance</p>
+        </div>
+    </div>
+
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Reference baseline — no cloud API calls are made</div>
+            <div class="advisory-banner-body">
+                This module does <strong>not</strong> authenticate to your cloud account or call any
+                provider API. It returns a <strong>static CIS-style baseline checklist</strong> and
+                sample compliance percentages for the selected provider — the same values every run.
+                For real posture data, use native tooling (<code>aws audit-config</code>,
+                <code>az security assessment</code>, <code>gcloud asset inventory</code>).
+            </div>
         </div>
     </div>
 
@@ -1294,6 +1334,19 @@
         <div>
             <h1 class="content-title">⛓️ Web3 Security</h1>
             <p class="content-subtitle">Smart contract auditing and wallet security analysis</p>
+        </div>
+    </div>
+
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Pattern checklist — no on-chain or source data is read</div>
+            <div class="advisory-banner-body">
+                Contract addresses are <strong>not</strong> queried on-chain and no source code is
+                fetched or parsed. You get a <strong>fixed audit checklist</strong>
+                (reentrancy, access control, oracle manipulation, …) plus sample data. For real
+                analysis use <code>slither</code>, <code>mythril</code> or a manual review.
+            </div>
         </div>
     </div>
 
@@ -1353,6 +1406,19 @@
         </div>
         <div class="content-actions">
             <button class="btn btn-secondary" id="exportMatrixBtn">📥 Export</button>
+        </div>
+    </div>
+
+
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Reference content — no live data source is connected</div>
+            <div class="advisory-banner-body">
+                This workspace is populated from a <strong>built-in static dataset</strong> in the backend
+                crate, not from your environment. Treat the values as a reference/starting point.
+                Persistent, per-environment tracking is not implemented yet.
+            </div>
         </div>
     </div>
 
@@ -1511,6 +1577,19 @@
         </div>
         <div class="content-actions">
             <button class="btn btn-secondary" id="refreshSocBtn">🔄 Refresh</button>
+        </div>
+    </div>
+
+
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Reference content — no live data source is connected</div>
+            <div class="advisory-banner-body">
+                This workspace is populated from a <strong>built-in static dataset</strong> in the backend
+                crate, not from your environment. Treat the values as a reference/starting point.
+                Persistent, per-environment tracking is not implemented yet.
+            </div>
         </div>
     </div>
 
@@ -1837,6 +1916,19 @@
         <div class="content-actions">
             <button class="btn btn-secondary" id="importAssetsBtn">📥 Import</button>
             <button class="btn btn-primary" id="addAssetBtn">+ Add Asset</button>
+        </div>
+    </div>
+
+
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Reference content — no live data source is connected</div>
+            <div class="advisory-banner-body">
+                This workspace is populated from a <strong>built-in static dataset</strong> in the backend
+                crate, not from your environment. Treat the values as a reference/starting point.
+                Persistent, per-environment tracking is not implemented yet.
+            </div>
         </div>
     </div>
 
@@ -2411,6 +2503,19 @@
         </div>
     </div>
 
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">⚠️</span>
+        <div>
+            <div class="advisory-banner-title">Demo mode — no wireless adapter is used</div>
+            <div class="advisory-banner-body">
+                The scans below return <strong>hardcoded example devices</strong> after a short delay.
+                No Wi-Fi, Bluetooth, or RFID radio is queried and no packets are captured. Use
+                <code>aircrack-ng</code>, <code>bluetoothctl</code>/<code>hcitool</code> or
+                <code>nfc-list</code> for real wireless work.
+            </div>
+        </div>
+    </div>
+
     <div class="tabs mb-4">
         <button class="tab active" data-tab="wireless-wifi">WiFi</button>
         <button class="tab" data-tab="wireless-bt">Bluetooth</button>
@@ -2475,6 +2580,19 @@
         <div>
             <h1 class="content-title">💥 Exploitation</h1>
             <p class="content-subtitle">Exploit framework & post-exploitation</p>
+        </div>
+    </div>
+
+    <div class="advisory-banner">
+        <span class="advisory-banner-icon">🚧</span>
+        <div>
+            <div class="advisory-banner-title">Not implemented — UI shell only</div>
+            <div class="advisory-banner-body">
+                These tabs are placeholders. Search returns a static sample list, and there is
+                <strong>no listener, session, or post-exploitation module behind this page</strong> —
+                the buttons have no backend and will not establish or run anything. Use
+                <code>metasploit</code> or <code>sliver</code> for actual exploitation work.
+            </div>
         </div>
     </div>
 

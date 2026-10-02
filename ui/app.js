@@ -3742,6 +3742,7 @@
                     </span>
                 </div>
                 <div class="card-body">
+                    ${advisoryNote('Fixed advisory checklist — no local or remote system was inspected.')}
                     <div class="grid grid-5 mb-4">
                         <div class="severity-card critical"><div class="severity-card-count">${severityCounts.CRITICAL}</div><div class="severity-card-label">Critical</div></div>
                         <div class="severity-card high"><div class="severity-card-count">${severityCounts.HIGH}</div><div class="severity-card-label">High</div></div>
@@ -3820,7 +3821,10 @@
             </div>
             <div class="card">
                 <div class="card-header"><span class="card-title">Findings (${result.findings.length})</span></div>
-                <div class="card-body">${findingsHtml}</div>
+                <div class="card-body">
+                    ${advisoryNote('Generic OWASP MASVS checklist — no APK/IPA was read.')}
+                    ${findingsHtml}
+                </div>
             </div>
         `;
     }
@@ -3894,6 +3898,7 @@
                     </span>
                 </div>
                 <div class="card-body">
+                    ${advisoryNote('Static CIS-style baseline — no cloud API calls were made.')}
                     <h4 class="mb-3">Compliance Scores</h4>
                     ${complianceHtml}
                 </div>
@@ -5673,6 +5678,8 @@
                         <span class="badge badge-info">5 networks</span>
                     </div>
                     <div class="card-body">
+                        ${advisoryNote('DEMO DATA — hardcoded example Wi-Fi data, not a real scan. No Wi-Fi interface was queried.')}
+                    
                         ${[
                             { ssid: 'CorpNet-5G', bssid: 'AA:BB:CC:DD:EE:01', signal: -42, channel: 36, security: 'WPA3-Enterprise' },
                             { ssid: 'CorpNet-2.4G', bssid: 'AA:BB:CC:DD:EE:02', signal: -55, channel: 6, security: 'WPA3-Enterprise' },
@@ -5722,6 +5729,8 @@
                         <span class="badge badge-info">3 devices</span>
                     </div>
                     <div class="card-body">
+                        ${advisoryNote('DEMO DATA — these devices are hardcoded examples, not a real scan. No Bluetooth radio was queried.')}
+                    
                         ${[
                             { name: 'Corporate Printer', mac: '00:1A:2B:3C:4D:5E', type: 'Classic', rssi: -55 },
                             { name: 'Unknown Device', mac: 'F8:95:EA:12:34:56', type: 'BLE', rssi: -70 },
@@ -5768,6 +5777,8 @@
                         <span class="badge badge-info">2 tags</span>
                     </div>
                     <div class="card-body">
+                        ${advisoryNote('DEMO DATA — these devices are hardcoded examples, not a real scan. No RFID/NFC radio was queried.')}
+                    
                         ${[
                             { uid: '04:A2:B3:C4:D5:E6:F7', type: 'MIFARE Classic 1K', data: 'Employee Badge' },
                             { uid: 'E2:00:00:12:34:56:78', type: 'NTAG215', data: 'Blank/Unprogrammed' },
@@ -6247,6 +6258,7 @@
                         <span class="badge badge-info">47 assets</span>
                     </div>
                     <div class="card-body">
+                    
                         ${[
                             { name: 'www.example.com', type: 'Web Server', exposure: 'High', services: 'HTTP, HTTPS' },
                             { name: 'api.example.com', type: 'API Gateway', exposure: 'Medium', services: 'HTTPS, gRPC' },
@@ -6845,7 +6857,7 @@
             return;
         }
 
-        container.innerHTML = endpoints.map(e => `
+        container.innerHTML = advisoryNote('DEMO DATA — these endpoints are hardcoded examples, not a real scan. No network sweep was performed.') + endpoints.map(e => `
             <div class="finding-card">
                 <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
                     <div class="flex items-center gap-3">
@@ -6919,6 +6931,8 @@
                         <span class="badge badge-warning">12 findings</span>
                     </div>
                     <div class="card-body">
+                        ${advisoryNote('DEMO DATA — hardcoded example cloud-posture data, not a real scan. No cloud-posture interface was queried.')}
+                    
                         ${[
                             { title: 'S3 Bucket Public Access', severity: 'Critical', service: 'S3', account: 'prod-account' },
                             { title: 'Security Group Open to World', severity: 'High', service: 'EC2', account: 'prod-account' },
@@ -8348,6 +8362,20 @@
     // ========================================
     // Utility Functions
     // ========================================
+
+    // ========================================
+    // Advisory (non-measuring) module notice
+    // ========================================
+
+    // Several modules return a fixed reference checklist rather than data
+    // gathered from a live target. Every result view for those modules must
+    // carry this note so the output is never read as measured findings.
+    const ADVISORY_INLINE_NOTE =
+        '<div class="advisory-inline">⚠️ Reference checklist — these items were not measured against a live target. Verify each one before acting on it.</div>';
+
+    function advisoryNote(text) {
+        return `<div class="advisory-inline">⚠️ ${escapeHtml(text)}</div>`;
+    }
 
     function escapeHtml(text) {
         if (!text) return '';

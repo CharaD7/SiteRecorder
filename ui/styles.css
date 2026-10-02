@@ -737,6 +737,56 @@ body {
     white-space: nowrap;
 }
 
+/* === Advisory notice ===
+   Used on modules that emit a static, hardcoded advisory/checklist rather than
+   measurements taken from the target. Keeps results from being mistaken for
+   real findings. */
+.advisory-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    border: 1px solid var(--severity-medium-bg);
+    border-left: 3px solid var(--severity-medium);
+    border-radius: var(--radius-md);
+    background: var(--severity-medium-bg);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+}
+
+.advisory-banner-icon {
+    flex-shrink: 0;
+    font-size: var(--text-lg);
+    line-height: 1.3;
+}
+
+.advisory-banner-title {
+    font-weight: var(--font-semibold);
+    margin-bottom: 2px;
+}
+
+.advisory-banner-body {
+    color: var(--text-secondary);
+}
+
+.advisory-banner-body code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    background: var(--bg-tertiary);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+}
+
+/* Inline variant shown above rendered result lists. */
+.advisory-inline {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: var(--space-2);
+}
+
 .badge-critical {
     background: var(--severity-critical-bg);
     color: var(--severity-critical);
