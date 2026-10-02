@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::net::TcpListener;
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
 #[derive(Debug, Error)]
@@ -109,7 +109,7 @@ pub enum InterceptCondition {
     All,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InterceptAction {
     Intercept,
     Forward,
@@ -273,6 +273,18 @@ async fn handle_request(
     let body_str = String::from_utf8_lossy(&body_bytes).to_string();
     let body_size = body_bytes.len();
 
+    // Decide interception up-front so the session is flagged before it is stored.
+    let proxy_config = config.read().await.clone();
+    let action = evaluate_action(
+        &rules.read().await,
+        &method,
+        &uri,
+        &headers,
+        &body_str,
+        proxy_config.intercept_requests,
+    )
+    .await;
+
     let request = InterceptedRequest {
         id: Uuid::new_v4().to_string(),
         timestamp: Utc::now().to_rfc3339(),
@@ -286,20 +298,27 @@ async fn handle_request(
         },
         body_size,
         source_ip: peer,
-        intercepted: false,
+        intercepted: matches!(action, InterceptAction::Intercept | InterceptAction::Modify),
         modified: false,
-        dropped: false,
+        dropped: matches!(action, InterceptAction::Drop),
     };
 
     let session = ProxySession {
         id: request.id.clone(),
         request: request.clone(),
         response: None,
-        intercepted: false,
+        intercepted: request.intercepted,
     };
 
     sessions.write().await.push(session.clone());
     let _ = tx.send(ProxyEvent::SessionStarted(session));
+
+    // A Drop rule means the operator (or the rule) explicitly discarded this request.
+    if matches!(action, InterceptAction::Drop) {
+        let mut resp = Response::new(Full::new(Bytes::from_static(b"")));
+        *resp.status_mut() = StatusCode::from_u16(502).unwrap_or(StatusCode::BAD_GATEWAY);
+        return Ok(resp);
+    }
 
     let response = forward_to_target(method, uri, &request.headers, body_bytes).await;
 
@@ -341,6 +360,41 @@ async fn handle_request(
             *resp.status_mut() = StatusCode::BAD_GATEWAY;
             Ok(resp)
         }
+    }
+}
+
+/// Returns the first matching rule action, or `Intercept` when global
+/// interception is on and no rule matched.
+async fn evaluate_action(
+    rules: &[InterceptRule],
+    method: &Method,
+    uri: &Uri,
+    headers: &HashMap<String, String>,
+    body: &str,
+    intercept_by_default: bool,
+) -> InterceptAction {
+    for rule in rules.iter().filter(|r| r.enabled) {
+        let matched = match &rule.condition {
+            InterceptCondition::All => true,
+            InterceptCondition::UrlContains(needle) => uri.to_string().contains(needle.as_str()),
+            InterceptCondition::MethodIs(expected) => {
+                method.as_str().eq_ignore_ascii_case(expected)
+            }
+            InterceptCondition::HeaderContains(name, needle) => headers
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case(name) && v.contains(needle.as_str())),
+            InterceptCondition::BodyContains(needle) => body.contains(needle.as_str()),
+        };
+
+        if matched {
+            return rule.action.clone();
+        }
+    }
+
+    if intercept_by_default {
+        InterceptAction::Intercept
+    } else {
+        InterceptAction::Forward
     }
 }
 
@@ -424,5 +478,131 @@ mod tests {
         assert_eq!(canonical_reason(200), Some("OK"));
         assert_eq!(canonical_reason(404), Some("Not Found"));
         assert_eq!(canonical_reason(999), None);
+    }
+
+    fn rule(condition: InterceptCondition, action: InterceptAction) -> InterceptRule {
+        InterceptRule {
+            id: "r1".to_string(),
+            name: "test".to_string(),
+            enabled: true,
+            condition,
+            action,
+        }
+    }
+
+    fn uri(s: &str) -> Uri {
+        s.parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_rule_matches_url() {
+        let rules = vec![rule(
+            InterceptCondition::UrlContains("/admin".to_string()),
+            InterceptAction::Drop,
+        )];
+
+        let action = evaluate_action(
+            &rules,
+            &Method::GET,
+            &uri("http://example.com/admin/panel"),
+            &HashMap::new(),
+            "",
+            false,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Drop);
+
+        let action = evaluate_action(
+            &rules,
+            &Method::GET,
+            &uri("http://example.com/public"),
+            &HashMap::new(),
+            "",
+            false,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Forward);
+    }
+
+    #[tokio::test]
+    async fn test_rule_matches_method_and_disabled_is_skipped() {
+        let rules = vec![rule(
+            InterceptCondition::MethodIs("post".to_string()),
+            InterceptAction::Intercept,
+        )];
+
+        let action = evaluate_action(
+            &rules,
+            &Method::POST,
+            &uri("http://example.com/login"),
+            &HashMap::new(),
+            "",
+            false,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Intercept);
+
+        let mut disabled = rule(
+            InterceptCondition::MethodIs("post".to_string()),
+            InterceptAction::Drop,
+        );
+        disabled.enabled = false;
+        let action = evaluate_action(
+            &[disabled],
+            &Method::POST,
+            &uri("http://example.com/login"),
+            &HashMap::new(),
+            "",
+            false,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Forward);
+    }
+
+    #[tokio::test]
+    async fn test_rule_matches_header_and_body() {
+        let headers = HashMap::from([("Authorization".to_string(), "Bearer abc".to_string())]);
+
+        let action = evaluate_action(
+            &[rule(
+                InterceptCondition::HeaderContains("authorization".to_string(), "Bearer".to_string()),
+                InterceptAction::Intercept,
+            )],
+            &Method::GET,
+            &uri("http://example.com/api"),
+            &headers,
+            "",
+            false,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Intercept);
+
+        let action = evaluate_action(
+            &[rule(
+                InterceptCondition::BodyContains("password=".to_string()),
+                InterceptAction::Drop,
+            )],
+            &Method::POST,
+            &uri("http://example.com/login"),
+            &HashMap::new(),
+            "user=a&password=hunter2",
+            false,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Drop);
+    }
+
+    #[tokio::test]
+    async fn test_global_interception_default() {
+        let action = evaluate_action(
+            &[],
+            &Method::GET,
+            &uri("http://example.com/"),
+            &HashMap::new(),
+            "",
+            true,
+        )
+        .await;
+        assert_eq!(action, InterceptAction::Intercept);
     }
 }
