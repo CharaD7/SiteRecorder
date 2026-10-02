@@ -13,6 +13,9 @@ pub enum CloudError {
     ApiError(String),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, CloudError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -617,8 +620,12 @@ impl CloudAuditor {
         }
 
         let total = critical + high + medium + low;
-        let compliance_score = if total > 0 {
-            ((total - critical - high) as f64 / total as f64 * 100.0).max(0.0)
+        // Use saturating math: many critical findings can make the weighted
+        // penalty exceed `total` and would otherwise underflow.
+        let safe_total = total as f64;
+        let penalty = critical as f64 * 10.0 + high as f64 * 5.0;
+        let compliance_score = if safe_total > 0.0 {
+            ((safe_total - penalty) / safe_total * 100.0).clamp(0.0, 100.0)
         } else {
             100.0
         };
@@ -637,13 +644,13 @@ impl CloudAuditor {
     fn aws_cis_compliance(findings: &[CloudFinding]) -> f64 {
         let critical_count = findings.iter().filter(|f| f.severity == CloudSeverity::Critical).count();
         let high_count = findings.iter().filter(|f| f.severity == CloudSeverity::High).count();
-        ((100 - critical_count * 20 - high_count * 10) as f64).max(0.0)
+        (100.0 - critical_count as f64 * 20.0 - high_count as f64 * 10.0).clamp(0.0, 100.0)
     }
 
     fn azure_cis_compliance(findings: &[CloudFinding]) -> f64 {
         let critical_count = findings.iter().filter(|f| f.severity == CloudSeverity::Critical).count();
         let high_count = findings.iter().filter(|f| f.severity == CloudSeverity::High).count();
-        ((100 - critical_count * 25 - high_count * 10) as f64).max(0.0)
+        (100.0 - critical_count as f64 * 25.0 - high_count as f64 * 10.0).clamp(0.0, 100.0)
     }
 }
 

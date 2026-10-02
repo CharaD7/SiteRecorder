@@ -1,7 +1,5 @@
 use chrono::Utc;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,6 +12,9 @@ pub enum Web3Error {
     ParseError(String),
 }
 
+// Public crate convention; kept for callers even where the crate
+// currently returns infallible results.
+#[allow(dead_code)]
 type Result<T> = std::result::Result<T, Web3Error>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -607,7 +608,13 @@ impl Web3Auditor {
         let medium = findings.iter().filter(|f| f.severity == ContractSeverity::Medium).count();
         let low = findings.iter().filter(|f| f.severity == ContractSeverity::Low).count();
 
-        ((total - critical * 5 - high * 3 - medium - low / 2) as f64 / total as f64 * 100.0).max(0.0)
+        // Weighted penalty in f64: the integer form underflows once the weighted
+        // total exceeds the finding count.
+        let penalty = critical as f64 * 5.0
+            + high as f64 * 3.0
+            + medium as f64
+            + low as f64 * 0.5;
+        ((total as f64 - penalty) / total as f64 * 100.0).clamp(0.0, 100.0)
     }
 
     fn calculate_wallet_risk(findings: &[WalletFinding]) -> f64 {
