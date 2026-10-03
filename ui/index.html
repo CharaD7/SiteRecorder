@@ -78,9 +78,13 @@
         </aside>
 
         <!-- ========== CONTENT AREA ========== -->
-        <main class="content" id="contentArea">
+        <main class="content">
+            <!-- Outside contentArea on purpose: renderTemplate() clears that
+                 element, so a banner inside it would vanish on every page render. -->
             <div id="dbStatusBanner" style="margin-bottom:12px;"></div>
+            <div id="contentArea">
             <!-- Dynamic content based on active section -->
+            </div>
         </main>
     </div>
 

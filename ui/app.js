@@ -522,6 +522,16 @@
 
     // §5.6 metrics. Headline figures that cannot be derived from real data are
     // listed with a reason instead of being approximated.
+    // Rust enums serialise as lowercase strings and `AgingBuckets` is a plain
+    // struct, so neither carries methods. Derive values from the wire shape.
+    const LIKELIHOOD_SCORE = { rare: 1, unlikely: 2, possible: 3, likely: 4, almostcertain: 5 };
+    const IMPACT_SCORE = { negligible: 1, minor: 2, moderate: 3, major: 4, severe: 5 };
+
+    function agingTotal(a) {
+        if (!a) return 0;
+        return (a.d0_30 || 0) + (a.d31_60 || 0) + (a.d61_90 || 0) + (a.d90_plus || 0);
+    }
+
     async function loadMetrics() {
         const el = $('#metricsStatus');
         if (!el) return;
@@ -532,7 +542,7 @@
             el.innerHTML = `
                 <div class="grid grid-4 mb-3">
                     <div class="stat-card"><div class="stat-value">${v.open}</div><div class="stat-label">Open findings</div></div>
-                    <div class="stat-card"><div class="stat-value">${v.aging.total()}</div><div class="stat-label">In aging buckets</div></div>
+                    <div class="stat-card"><div class="stat-value">${agingTotal(v.aging)}</div><div class="stat-label">In aging buckets</div></div>
                     <div class="stat-card"><div class="stat-value">${pct(v.false_positive_rate)}</div><div class="stat-label">False positive rate</div></div>
                     <div class="stat-card"><div class="stat-value">${pct(v.remediation_rate)}</div><div class="stat-label">Remediation rate</div></div>
                 </div>
@@ -565,7 +575,7 @@
                 <div style="display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border-secondary);">
                     <span class="badge badge-${e.level === 'critical' ? 'critical' : e.level === 'high' ? 'high' : e.level === 'medium' ? 'warning' : 'info'}">${escapeHtml(e.level)}</span>
                     <span style="flex:1;">${escapeHtml(e.title)}</span>
-                    <span class="text-tertiary text-sm">L ${e.likelihood.score?.toFixed(0) ?? '-'} x I ${e.impact.score?.toFixed(0) ?? '-'} = <strong>${e.score.toFixed(0)}</strong></span>
+                    <span class="text-tertiary text-sm">L ${LIKELIHOOD_SCORE[String(e.likelihood).toLowerCase()] ?? '-'} x I ${IMPACT_SCORE[String(e.impact).toLowerCase()] ?? '-'} = <strong>${Number(e.score).toFixed(0)}</strong></span>
                 </div>`).join('');
 
             el.innerHTML = `
@@ -3260,26 +3270,6 @@
     // Export Functionality (Enhanced)
     // ========================================
 
-    function setupWebScanner() {
-        $('#startWebScanBtn')?.addEventListener('click', startWebScan);
-        $('#pauseWebScanBtn')?.addEventListener('click', pauseWebScan);
-        $('#cancelWebScanBtn')?.addEventListener('click', cancelWebScan);
-
-        const authSel = document.getElementById('webScanAuth');
-        if (authSel) {
-            authSel.innerHTML = '<option value="">Unauthenticated</option>' +
-                (state.data.authProfiles || []).map(p =>
-                    `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
-                ).join('');
-            createCustomSelect(authSel);
-        }
-
-        const outputDir = $('#outputDir');
-        if (outputDir && !outputDir.value) {
-            getDefaultDir().then(dir => { if (outputDir) outputDir.value = dir; }).catch(() => {});
-        }
-    }
-
     function resetAuthProfileForm() {
         $('#authProfileName').value = '';
         $('#authProfileTarget').value = '';
@@ -3508,28 +3498,6 @@
     // ========================================
     // Password Attack Tools
     // ========================================
-
-    function setupPasswordAttack() {
-        $('#identifyHashBtn')?.addEventListener('click', identifyHash);
-        $('#startCrackBtn')?.addEventListener('click', startCrack);
-        $('#generateMaskBtn')?.addEventListener('click', generateMask);
-        $('#startSprayBtn')?.addEventListener('click', startSpray);
-        $('#useDefaultWordlist')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            loadDefaultWordlist();
-        });
-
-        $$('#content-passwordattack .tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                $$('#content-passwordattack .tab').forEach(t => t.classList.remove('active'));
-                $$('#content-passwordattack .tab-content').forEach(c => c.style.display = 'none');
-                tab.classList.add('active');
-                const tabId = `tab-${tab.dataset.tab}`;
-                const tabContent = $(`#${tabId}`);
-                if (tabContent) tabContent.style.display = '';
-            });
-        });
-    }
 
     async function identifyHash() {
         const hash = $('#hashInput')?.value?.trim();
@@ -4921,45 +4889,6 @@
         loadPolicies();
     }
 
-    async function loadCompliance() {
-        try {
-            const frameworks = await invoke('whiteteam_get_compliance_frameworks');
-            const container = $('#complianceResults');
-            if (!container) return;
-
-            container.innerHTML = frameworks.map(f => `
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <span class="card-title">${escapeHtml(f.name)} ${escapeHtml(f.version)}</span>
-                        <span class="badge badge-${f.overall_score >= 80 ? 'success' : f.overall_score >= 60 ? 'warning' : 'error'}">${f.overall_score.toFixed(0)}%</span>
-                    </div>
-                    <div class="card-body">
-                        ${f.categories.map(c => `
-                            <div class="finding-card mb-2">
-                                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                                    <span class="font-medium">${escapeHtml(c.name)}</span>
-                                    <span class="badge badge-${c.score >= 80 ? 'success' : c.score >= 60 ? 'warning' : 'error'}">${c.score.toFixed(0)}%</span>
-                                    <span class="text-tertiary text-sm">▼</span>
-                                </div>
-                                <div class="finding-card-body hidden">
-                                    ${c.controls.map(ctrl => `
-                                        <div style="padding:6px 0; border-bottom:1px solid var(--border-secondary);">
-                                            <div class="flex items-center gap-2">
-                                                <span class="badge badge-${ctrl.status === 'Implemented' ? 'success' : ctrl.status === 'In Progress' ? 'warning' : 'error'}">${escapeHtml(ctrl.status)}</span>
-                                                <span style="font-weight:500;">${escapeHtml(ctrl.id)}: ${escapeHtml(ctrl.name)}</span>
-                                            </div>
-                                            ${ctrl.gaps?.length ? `<div class="text-sm text-error mt-1">Gaps: ${ctrl.gaps.map(g => escapeHtml(g)).join(', ')}</div>` : ''}
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
-    }
-
     // ========================================
     // White Team: Risk Register
     // ========================================
@@ -4968,69 +4897,12 @@
         loadRiskRegister();
     }
 
-    async function loadRiskRegister() {
-        try {
-            const register = await invoke('whiteteam_get_risk_register');
-            const container = $('#riskResults');
-            if (!container) return;
-
-            container.innerHTML = register.risks.map(r => `
-                <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                        <div class="flex items-center gap-3">
-                            <span class="status-icon">${r.risk_score >= 15 ? '🔴' : r.risk_score >= 10 ? '🟠' : '🟡'}</span>
-                            <span class="font-medium">${escapeHtml(r.title)}</span>
-                            <span class="badge badge-${r.risk_score >= 15 ? 'critical' : r.risk_score >= 10 ? 'high' : 'warning'}">Score: ${r.risk_score.toFixed(0)}</span>
-                            <span class="badge badge-info">${escapeHtml(r.category?.replace(/_/g, ' ') || '')}</span>
-                        </div>
-                        <span class="text-tertiary text-sm">▼</span>
-                    </div>
-                    <div class="finding-card-body hidden">
-                        <div class="text-sm text-secondary mb-2">${escapeHtml(r.description || '')}</div>
-                        <div class="text-sm mb-2"><strong>Treatment:</strong> ${escapeHtml(r.treatment || '')} &middot; <strong>Owner:</strong> ${escapeHtml(r.owner || '')}</div>
-                        <div class="text-sm mb-2"><strong>Inherent:</strong> ${r.inherent_score.toFixed(0)} &rarr; <strong>Residual:</strong> ${r.residual_score.toFixed(0)}</div>
-                        <div class="finding-remediation"><strong>Mitigations:</strong></div>
-                        <ul class="text-sm">${r.mitigations?.map(m => `<li style="padding:2px 0;">• ${escapeHtml(m)}</li>`).join('') || ''}</ul>
-                    </div>
-                </div>
-            `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
-    }
-
     // ========================================
     // White Team: Policies
     // ========================================
 
     function setupWhitePolicies() {
         loadPolicies();
-    }
-
-    async function loadPolicies() {
-        try {
-            const policies = await invoke('whiteteam_get_policies');
-            const container = $('#policyResults');
-            if (!container) return;
-
-            container.innerHTML = policies.map(p => `
-                <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                        <div class="flex items-center gap-3">
-                            <span class="status-icon">${p.status === 'Published' ? '🟢' : p.status === 'Under Review' ? '🟡' : '🔵'}</span>
-                            <span class="font-medium">${escapeHtml(p.name)}</span>
-                            <span class="badge badge-${p.status === 'Published' ? 'success' : p.status === 'Under Review' ? 'warning' : 'info'}">${escapeHtml(p.status?.replace(/_/g, ' ') || '')}</span>
-                            <span class="badge badge-info">v${escapeHtml(p.version || '')}</span>
-                        </div>
-                        <span class="text-tertiary text-sm">▼</span>
-                    </div>
-                    <div class="finding-card-body hidden">
-                        <div class="text-sm text-secondary mb-2">${escapeHtml(p.description || '')}</div>
-                        <div class="text-sm mb-2"><strong>Category:</strong> ${escapeHtml(p.category?.replace(/_/g, ' ') || '')} &middot; <strong>Owner:</strong> ${escapeHtml(p.owner || '')}</div>
-                        <div class="text-sm mb-2"><strong>Effective:</strong> ${escapeHtml(p.effective_date || '')} &middot; <strong>Review:</strong> ${escapeHtml(p.review_date || '')}</div>
-                        <div class="text-sm"><strong>Acknowledgments:</strong> ${p.acknowledgments?.length || 0} users</div>
-                    </div>
-                </div>
-            `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
     }
 
     // ========================================
@@ -5063,7 +4935,7 @@
                         <div class="text-sm mb-2"><strong>Services:</strong> ${v.services?.map(s => `<span class="badge badge-info mr-1">${escapeHtml(s)}</span>`).join('') || 'N/A'}</div>
                         <div class="text-sm mb-2"><strong>Data Access:</strong> ${v.data_access?.map(d => `<span class="badge badge-warning mr-1">${escapeHtml(d)}</span>`).join('') || 'N/A'}</div>
                         <div class="text-sm mb-2"><strong>Contract:</strong> ${escapeHtml(v.contract_start || '')} to ${escapeHtml(v.contract_end || '')}</div>
-                        ${v.assessments?.length ? `<div class="text-sm"><strong>Last Assessment:</strong> Score ${v.assessments[0]?.score?.toFixed(0)}%</div>` : ''}
+                        ${v.assessments?.length && v.assessments[0]?.readiness_score != null ? `<div class="text-sm"><strong>Readiness:</strong> ${Number(v.assessments[0].readiness_score).toFixed(0)}%</div>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -5716,6 +5588,10 @@
         setFindingsCounts(findings, findings.length - visible.length);
         loadAttackCoverage();
         loadCompliance();
+        // These panels live on the findings page, so they are loaded here too.
+        loadMetrics();
+        loadRiskRegister();
+        loadPolicies();
 
         if (!container) return;
 
@@ -5743,6 +5619,7 @@
                         <span class="badge badge-info">${escapeHtml(f.category || 'other')}</span>
                         ${f.status && f.status !== 'new' ? `<span class="badge badge-warning">${escapeHtml(f.status)}</span>` : ''}
                         ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
+                        ${(f.mitre_techniques || []).map(t => `<span class="badge badge-info" title="MITRE ATT&CK">${escapeHtml(t)}</span>`).join('')}
                     </div>
                     <span class="text-tertiary text-sm">▼</span>
                 </div>
@@ -5834,301 +5711,6 @@
         } catch (e) {
             showToast('error', 'Could Not Save', String(e));
         }
-    }
-
-    function exportFindings() {
-        const findings = state.data.findings || [];
-        if (findings.length === 0) {
-            showToast('warning', 'No Findings', 'There are no findings to export.');
-            return;
-        }
-
-        showModal({
-            title: '📤 Export Findings',
-            body: `
-                <div class="form-group">
-                    <label class="form-label">Export Format</label>
-                    <select class="input" id="exportFormat">
-                        <option value="csv">CSV</option>
-                        <option value="json">JSON</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Severity Filter</label>
-                    <select class="input" id="exportSeverityFilter">
-                        <option value="all">All Severities</option>
-                        <option value="critical">Critical Only</option>
-                        <option value="critical-high">Critical & High</option>
-                        <option value="medium-low">Medium & Low</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Include Fields</label>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                        <label class="checkbox"><input type="checkbox" id="expTitle" checked> Title</label>
-                        <label class="checkbox"><input type="checkbox" id="expSeverity" checked> Severity</label>
-                        <label class="checkbox"><input type="checkbox" id="expCategory" checked> Category</label>
-                        <label class="checkbox"><input type="checkbox" id="expTarget" checked> Target</label>
-                        <label class="checkbox"><input type="checkbox" id="expDescription" checked> Description</label>
-                        <label class="checkbox"><input type="checkbox" id="expRemediation"> Remediation</label>
-                        <label class="checkbox"><input type="checkbox" id="expDate" checked> Date</label>
-                    </div>
-                </div>
-            `,
-            actions: [
-                '<button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Cancel</button>',
-                '<button class="btn btn-primary" id="processExportFindingsBtn">Export</button>',
-            ],
-        });
-
-        setTimeout(() => {
-            $('#processExportFindingsBtn')?.addEventListener('click', () => {
-                const format = $('#exportFormat')?.value;
-                const severityFilter = $('#exportSeverityFilter')?.value;
-                const fields = {
-                    title: $('#expTitle')?.checked,
-                    severity: $('#expSeverity')?.checked,
-                    category: $('#expCategory')?.checked,
-                    target: $('#expTarget')?.checked,
-                    description: $('#expDescription')?.checked,
-                    remediation: $('#expRemediation')?.checked,
-                    date: $('#expDate')?.checked,
-                };
-
-                let filtered = [...findings];
-                if (severityFilter === 'critical') {
-                    filtered = filtered.filter(f => f.severity === 'critical');
-                } else if (severityFilter === 'critical-high') {
-                    filtered = filtered.filter(f => f.severity === 'critical' || f.severity === 'high');
-                } else if (severityFilter === 'medium-low') {
-                    filtered = filtered.filter(f => f.severity === 'medium' || f.severity === 'low' || f.severity === 'info');
-                }
-
-                if (filtered.length === 0) {
-                    showToast('warning', 'No Results', 'No findings match the selected filter.');
-                    return;
-                }
-
-                let output = '';
-                const selectedFields = Object.entries(fields).filter(([, v]) => v).map(([k]) => k);
-
-                if (format === 'csv') {
-                    output = selectedFields.join(',') + '\n';
-                    for (const f of filtered) {
-                        const row = selectedFields.map(field => {
-                            let val = '';
-                            switch(field) {
-                                case 'title': val = f.title || ''; break;
-                                case 'severity': val = f.severity || ''; break;
-                                case 'category': val = f.category || ''; break;
-                                case 'target': val = f.target || ''; break;
-                                case 'description': val = (f.description || '').replace(/,/g, ';').replace(/\n/g, ' '); break;
-                                case 'remediation': val = (f.remediation || '').replace(/,/g, ';').replace(/\n/g, ' '); break;
-                                case 'date': val = f.discoveredAt ? new Date(f.discoveredAt).toISOString() : ''; break;
-                            }
-                            return `"${val}"`;
-                        });
-                        output += row.join(',') + '\n';
-                    }
-                } else {
-                    const jsonObj = filtered.map(f => {
-                        const obj = {};
-                        if (fields.title) obj.title = f.title;
-                        if (fields.severity) obj.severity = f.severity;
-                        if (fields.category) obj.category = f.category;
-                        if (fields.target) obj.target = f.target;
-                        if (fields.description) obj.description = f.description;
-                        if (fields.remediation) obj.remediation = f.remediation;
-                        if (fields.date) obj.discoveredAt = f.discoveredAt ? new Date(f.discoveredAt).toISOString() : null;
-                        return obj;
-                    });
-                    output = JSON.stringify(jsonObj, null, 2);
-                }
-
-                const blob = new Blob([output], { type: format === 'csv' ? 'text/csv' : 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `findings_export_${new Date().toISOString().slice(0, 10)}.${format}`;
-                a.click();
-                URL.revokeObjectURL(url);
-
-                $('.modal-overlay').remove();
-                showToast('success', 'Export Complete', `${filtered.length} findings exported to ${format.toUpperCase()}.`);
-                addActivity(`Exported ${filtered.length} findings to ${format.toUpperCase()}`);
-            });
-        }, 100);
-    }
-
-    // Findings come from the database (Wave 2), not from `state.data`, so they
-    // survive a restart. Severity arrives uppercase from the Rust enum.
-    function severityClass(sev) {
-        const s = String(sev || '').toUpperCase();
-        return {
-            CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'warning',
-            LOW: 'info', INFO: 'success',
-        }[s] || 'info';
-    }
-
-    function severityIcon(sev) {
-        const s = String(sev || '').toUpperCase();
-        return { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🔵', INFO: '🟢' }[s] || '🟢';
-    }
-
-    async function loadFindings() {
-        const container = $('#findingsList');
-        const search = ($('#findingSearch')?.value || '').trim().toLowerCase();
-        const statusFilter = $('#findingStatusFilter')?.value || '';
-
-        let findings = [];
-        try {
-            findings = await invoke('list_findings', { limit: 500 });
-        } catch (e) {
-            if (container) {
-                container.innerHTML = `<div class="advisory-banner" style="margin:0">
-                    <span class="advisory-banner-icon">⚠️</span>
-                    <div>
-                        <div class="advisory-banner-title">Findings could not be loaded</div>
-                        <div class="advisory-banner-body">${escapeHtml(String(e))}. Findings are read
-                        from the shared database; if it is unavailable, nothing is being persisted.</div>
-                    </div>
-                </div>`;
-            }
-            setFindingsCounts([], 0);
-            return;
-        }
-
-        // Apply client-side search/filter on top of the server result.
-        const visible = findings.filter(f => {
-            if (statusFilter && String(f.status || '').toLowerCase() !== statusFilter.toLowerCase()) {
-                return false;
-            }
-            if (!search) return true;
-            return [f.title, f.category, f.cwe_id, f.description]
-                .filter(Boolean)
-                .some(v => String(v).toLowerCase().includes(search));
-        });
-
-        setFindingsCounts(findings, findings.length - visible.length);
-
-        if (!container) return;
-
-        if (findings.length === 0) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div>
-                <div class="empty-state-title">No Findings</div>
-                <div class="empty-state-text">Run a vulnerability scan to populate this list, or add one manually.</div></div>`;
-            return;
-        }
-
-        if (visible.length === 0) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div>
-                <div class="empty-state-title">No matches</div>
-                <div class="empty-state-text">${findings.length} finding(s) hidden by the current filter.</div></div>`;
-            return;
-        }
-
-        container.innerHTML = visible.map(f => `
-            <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
-                    <div class="flex items-center gap-3">
-                        <span class="status-icon">${severityIcon(f.severity)}</span>
-                        <span class="font-medium">${escapeHtml(f.title)}</span>
-                        <span class="badge badge-${severityClass(f.severity)}">${escapeHtml(f.severity)}</span>
-                        <span class="badge badge-info">${escapeHtml(f.category || 'other')}</span>
-                        ${f.status && f.status !== 'new' ? `<span class="badge badge-warning">${escapeHtml(f.status)}</span>` : ''}
-                        ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
-                    </div>
-                    <span class="text-tertiary text-sm">▼</span>
-                </div>
-                <div class="finding-card-body hidden">
-                    <div class="text-sm text-secondary mb-2">${escapeHtml(f.description || '')}</div>
-                    ${f.remediation ? `<div class="finding-remediation"><strong>Remediation:</strong> ${escapeHtml(f.remediation)}</div>` : ''}
-                    ${f.cve_ids?.length ? `<div class="text-sm mt-2"><strong>CVE:</strong> ${f.cve_ids.map(escapeHtml).join(', ')}</div>` : ''}
-                    ${f.evidence?.length ? `<details class="mt-2"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">Evidence (${f.evidence.length})</summary>${f.evidence.map(e => `<div class="code-block mt-1" style="font-size:0.75rem;">${escapeHtml(e.description || '')}</div>`).join('')}</details>` : ''}
-                    <div class="text-sm text-tertiary mt-2">Discovered: ${f.created_at ? new Date(f.created_at).toLocaleString() : 'N/A'}${f.scan_id ? ` · scan <code>${escapeHtml(f.scan_id)}</code>` : ''}</div>
-                    <div class="flex gap-2 mt-3">
-                        ${statusActionButton(f, 'confirmed', 'Confirm')}
-                        ${statusActionButton(f, 'false_positive', 'False positive')}
-                        ${statusActionButton(f, 'remediated', 'Remediated')}
-                        ${statusActionButton(f, 'accepted', 'Accept risk')}
-                    </div>
-                </div>
-            </div>
-        `).join('');
-
-        // Status transitions persist to the database and are audited.
-        container.querySelectorAll('[data-finding-status]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const id = btn.dataset.findingId;
-                const next = btn.dataset.findingStatus;
-                btn.disabled = true;
-                try {
-                    await invoke('update_finding_status', { id, status: next });
-                    showToast('success', 'Finding updated', `Marked as ${next.replace('_', ' ')}.`);
-                    await loadFindings();
-                } catch (err) {
-                    btn.disabled = false;
-                    showToast('error', 'Update failed', String(err));
-                }
-            });
-        });
-    }
-
-    function statusActionButton(f, status, label) {
-        if (String(f.status || '').toLowerCase() === status) return '';
-        return `<button class="btn btn-sm btn-secondary" data-finding-id="${escapeHtml(f.id)}"
-            data-finding-status="${status}">${label}</button>`;
-    }
-
-    function setFindingsCounts(findings, hidden) {
-        const count = (sev) => findings.filter(f => String(f.severity || '').toUpperCase() === sev).length;
-        const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-        set('#findingsCritical', count('CRITICAL'));
-        set('#findingsHigh', count('HIGH'));
-        set('#findingsMedium', count('MEDIUM'));
-        set('#findingsLow', count('LOW'));
-        set('#findingsInfo', count('INFO'));
-        set('#findingsTotal', findings.length + (hidden ? ` (${hidden} hidden)` : ''));
-    }
-
-    function saveFinding() {
-        const title = $('#findingTitle')?.value?.trim();
-        const severity = $('#findingSeverity')?.value;
-        const target = $('#findingTarget')?.value?.trim();
-        const category = $('#findingCategory')?.value;
-        const description = $('#findingDesc')?.value?.trim();
-        const remediation = $('#findingRemediation')?.value?.trim();
-
-        if (!title) {
-            showToast('error', 'Missing Title', 'Please enter a finding title.');
-            return;
-        }
-
-        const finding = {
-            id: `finding_${Date.now()}`,
-            title,
-            severity,
-            target,
-            category,
-            description,
-            remediation,
-            discoveredAt: Date.now(),
-        };
-
-        state.data.findings.push(finding);
-        $('#findingForm').style.display = 'none';
-        loadFindings();
-        showToast('success', 'Finding Added', `"${title}" has been recorded.`);
-        addActivity(`Finding added: ${title}`);
-    }
-
-    function filterFindingsList(query) {
-        const cards = $$('#findingsList .finding-card');
-        cards.forEach(card => {
-            const text = card.textContent.toLowerCase();
-            card.style.display = text.includes(query.toLowerCase()) ? '' : 'none';
-        });
     }
 
     // ========================================
@@ -7645,52 +7227,6 @@
         });
     }
 
-    function loadMetrics() {
-        const metrics = state.data.metrics || { mttr: 48, patchRate: 87, phishRate: 12, openFindings: 5 };
-        $('#mttr').textContent = metrics.mttr + 'h';
-        $('#patchRate').textContent = metrics.patchRate + '%';
-        $('#phishRate').textContent = metrics.phishRate + '%';
-        $('#openFindings').textContent = metrics.openFindings;
-
-        const remediationContainer = $('#remediationTrend');
-        if (remediationContainer) {
-            remediationContainer.innerHTML = `
-                ${[
-                    { week: 'Week 1', opened: 12, closed: 8 },
-                    { week: 'Week 2', opened: 9, closed: 11 },
-                    { week: 'Week 3', opened: 7, closed: 10 },
-                    { week: 'Week 4', opened: 5, closed: 9 },
-                ].map(w => `
-                    <div style="display:flex; align-items:center; gap:12px; padding:6px 0;">
-                        <span style="min-width:60px;">${escapeHtml(w.week)}</span>
-                        <span class="badge badge-error">Opened: ${w.opened}</span>
-                        <span class="badge badge-success">Closed: ${w.closed}</span>
-                    </div>
-                `).join('')}
-            `;
-        }
-
-        const riskContainer = $('#metricsRiskTrend');
-        if (riskContainer) {
-            riskContainer.innerHTML = `
-                ${[
-                    { month: 'Jan', score: 7.2 },
-                    { month: 'Feb', score: 6.8 },
-                    { month: 'Mar', score: 6.5 },
-                    { month: 'Apr', score: 6.1 },
-                    { month: 'May', score: 5.8 },
-                    { month: 'Jun', score: 5.4 },
-                ].map(m => `
-                    <div style="display:flex; align-items:center; gap:12px; padding:6px 0;">
-                        <span style="min-width:40px;">${escapeHtml(m.month)}</span>
-                        <div class="progress" style="flex:1;"><div class="progress-bar ${m.score >= 7 ? 'critical' : m.score >= 5 ? '' : 'success'}" style="width:${m.score * 10}%"></div></div>
-                        <span style="min-width:30px; text-align:right;">${m.score.toFixed(1)}</span>
-                    </div>
-                `).join('')}
-            `;
-        }
-    }
-
     // ========================================
     // White Team: Reports
     // ========================================
@@ -7968,16 +7504,6 @@
     // ========================================
     // Cross-Team: Notifications (Enhanced)
     // ========================================
-
-    function setupNotifications() {
-        loadNotifications();
-        $('#markAllReadBtn')?.addEventListener('click', () => {
-            const notifications = state.data.notifications || [];
-            notifications.forEach(n => n.read = true);
-            loadNotifications();
-            showToast('success', 'Done', 'All notifications marked as read.');
-        });
-    }
 
     // ========================================
     // Cross-Team: Reports (Enhanced)
@@ -8934,14 +8460,6 @@
     // Theme
     // ========================================
 
-    function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme');
-        const next = current === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', next);
-        state.ui.theme = next;
-        try { localStorage.setItem('sr-theme', next); } catch (e) {}
-    }
-
     function loadTheme() {
         let theme = 'dark';
         try { theme = localStorage.getItem('sr-theme') || 'dark'; } catch (e) {}
@@ -9133,18 +8651,6 @@
     // ========================================
     // Legacy Compatibility (Recording)
     // ========================================
-
-    async function startRecording() {
-        const btn = document.getElementById('recordingStartBtn');
-        if (btn) btn.click();
-        else showToast('info', 'Recording', 'Recording module available in sidebar.');
-    }
-
-    async function stopRecording() {
-        const btn = document.getElementById('recordingStopBtn');
-        if (btn) btn.click();
-        else showToast('info', 'Recording', 'Recording stopped.');
-    }
 
     // ========================================
     // Initialization
