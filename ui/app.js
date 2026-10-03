@@ -426,7 +426,7 @@
             create_auth_profile: { id: 'auth_' + Date.now(), name: 'New Profile', auth_type: 'form', created_at: Date.now() },
             update_auth_profile: { id: 'auth_1', name: 'Updated Profile', auth_type: 'form', updated_at: Date.now() },
             delete_auth_profile: null,
-            test_auth_profile: { success: true, message: 'Authentication profile is valid. Login test successful.', session_token: 'sess_' + Date.now(), cookies: ['session=abc123'] },
+            test_auth_profile: { success: false, outcome: 'not_tested', message: 'Profile is well-formed, but credentials were NOT verified.', session_token: null, cookies: null, validation_errors: [] },
             generate_totp: { code: '847291', valid_until: Date.now() + 30000 },
             validate_totp: true,
             generate_totp_secret: 'JBSWY3DPEHPK3PXP',
@@ -2626,10 +2626,18 @@
             showToast('error', 'No Profile', 'Enter a profile name first.');
             return;
         }
-        showToast('info', 'Testing Login', 'Attempting authentication with provided credentials...');
+        showToast('info', 'Validating Profile', 'Checking the profile is usable...');
         try {
             const result = await invoke('test_auth_profile', { id: 'auth_1' });
-            if (result?.success) {
+            // Three distinct outcomes. "Not tested" must not be shown as either
+            // success or failure, because it is neither.
+            if (result?.outcome === 'invalid') {
+                showToast('error', 'Profile Invalid',
+                    (result.validation_errors || []).join('; ') || result.message);
+            } else if (result?.outcome === 'not_tested') {
+                showToast('warning', 'Not Verified',
+                    result.message || 'Credentials were not checked.');
+            } else if (result?.success) {
                 showToast('success', 'Login Successful', result.message);
             } else {
                 showToast('error', 'Login Failed', result?.message || 'Authentication failed.');

@@ -416,13 +416,41 @@ async fn test_auth_profile(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Profile not found".to_string())?;
 
+    // Structural validation only. This does NOT verify credentials: doing so
+    // needs a browser session, which is not implemented here. Reporting success
+    // without authenticating would tell an operator their creds work when
+    // nobody checked them.
+    let validation_errors = auth_profiles::validate_profile(&profile);
+
+    if !validation_errors.is_empty() {
+        return Ok(auth_profiles::AuthTestResult {
+            success: false,
+            outcome: auth_profiles::TestOutcome::Invalid,
+            message: format!(
+                "Profile '{}' cannot be used: {}",
+                profile.name,
+                validation_errors.join("; ")
+            ),
+            session_token: None,
+            cookies: None,
+            validation_errors,
+        });
+    }
+
+    // Only record use when the profile is actually usable.
     manager.update_last_used(&id).ok();
 
     Ok(auth_profiles::AuthTestResult {
-        success: true,
-        message: format!("Authentication profile '{}' is valid. Full login test requires browser automation.", profile.name),
+        success: false,
+        outcome: auth_profiles::TestOutcome::NotTested,
+        message: format!(
+            "Profile '{}' is well-formed, but credentials were NOT verified. \
+             Browser automation is not implemented, so no login was attempted.",
+            profile.name
+        ),
         session_token: None,
         cookies: None,
+        validation_errors,
     })
 }
 

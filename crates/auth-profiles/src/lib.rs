@@ -157,10 +157,71 @@ impl ReauthStrategy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthTestResult {
+    /// True only when credentials were actually verified against the target.
+    ///
+    /// Never true merely because the profile exists. An auth check reporting
+    /// success without authenticating is a false positive that tells an
+    /// operator their credentials work when nobody checked them.
     pub success: bool,
     pub message: String,
     pub session_token: Option<String>,
     pub cookies: Option<Vec<CookieEntry>>,
+    pub outcome: TestOutcome,
+    /// Problems found by structural validation of the profile itself.
+    pub validation_errors: Vec<String>,
+}
+
+/// What a "test" actually established.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TestOutcome {
+    /// Credentials were verified against the target.
+    Authenticated,
+    /// The profile is well-formed but credentials were not checked.
+    NotTested,
+    /// Structural problems mean the profile cannot work.
+    Invalid,
+}
+
+/// Auth types that need a stored secret to function at all.
+fn requires_secret(auth_type: &AuthType) -> bool {
+    matches!(
+        auth_type,
+        AuthType::Form | AuthType::Basic | AuthType::Bearer | AuthType::Script
+    )
+}
+
+/// Structural validation of a profile.
+///
+/// Checks only what can be checked locally -- that the record is internally
+/// consistent enough to attempt a login at all. It says nothing about whether
+/// the credentials are correct; that needs a browser and is reported
+/// separately as [`TestOutcome::NotTested`].
+pub fn validate_profile(profile: &AuthProfile) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    if profile.target_url.trim().is_empty() {
+        errors.push("target_url is empty".to_string());
+    } else if url::Url::parse(&profile.target_url).is_err() {
+        errors.push(format!("target_url is not a valid URL: {}", profile.target_url));
+    }
+
+    if let Some(login_url) = &profile.login_url {
+        if url::Url::parse(login_url).is_err() {
+            errors.push(format!("login_url is not a valid URL: {}", login_url));
+        }
+    }
+
+    if requires_secret(&profile.auth_type) {
+        if profile.username.as_deref().unwrap_or("").trim().is_empty() {
+            errors.push(format!("auth_type {:?} requires a username", profile.auth_type));
+        }
+        if profile.encrypted_password.is_none() {
+            errors.push(format!("auth_type {:?} requires a stored credential", profile.auth_type));
+        }
+    }
+
+    errors
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -755,5 +816,65 @@ mod tests {
 
         let entries = manager.list_audit_entries(None).unwrap();
         assert_eq!(entries.len(), 2);
+    }
+}
+
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    fn profile(url: &str, auth_type: AuthType, user: Option<&str>, secret: Option<&str>) -> AuthProfile {
+        AuthProfile {
+            id: "p1".into(),
+            name: "Test".into(),
+            target_url: url.into(),
+            auth_type,
+            username: user.map(|u| u.into()),
+            encrypted_password: secret.map(|s| s.into()),
+            login_url: None,
+            mfa_config: None,
+            custom_headers: None,
+            login_script: None,
+            session_ttl_minutes: 30,
+            reauth_strategy: ReauthStrategy::Automatic,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            last_used: None,
+        }
+    }
+
+    #[test]
+    fn validate_accepts_a_well_formed_profile() {
+        let p = profile("https://example.com", AuthType::Form, Some("u"), Some("enc"));
+        assert!(validate_profile(&p).is_empty());
+    }
+
+    #[test]
+    fn validate_rejects_an_unparseable_target_url() {
+        let p = profile("not a url", AuthType::Form, Some("u"), Some("enc"));
+        let errs = validate_profile(&p);
+        assert!(errs.iter().any(|e| e.contains("target_url")), "{errs:?}");
+    }
+
+    #[test]
+    fn validate_requires_username_and_secret_for_form_auth() {
+        let p = profile("https://example.com", AuthType::Form, None, None);
+        let errs = validate_profile(&p);
+        assert!(errs.iter().any(|e| e.contains("username")), "{errs:?}");
+        assert!(errs.iter().any(|e| e.contains("credential")), "{errs:?}");
+    }
+
+    #[test]
+    fn validate_does_not_require_a_secret_for_token_auth() {
+        let p = profile("https://example.com", AuthType::None, None, None);
+        assert!(validate_profile(&p).is_empty());
+    }
+
+    #[test]
+    fn validate_rejects_an_unparseable_login_url() {
+        let mut p = profile("https://example.com", AuthType::Form, Some("u"), Some("e"));
+        p.login_url = Some("::::".into());
+        assert!(validate_profile(&p).iter().any(|e| e.contains("login_url")));
     }
 }
