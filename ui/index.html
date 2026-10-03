@@ -1983,6 +1983,13 @@
     <div class="card">
         <div class="card-body" id="notificationList"></div>
     </div>
+
+    <!-- Alert rules render separately: they previously shared the notification
+         container, so loading rules overwrote the notification list. -->
+    <div class="card mt-4">
+        <div class="card-header"><span class="card-title">Alert Rules</span></div>
+        <div class="card-body" id="alertRulesList"></div>
+    </div>
 </template>
 
 <!-- Cross-Team: Reports -->

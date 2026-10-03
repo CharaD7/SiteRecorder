@@ -4,11 +4,52 @@ A cross-platform desktop application built in Rust that automates full-site trav
 
 ## Documentation
 
-- **[Installation Guide](INSTALLATION_GUIDE.md)** - Detailed setup instructions for all platforms
-- **[Quick Start](QUICKSTART.md)** - Get started in minutes
-- **[Quick Reference](QUICK_REFERENCE.md)** - Command and API reference
-- **[Usage Guide](USAGE.md)** - Comprehensive usage documentation
-- **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
+- **[Build Order](BUILD_ORDER.md)** - Decision record and implementation sequencing
+- **[UI Redesign Plan](UI_REDESIGN_PLAN.md)** - The specification this project is built against
+
+## Current state, honestly
+
+A cross-platform security tool. This section exists because a security product
+that overstates its capabilities is worse than one that does not.
+
+### Measured — reads a real target or the real machine
+
+| Module | What it actually does |
+|---|---|
+| **Web vulnerability scanner** | 47 active checks against a live target |
+| **Network scanner** | Real TCP port scans; service banners read from the socket; TLS inspection via `openssl s_client` |
+| **OS pentest (Linux)** | SUID enumeration, cron targets, `sshd_config`, key permissions, container runtime — measured on the host |
+| **Findings store** | Every scan ingested into SQLite with lifecycle, filtering and aggregation |
+
+Findings persist to `~/.local/share/siterecorder/siterecorder.db`. An audit log
+is SHA-256 hash-chained and tamper-evident; `verify_audit_integrity` detects any
+modified or deleted row.
+
+### Advisory only — returns reference material, not measurements
+
+`mobile`, `cloud`, `web3`, and the `gray-team` / `blue-team` / `white-team` /
+`cross-team` workspaces return a built-in checklist. They are labelled as such
+in the UI, but they do not inspect anything. Windows and macOS OS-pentesting
+returns reference material; only Linux is measured.
+
+### Deliberately not computed
+
+Where a number cannot be derived honestly, the tool says so and explains why
+rather than approximating:
+
+- **MTTD / MTTR / MTTC** — no incident detection pipeline feeds them
+- **Monte Carlo, FAIR, loss exceedance** — no organisation-specific loss model
+- **ATT&CK coverage percentage** — withheld while any finding is unmapped
+- **Compliance readiness** — withheld while any finding is unmapped
+
+The pattern is deliberate: a fabricated figure in a security report is a false
+negative somebody acts on.
+
+### Agent
+
+Advisory only. No capability to write data, execute processes, or contact a
+scanned target. Tool access is gated by explicit capability grants that fail
+closed. See `crates/agent`.
 
 ## Features
 
@@ -35,7 +76,7 @@ A cross-platform desktop application built in Rust that automates full-site trav
 - **GUI Integration** - Full vulnerability scanner tab in the desktop application
 - **CLI Support** - Run standalone scans with `site-recorder scan`, or attach a scan to a crawl via `--scan-url`
 
-#### Vulnerability Checks (30):
+#### Vulnerability Checks (47 active):
 1. **Security Headers Analysis** - X-Frame-Options, CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 2. **Cross-Site Scripting (XSS) Detection** - Reflected (active payload injection + unencoded reflection), DOM-based, and stored XSS pattern analysis
 3. **SQL Injection Detection** - Active payload injection with SQL error-signature matching, form analysis, URL parameter checks
@@ -512,14 +553,30 @@ recordings/
 ### Running Tests
 
 ```bash
-# Run all tests
-cargo test
+# Run all tests (the workspace has 254)
+cargo test --workspace
 
 # Run tests for a specific crate
-cargo test -p browser
-cargo test -p crawler
-cargo test -p recorder
 cargo test -p scanner
+cargo test -p findings
+cargo test -p db
+
+# Zero warnings is expected and enforced
+cargo check --workspace --all-targets
+```
+
+There is also a Playwright suite that drives the real UI in Chrome against a
+stubbed IPC layer, covering navigation, findings rendering, status
+persistence, every §5 panel, audit-chain verification, the load-failure path,
+and a zero-console-error sweep. It lives outside this repository (it needs a
+real browser), so `ui/` is the contract it exercises.
+
+`examples/verify_waves.rs` runs the backend against real inputs — a live
+vulnerability scan, a real TLS handshake, a banner read from a local socket,
+and enumeration of the machine it runs on:
+
+```bash
+cargo run --example verify_waves
 ```
 
 ### Code Structure

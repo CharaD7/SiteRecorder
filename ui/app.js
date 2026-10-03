@@ -2993,10 +2993,15 @@
     }
 
     function renderAlertRules(rules) {
-        const container = $('#notificationList');
+        // Must not share the container with loadNotifications(), or rendering
+        // rules silently replaces the notification list.
+        const container = $('#alertRulesList');
         if (!container) return;
 
-        if (rules.length === 0) return;
+        if (rules.length === 0) {
+            container.innerHTML = '<div class="text-tertiary text-sm">No alert rules configured.</div>';
+            return;
+        }
 
         const rulesHtml = `
             <div style="margin-bottom:16px; padding:12px; background:var(--bg-tertiary); border-radius:8px; border:1px solid var(--border-primary);">
@@ -3027,7 +3032,6 @@
             e.preventDefault();
             loadDefaultWordlist();
         });
-        $('#loadWordlistsBtn')?.addEventListener('click', loadWordlistManager);
 
         $$('#content-passwordattack .tab').forEach(tab => {
             tab.addEventListener('click', () => {
