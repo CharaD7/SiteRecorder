@@ -553,6 +553,42 @@
         }
     }
 
+    // §5.2 risk register. Scores rank work using a published mapping; the
+    // quantitative models §5.2 also asks for are listed with reasons rather
+    // than simulated from invented loss data.
+    async function loadRiskRegister() {
+        const el = $('#riskRegisterStatus');
+        if (!el) return;
+        try {
+            const r = await invoke('risk_register');
+            const rows = r.entries.map(e => `
+                <div style="display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border-secondary);">
+                    <span class="badge badge-${e.level === 'critical' ? 'critical' : e.level === 'high' ? 'high' : e.level === 'medium' ? 'warning' : 'info'}">${escapeHtml(e.level)}</span>
+                    <span style="flex:1;">${escapeHtml(e.title)}</span>
+                    <span class="text-tertiary text-sm">L ${e.likelihood.score?.toFixed(0) ?? '-'} x I ${e.impact.score?.toFixed(0) ?? '-'} = <strong>${e.score.toFixed(0)}</strong></span>
+                </div>`).join('');
+
+            el.innerHTML = `
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm text-secondary">${r.entries.length} open risk(s)</span>
+                    <span class="badge badge-info">residual ${r.residual_score.toFixed(0)}</span>
+                    <span class="badge badge-info">${Object.entries(r.by_level).map(([k, v]) => `${k}: ${v}`).join(' · ')}</span>
+                </div>
+                ${rows || '<div class="text-tertiary text-sm">No open risks.</div>'}
+                ${r.notes.map(n => `<div class="advisory-inline" style="margin-top:6px;">${escapeHtml(n)}</div>`).join('')}
+                ${r.unavailable_models?.length ? `
+                    <details class="mt-2">
+                        <summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">
+                            ${r.unavailable_models.length} quantitative model(s) not computed — and why</summary>
+                        <ul class="text-sm" style="margin-top:6px;">
+                            ${r.unavailable_models.map(m => `<li style="padding:2px 0;"><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(m.reason)}</li>`).join('')}
+                        </ul>
+                    </details>` : ''}`;
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">Risk register unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     // ========================================
     // Custom Select Component
     // ========================================
@@ -4839,6 +4875,7 @@
     function setupWhiteCompliance() {
         loadCompliance();
         loadMetrics();
+        loadRiskRegister();
     }
 
     async function loadCompliance() {

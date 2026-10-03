@@ -286,6 +286,32 @@ async fn main() {
               "no unexplained refusals".into());
     }
 
+    // ---- Wave 4.3.3: §5.2 risk register from a real scan ----
+    if let Some(report) = &last_report {
+        let database = db::Db::open_in_memory().unwrap();
+        ingest::ingest_report(database.conn(), report, None).unwrap();
+
+        // Give the auto-created asset a real criticality so impact is measured.
+        database.conn().execute(
+            "UPDATE assets SET criticality = 'critical' WHERE id = (SELECT asset_id FROM findings LIMIT 1)",
+            [],
+        ).unwrap();
+
+        let r = findings::risk_register(database.conn()).unwrap();
+        println!("  risk: {}", r.describe());
+        for e in r.entries.iter().take(4) {
+            println!("    [{}] {} score={} basis={}", e.level, e.title, e.score, e.impact_basis);
+        }
+        check("wave4.3.3 register populated from real findings",
+              !r.entries.is_empty(), format!("{} entries", r.entries.len()));
+        check("wave4.3.3 scores are ordered highest first",
+              r.entries.windows(2).all(|w| w[0].score >= w[1].score),
+              "descending by score".into());
+        check("wave4.3.3 quantitative models refused",
+              r.unavailable_models.iter().any(|m| m.name.contains("Monte Carlo")),
+              "Monte Carlo reported unavailable".into());
+    }
+
     // ---- Wave 3.1: real TLS against a live host ----
     match NetworkScanner::check_ssl("example.com", 443).await {
         Ok(info) => {

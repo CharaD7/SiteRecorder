@@ -8,6 +8,7 @@
 pub mod attack;
 pub mod compliance;
 pub mod metrics;
+pub mod risk;
 pub mod ingest;
 
 use db::models::{AssetType, Finding, FindingStatus, Severity};
@@ -411,6 +412,50 @@ pub fn metrics_report(
     report.discovery_trend = metrics::discovery_trend(&projected, now, window_days);
     report.unavailable = metrics::unavailable_metrics(incidents);
     Ok(report)
+}
+
+/// Build the §5.2 risk register from stored findings.
+///
+/// Asset criticality is joined in so impact is measured where known, and
+/// defaulted (and disclosed) where it is not.
+pub fn risk_register(conn: &rusqlite::Connection) -> Result<risk::RiskRegister> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.title, f.severity, f.category, f.status, f.asset_id, a.criticality
+             FROM findings f
+             LEFT JOIN assets a ON a.id = f.asset_id",
+        )
+        .map_err(map_err)?;
+
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, Option<String>>(5)?,
+                r.get::<_, Option<String>>(6)?,
+            ))
+        })
+        .map_err(map_err)?;
+
+    let mut inputs = Vec::new();
+    for row in rows {
+        let (id, title, severity, category, status, asset_id, criticality) = row.map_err(map_err)?;
+        inputs.push(risk::RiskInput {
+            finding_id: id,
+            title,
+            severity,
+            category,
+            asset_id,
+            asset_criticality: criticality,
+            open: !matches!(status.as_str(), "false_positive" | "accepted" | "remediated"),
+        });
+    }
+
+    Ok(risk::build_register(chrono::Utc::now(), &inputs))
 }
 
 pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {
