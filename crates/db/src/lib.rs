@@ -33,7 +33,7 @@ pub enum DbError {
 pub type Result<T> = std::result::Result<T, DbError>;
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// A single forward-only schema change.
 struct Migration {
@@ -86,6 +86,65 @@ Migration {
 
         CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(status);
         CREATE INDEX IF NOT EXISTS idx_policy_ack_policy ON policy_acknowledgments(policy_id);
+    "#,
+},
+Migration {
+    version: 3,
+    name: "vendor_risk_and_training",
+    sql: r#"
+        CREATE TABLE IF NOT EXISTS vendors (
+            id            TEXT PRIMARY KEY,
+            name          TEXT NOT NULL,
+            category      TEXT NOT NULL DEFAULT 'other',
+            tier          TEXT NOT NULL DEFAULT 'medium',
+            data_access   TEXT NOT NULL DEFAULT 'none',
+            status        TEXT NOT NULL DEFAULT 'under_review',
+            owner         TEXT,
+            questionnaire TEXT NOT NULL DEFAULT '{}',
+            score         REAL,
+            notes         TEXT NOT NULL DEFAULT '',
+            reviewed_at   TEXT,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            user_id       TEXT REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS training_modules (
+            id            TEXT PRIMARY KEY,
+            title         TEXT NOT NULL,
+            description   TEXT NOT NULL DEFAULT '',
+            modality      TEXT NOT NULL DEFAULT 'document',
+            duration_mins INTEGER NOT NULL DEFAULT 15,
+            mandatory     INTEGER NOT NULL DEFAULT 0,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS training_assignments (
+            id            TEXT PRIMARY KEY,
+            module_id     TEXT NOT NULL REFERENCES training_modules(id) ON DELETE CASCADE,
+            user_id       TEXT NOT NULL,
+            assigned_at   TEXT NOT NULL,
+            due_at        TEXT,
+            completed_at  TEXT,
+            UNIQUE (module_id, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS phishing_campaigns (
+            id           TEXT PRIMARY KEY,
+            name         TEXT NOT NULL,
+            template_url TEXT,
+            audience     TEXT NOT NULL DEFAULT '',
+            launched_at  TEXT,
+            launched_by  TEXT,
+            sent_count   INTEGER NOT NULL DEFAULT 0,
+            clicked      INTEGER NOT NULL DEFAULT 0,
+            submitted    INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_vendors_tier ON vendors(tier);
+        CREATE INDEX IF NOT EXISTS idx_training_assign_due ON training_assignments(due_at);
     "#,
 }];
 
@@ -188,12 +247,13 @@ mod tests {
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN
                  ('users','assets','findings','scan_jobs','incidents','audit_log','schema_version',
-                  'policies','policy_acknowledgments','policy_exceptions')",
+                  'policies','policy_acknowledgments','policy_exceptions',
+                  'vendors','training_modules','training_assignments','phishing_campaigns')",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 10, "all tables from every migration must exist");
+        assert_eq!(count, 14, "all tables from every migration must exist");
     }
 
     #[test]

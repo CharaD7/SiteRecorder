@@ -10,6 +10,8 @@ pub mod compliance;
 pub mod metrics;
 pub mod policies;
 pub mod risk;
+pub mod training;
+pub mod vendors;
 pub mod ingest;
 
 use db::models::{AssetType, Finding, FindingStatus, Severity};
@@ -575,6 +577,188 @@ pub fn acknowledgment_coverage(
         .unwrap_or(0);
 
     Ok((count as usize, version))
+}
+
+/// §5.4 vendor register from stored vendors.
+pub fn vendor_register(conn: &rusqlite::Connection) -> Result<vendors::VendorRegister> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, category, data_access, criticality, status, owner,
+                    questionnaire, notes, created_at, updated_at
+             FROM vendors ORDER BY name",
+        )
+        .map_err(map_err)?;
+
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+                r.get::<_, Option<String>>(6)?,
+                r.get::<_, String>(7)?,
+                r.get::<_, String>(8)?,
+                r.get::<_, String>(9)?,
+                r.get::<_, String>(10)?,
+            ))
+        })
+        .map_err(map_err)?;
+
+    let mut all = Vec::new();
+    for row in rows {
+        let (id, name, category, access, criticality, status, owner, q, notes, created, updated) =
+            row.map_err(map_err)?;
+
+        let question: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(&q).unwrap_or_default();
+
+        all.push(vendors::Vendor {
+            id,
+            name,
+            category,
+            data_access: vendors::DataAccess::from_str(&access)
+                .ok_or_else(|| DbError::Migration(format!("unknown data_access: {}", access)))?,
+            criticality: vendors::Tier::from_str(&criticality).ok_or_else(|| {
+                DbError::Migration(format!("unknown criticality: {}", criticality))
+            })?,
+            status: match status.as_str() {
+                "under_review" => vendors::AssessmentStatus::UnderReview,
+                "complete" => vendors::AssessmentStatus::Complete,
+                "expired" => vendors::AssessmentStatus::Expired,
+                _ => vendors::AssessmentStatus::NotStarted,
+            },
+            owner,
+            questionnaire: question,
+            notes,
+            created_at: created,
+            updated_at: updated,
+        });
+    }
+
+    let mut reg = vendors::build_register(all);
+    reg.notes.push(format!(
+        "{} capability(s) are not implemented; see unavailable_capabilities().",
+        vendors::unavailable_capabilities().len()
+    ));
+    Ok(reg)
+}
+
+/// Seed the operator-written training modules. Idempotent.
+pub fn seed_training_modules(conn: &rusqlite::Connection) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let starters: Vec<(&str, &str, &str, &str, u32, bool)> = vec![
+        ("tm_phishing", "Recognising Phishing", "Spot phishing lures and report them.", "document", 20, true),
+        ("tm_passwords", "Password Hygiene", "Password managers, length, and reuse.", "document", 15, true),
+        ("tm_social", "Social Engineering", "Pretexting, vishing and tailgating.", "document", 20, false),
+        ("tm_reporting", "Reporting an Incident", "What to report and to whom, fast.", "document", 10, true),
+    ];
+    for (id, title, desc, modality, mins, mandatory) in starters {
+        conn.execute(
+            "INSERT OR IGNORE INTO training_modules
+             (id, title, description, modality, duration_mins, mandatory, created_at, updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
+            params![id, title, desc, modality, mins as i64, mandatory as i64, now],
+        )
+        .map_err(map_err)?;
+    }
+    Ok(())
+}
+
+/// §5.5 training report from stored modules, assignments and campaigns.
+pub fn training_report(conn: &rusqlite::Connection) -> Result<training::TrainingReport> {
+    seed_training_modules(conn)?;
+
+    let mut modules = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, description, modality, duration_mins, mandatory
+                 FROM training_modules ORDER BY title",
+            )
+            .map_err(map_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(training::Module {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    description: r.get(2)?,
+                    modality: match r.get::<_, String>(3)?.as_str() {
+                        "video" => training::Modality::Video,
+                        "live_session" => training::Modality::LiveSession,
+                        "phishing_simulation" => training::Modality::PhishingSimulation,
+                        _ => training::Modality::Document,
+                    },
+                    duration_mins: r.get::<_, i64>(4)? as u32,
+                    mandatory: r.get::<_, i64>(5)? != 0,
+                })
+            })
+            .map_err(map_err)?;
+        for row in rows {
+            modules.push(row.map_err(map_err)?);
+        }
+    }
+
+    let mut assignments = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, module_id, user_id, assigned_at, due_at, completed_at
+                 FROM training_assignments ORDER BY assigned_at DESC",
+            )
+            .map_err(map_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(training::Assignment {
+                    id: r.get(0)?,
+                    module_id: r.get(1)?,
+                    user_id: r.get(2)?,
+                    assigned_at: r.get(3)?,
+                    due_at: r.get(4)?,
+                    completed_at: r.get(5)?,
+                })
+            })
+            .map_err(map_err)?;
+        for row in rows {
+            assignments.push(row.map_err(map_err)?);
+        }
+    }
+
+    let mut campaigns = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, template_url, audience, launched_at, sent_count, clicked, submitted
+                 FROM phishing_campaigns ORDER BY created_at DESC",
+            )
+            .map_err(map_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(training::PhishingCampaign {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    template_url: r.get(2)?,
+                    audience: r.get(3)?,
+                    launched_at: r.get(4)?,
+                    sent_count: r.get::<_, i64>(5)? as u64,
+                    clicked: r.get::<_, i64>(6)? as u64,
+                    submitted: r.get::<_, i64>(7)? as u64,
+                })
+            })
+            .map_err(map_err)?;
+        for row in rows {
+            campaigns.push(row.map_err(map_err)?);
+        }
+    }
+
+    Ok(training::build_report(
+        &chrono::Utc::now().to_rfc3339(),
+        modules,
+        assignments,
+        campaigns,
+    ))
 }
 
 pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {

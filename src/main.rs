@@ -670,6 +670,29 @@ async fn acknowledge_policy(
     findings::acknowledge_policy(db.conn(), &policy_id, &user_id).map_err(|e| e.to_string())
 }
 
+/// §5.4 vendor risk register.
+#[tauri::command]
+async fn vendor_register(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    let reg = findings::vendor_register(db.conn()).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "register": reg,
+        "unavailable": findings::vendors::unavailable_capabilities()
+            .into_iter()
+            .map(|(name, reason)| serde_json::json!({"name": name, "reason": reason}))
+            .collect::<Vec<_>>(),
+    }))
+}
+
+/// §5.5 training and awareness report.
+#[tauri::command]
+async fn training_report(state: State<'_, AppState>) -> Result<findings::training::TrainingReport, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::training_report(db.conn()).map_err(|e| e.to_string())
+}
+
 /// §5.2 risk register over stored findings.
 #[tauri::command]
 async fn risk_register(state: State<'_, AppState>) -> Result<findings::risk::RiskRegister, String> {
@@ -2230,6 +2253,8 @@ fn run_gui_mode() {
             compliance_assessment,
             metrics_report,
             risk_register,
+            vendor_register,
+            training_report,
             policy_library,
             acknowledge_policy,
             // Persistence + tamper-evident audit (Wave 1)

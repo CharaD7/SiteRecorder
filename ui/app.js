@@ -641,6 +641,61 @@
         }
     }
 
+    // 5.4 vendor risk and 5.5 training. Both separate what is measured from
+    // what is operator-supplied, and both list what is not implemented.
+    async function loadVendorRisk() {
+        const el = $('#vendorStatus');
+        if (!el) return;
+        try {
+            const d = await invoke('vendor_register');
+            const r = d.register;
+            el.innerHTML = `
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm text-secondary">${r.vendors.length} vendor(s)</span>
+                    ${Object.entries(r.by_tier).map(([k, v]) => `<span class="badge badge-${k === 'critical' ? 'critical' : k === 'high' ? 'high' : k === 'medium' ? 'warning' : 'info'}">${escapeHtml(k)}: ${v}</span>`).join('')}
+                    ${r.needs_attention.length ? `<span class="badge badge-warning">${r.needs_attention.length} need attention</span>` : ''}
+                </div>
+                ${r.vendors.map(v => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-secondary);">
+                        <span style="flex:1;">${escapeHtml(v.name)}</span>
+                        <span class="badge badge-info">${escapeHtml(v.data_access)}</span>
+                        <span class="text-tertiary text-sm">questionnaire ${Math.round(v.questionnaire_coverage * 100)}%</span>
+                    </div>`).join('') || '<div class="text-tertiary text-sm">No vendors recorded.</div>'}
+                ${r.notes.map(n => `<div class="advisory-inline" style="margin-top:6px;">${escapeHtml(n)}</div>`).join('')}
+                ${d.unavailable?.length ? `<details class="mt-2"><summary style="cursor:pointer;font-size:0.8rem;color:var(--text-tertiary);">${d.unavailable.length} capability(s) not implemented</summary>
+                    <ul class="text-sm" style="margin-top:6px;">${d.unavailable.map(u => `<li><strong>${escapeHtml(u.name)}</strong> — ${escapeHtml(u.reason)}</li>`).join('')}</ul></details>` : ''}`;
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">Vendor register unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
+    async function loadTraining() {
+        const el = $('#trainingStatus');
+        if (!el) return;
+        try {
+            const t = await invoke('training_report');
+            const pct = (x) => x === null || x === undefined ? '—' : `${(x * 100).toFixed(0)}%`;
+            el.innerHTML = `
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm text-secondary">${t.modules.length} module(s)</span>
+                    <span class="badge badge-info">completion ${pct(t.completion_rate)}</span>
+                    ${t.overdue ? `<span class="badge badge-critical">${t.overdue} overdue</span>` : ''}
+                </div>
+                <div class="text-sm text-secondary mb-2">
+                    Phishing click rate ${pct(t.click_rate)} · submission rate ${pct(t.submission_rate)}
+                </div>
+                ${t.modules.map(m => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-secondary);">
+                        <span style="flex:1;">${escapeHtml(m.title)}</span>
+                        <span class="badge badge-info">${escapeHtml(m.modality)}</span>
+                        <span class="text-tertiary text-sm">${m.duration_mins}m${m.mandatory ? ' · mandatory' : ''}</span>
+                    </div>`).join('')}
+                ${t.notes.map(n => `<div class="advisory-inline" style="margin-top:6px;">${escapeHtml(n)}</div>`).join('')}`;
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">Training report unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     // ========================================
     // Custom Select Component
     // ========================================
@@ -4899,6 +4954,8 @@
         loadMetrics();
         loadRiskRegister();
         loadPolicies();
+        loadVendorRisk();
+        loadTraining();
     }
 
     // ========================================
