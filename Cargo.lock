@@ -50,6 +50,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6312,6 +6324,7 @@ name = "site-recorder"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "agent",
  "anyhow",
  "argon2",
  "auth-engine",

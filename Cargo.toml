@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/agent",
     "crates/db",
     "crates/findings",
     "crates/browser",
@@ -56,6 +57,7 @@ printpdf = "0.7"
 
 # Workspace crates
 db = { path = "crates/db" }
+agent = { path = "crates/agent" }
 findings = { path = "crates/findings" }
 browser = { path = "crates/browser" }
 crawler = { path = "crates/crawler" }
