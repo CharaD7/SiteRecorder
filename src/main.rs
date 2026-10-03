@@ -210,6 +210,7 @@ async fn get_status(state: State<'_, AppState>) -> Result<CrawlStatus, String> {
 async fn run_vulnerability_scan(
     url: String,
     output_dir: Option<String>,
+    max_pages: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<ScanReport, String> {
     info!("Starting vulnerability scan for: {}", url);
@@ -217,6 +218,9 @@ async fn run_vulnerability_scan(
     let mut config = ScanConfig::new(&url).map_err(|e| e.to_string())?;
     if let Some(dir) = output_dir {
         config = config.with_output_dir(std::path::PathBuf::from(dir));
+    }
+    if let Some(pages) = max_pages {
+        config = config.with_max_pages(pages);
     }
     let mut scanner = VulnerabilityScanner::new(config).map_err(|e| e.to_string())?;
 

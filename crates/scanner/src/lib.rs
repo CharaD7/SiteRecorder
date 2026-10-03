@@ -174,6 +174,15 @@ impl ScanConfig {
         self.output_dir = Some(dir);
         self
     }
+
+    /// Clamp and apply a page budget.
+    ///
+    /// Zero or absurd values are clamped rather than accepted: a zero budget
+    /// would silently scan nothing and look like a clean target.
+    pub fn with_max_pages(mut self, max_pages: u32) -> Self {
+        self.max_pages = max_pages.clamp(1, 5000) as usize;
+        self
+    }
 }
 
 pub struct VulnerabilityScanner {
@@ -4105,6 +4114,15 @@ impl Default for ScanConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn with_max_pages_clamps_absurd_values() {
+        let cfg = ScanConfig::new("https://example.com").unwrap();
+        // A zero budget would scan nothing and look like a clean target.
+        assert_eq!(cfg.clone().with_max_pages(0).max_pages, 1);
+        assert_eq!(cfg.clone().with_max_pages(10).max_pages, 10);
+        assert_eq!(cfg.with_max_pages(99_999).max_pages, 5000);
+    }
 
     #[test]
     fn test_scan_config_creation() {

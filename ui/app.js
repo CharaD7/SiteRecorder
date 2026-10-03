@@ -2188,34 +2188,42 @@
         state.data.scans.push({ id: scanId, url, status: 'running', progress: 0, pages: [], findings: [] });
         state.data.activeScanId = scanId;
 
-        // Start progress polling
+        // Elapsed-time indicator only.
+        //
+        // This used to invent a page count, a check count and a percentage on
+        // a 30s timer, which read as real measurement while being pure fiction.
+        // The scan command returns no progress events, so the honest signal is
+        // elapsed time and an indeterminate bar.
         const scanStartTime = Date.now();
-        const estimatedDuration = 30000; // Estimate 30 seconds
         const progressInterval = setInterval(() => {
             if (!state.data.activeScanId || state.data.activeScanId !== scanId) {
                 clearInterval(progressInterval);
                 return;
             }
-            const elapsed = Date.now() - scanStartTime;
-            const estimatedPct = Math.min(95, Math.round((elapsed / estimatedDuration) * 100));
+            const elapsed = Math.round((Date.now() - scanStartTime) / 1000);
             updateScanProgress({
                 phase: 'Scanning',
                 current_url: url,
                 current_check: 'Running security checks...',
-                pages_scanned: Math.max(1, Math.round((elapsed / estimatedDuration) * 1)),
-                total_pages: 1,
-                checks_completed: Math.round((elapsed / estimatedDuration) * 30),
-                total_checks: 30,
-                findings_count: 0,
-                elapsed_seconds: Math.round(elapsed / 1000),
-                message: `Scanning ${url}...`,
+                elapsed_seconds: elapsed,
+                message: `Scanning ${url} — ${elapsed}s elapsed (progress not reported by the scanner)`,
             });
-            $('#webScanProgressBar').style.width = `${estimatedPct}%`;
+            const bar = $('#webScanProgressBar');
+            if (bar) {
+                // Indeterminate sweep rather than a fabricated percentage.
+                bar.style.width = '100%';
+                bar.classList.add('progress-indeterminate');
+            }
         }, 1000);
 
         try {
             const outputDir = $('#outputDir')?.value?.trim();
-            const result = await invoke('run_vulnerability_scan', { url, outputDir });
+            const maxPages = parseInt($('#webScanMaxPages')?.value, 10);
+            const result = await invoke('run_vulnerability_scan', {
+                url,
+                outputDir,
+                maxPages: Number.isFinite(maxPages) && maxPages > 0 ? maxPages : null,
+            });
 
             $('#webScanStatus').textContent = 'Scan complete!';
             $('#webScanProgressBar').style.width = '100%';
