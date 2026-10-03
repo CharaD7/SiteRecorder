@@ -589,6 +589,48 @@
         }
     }
 
+    // 5.3 policy library. Reports the library as incomplete until it reaches
+    // the spec target rather than presenting starter outlines as a finished set.
+    async function loadPolicies() {
+        const el = $('#policyStatus');
+        if (!el) return;
+        try {
+            const lib = await invoke('policy_library');
+            el.innerHTML = `
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm text-secondary">${lib.policies.length} of ${lib.target_library_size} policies</span>
+                    <span class="badge badge-warning">${lib.drafts} draft</span>
+                    <span class="badge badge-success">${lib.active} active</span>
+                    ${lib.overdue_for_review.length ? `<span class="badge badge-critical">${lib.overdue_for_review.length} overdue review</span>` : ''}
+                </div>
+                ${lib.policies.map(p => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-secondary);">
+                        <code class="text-sm">${escapeHtml(p.code)}</code>
+                        <span style="flex:1;">${escapeHtml(p.title)}</span>
+                        <span class="badge badge-${p.status === 'active' ? 'success' : 'warning'}">${escapeHtml(p.status)}</span>
+                        <span class="text-tertiary text-sm">v${p.version} · ${escapeHtml(p.cadence)}</span>
+                        <button class="btn btn-sm btn-secondary" data-policy-ack="${escapeHtml(p.id)}">Acknowledge</button>
+                    </div>`).join('')}
+                ${lib.notes.map(n => `<div class="advisory-inline" style="margin-top:6px;">${escapeHtml(n)}</div>`).join('')}`;
+
+            el.querySelectorAll('[data-policy-ack]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    btn.disabled = true;
+                    try {
+                        await invoke('acknowledge_policy', { policyId: btn.dataset.policyAck });
+                        btn.textContent = 'Acknowledged';
+                        showToast('success', 'Acknowledged', 'Recorded against the current version.');
+                    } catch (err) {
+                        btn.disabled = false;
+                        showToast('error', 'Failed', String(err));
+                    }
+                });
+            });
+        } catch (e) {
+            el.innerHTML = `<div class="advisory-inline">Policy library unavailable: ${escapeHtml(String(e))}</div>`;
+        }
+    }
+
     // ========================================
     // Custom Select Component
     // ========================================
@@ -4876,6 +4918,7 @@
         loadCompliance();
         loadMetrics();
         loadRiskRegister();
+        loadPolicies();
     }
 
     async function loadCompliance() {

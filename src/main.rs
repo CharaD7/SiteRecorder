@@ -641,6 +641,31 @@ async fn findings_severity_breakdown(
     findings::severity_breakdown(db.conn()).map_err(|e| e.to_string())
 }
 
+/// §5.3 policy library.
+#[tauri::command]
+async fn policy_library(
+    target: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<findings::policies::PolicyLibrary, String> {
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::policy_library(db.conn(), target).map_err(|e| e.to_string())
+}
+
+/// Record a user's acknowledgment of a policy at its current version.
+#[tauri::command]
+async fn acknowledge_policy(
+    policy_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let operator = state.operator_id.lock().await.clone();
+    let user_id = operator.ok_or("No operator identity available")?;
+
+    let db_guard = state.database.lock().await;
+    let db = db_guard.as_ref().ok_or("Database unavailable")?;
+    findings::acknowledge_policy(db.conn(), &policy_id, &user_id).map_err(|e| e.to_string())
+}
+
 /// §5.2 risk register over stored findings.
 #[tauri::command]
 async fn risk_register(state: State<'_, AppState>) -> Result<findings::risk::RiskRegister, String> {
@@ -2201,6 +2226,8 @@ fn run_gui_mode() {
             compliance_assessment,
             metrics_report,
             risk_register,
+            policy_library,
+            acknowledge_policy,
             // Persistence + tamper-evident audit (Wave 1)
             get_database_status,
             list_chained_audit_entries,

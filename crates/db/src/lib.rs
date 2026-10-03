@@ -33,7 +33,7 @@ pub enum DbError {
 pub type Result<T> = std::result::Result<T, DbError>;
 
 /// Current schema version. Bump when adding a migration.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// A single forward-only schema change.
 struct Migration {
@@ -47,6 +47,46 @@ const MIGRATIONS: &[Migration] = &[Migration {
     version: 1,
     name: "initial_schema",
     sql: include_str!("schema.sql"),
+},
+Migration {
+    version: 2,
+    name: "policies",
+    sql: r#"
+        CREATE TABLE IF NOT EXISTS policies (
+            id          TEXT PRIMARY KEY,
+            code        TEXT NOT NULL UNIQUE,
+            title       TEXT NOT NULL,
+            summary     TEXT NOT NULL DEFAULT '',
+            status      TEXT NOT NULL DEFAULT 'draft',
+            version     INTEGER NOT NULL DEFAULT 1,
+            cadence     TEXT NOT NULL DEFAULT 'annual',
+            owner       TEXT,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            next_review TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS policy_acknowledgments (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            policy_id        TEXT NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+            policy_version   INTEGER NOT NULL,
+            user_id          TEXT NOT NULL,
+            acknowledged_at  TEXT NOT NULL,
+            UNIQUE (policy_id, policy_version, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS policy_exceptions (
+            id           TEXT PRIMARY KEY,
+            policy_id    TEXT NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+            justification TEXT NOT NULL,
+            approved_by  TEXT,
+            expires_at   TEXT,
+            created_at   TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(status);
+        CREATE INDEX IF NOT EXISTS idx_policy_ack_policy ON policy_acknowledgments(policy_id);
+    "#,
 }];
 
 /// Connection wrapper owning schema lifecycle.
@@ -147,12 +187,13 @@ mod tests {
             .conn()
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN
-                 ('users','assets','findings','scan_jobs','incidents','audit_log','schema_version')",
+                 ('users','assets','findings','scan_jobs','incidents','audit_log','schema_version',
+                  'policies','policy_acknowledgments','policy_exceptions')",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 7);
+        assert_eq!(count, 10, "all tables from every migration must exist");
     }
 
     #[test]
@@ -171,7 +212,10 @@ mod tests {
             .conn()
             .query_row("SELECT COUNT(*) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(applied, 1);
+        assert_eq!(
+            applied, SCHEMA_VERSION,
+            "reopening must not re-apply migrations, so the count equals the version"
+        );
     }
 
     #[test]

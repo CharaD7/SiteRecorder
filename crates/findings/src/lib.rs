@@ -8,6 +8,7 @@
 pub mod attack;
 pub mod compliance;
 pub mod metrics;
+pub mod policies;
 pub mod risk;
 pub mod ingest;
 
@@ -456,6 +457,124 @@ pub fn risk_register(conn: &rusqlite::Connection) -> Result<risk::RiskRegister> 
     }
 
     Ok(risk::build_register(chrono::Utc::now(), &inputs))
+}
+
+/// Ensure the starter policy library exists. Idempotent.
+pub fn seed_policies(conn: &rusqlite::Connection) -> Result<()> {
+    for p in policies::starter_policies() {
+        conn.execute(
+            "INSERT OR IGNORE INTO policies
+             (id, code, title, summary, status, version, cadence, owner, created_at, updated_at, next_review)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                p.id, p.code, p.title, p.summary, p.status.as_str(), p.version as i64,
+                p.cadence.as_str(), p.owner, p.created_at, p.updated_at, p.next_review,
+            ],
+        )
+        .map_err(map_err)?;
+    }
+    Ok(())
+}
+
+fn policy_from_row(row: &Row<'_>) -> rusqlite::Result<policies::Policy> {
+    Ok(policies::Policy {
+        id: row.get(0)?,
+        code: row.get(1)?,
+        title: row.get(2)?,
+        summary: row.get(3)?,
+        status: match row.get::<_, String>(4)?.as_str() {
+            "active" => policies::PolicyStatus::Active,
+            "retired" => policies::PolicyStatus::Retired,
+            _ => policies::PolicyStatus::Draft,
+        },
+        version: row.get::<_, i64>(5)? as u32,
+        cadence: match row.get::<_, String>(6)?.as_str() {
+            "quarterly" => policies::ReviewCadence::Quarterly,
+            "semi_annual" => policies::ReviewCadence::SemiAnnual,
+            "biennial" => policies::ReviewCadence::Biennial,
+            _ => policies::ReviewCadence::Annual,
+        },
+        owner: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+        next_review: row.get(10)?,
+    })
+}
+
+/// §5.3 policy library, seeding starters on first use.
+pub fn policy_library(
+    conn: &rusqlite::Connection,
+    target: Option<usize>,
+) -> Result<policies::PolicyLibrary> {
+    seed_policies(conn)?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, code, title, summary, status, version, cadence, owner,
+                    created_at, updated_at, next_review
+             FROM policies ORDER BY code",
+        )
+        .map_err(map_err)?;
+    let rows = stmt.query_map([], policy_from_row).map_err(map_err)?;
+    let all: Vec<policies::Policy> = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)?;
+
+    Ok(policies::build_library(
+        chrono::Utc::now(),
+        all,
+        target.unwrap_or(policies::TARGET_LIBRARY_SIZE),
+    ))
+}
+
+/// Record that a user acknowledged a specific policy version.
+pub fn acknowledge_policy(
+    conn: &rusqlite::Connection,
+    policy_id: &str,
+    user_id: &str,
+) -> Result<()> {
+    let version: i64 = conn
+        .query_row(
+            "SELECT version FROM policies WHERE id = ?1",
+            params![policy_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => DbError::NotFound(policy_id.to_string()),
+            other => DbError::Sqlite(other),
+        })?;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO policy_acknowledgments (policy_id, policy_version, user_id, acknowledged_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![policy_id, version, user_id, chrono::Utc::now().to_rfc3339()],
+    )
+    .map_err(map_err)?;
+    Ok(())
+}
+
+/// Acknowledgment coverage for a policy: how many distinct users, at which version.
+pub fn acknowledgment_coverage(
+    conn: &rusqlite::Connection,
+    policy_id: &str,
+) -> Result<(usize, u32)> {
+    let version: u32 = conn
+        .query_row(
+            "SELECT version FROM policies WHERE id = ?1",
+            params![policy_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|v| v as u32)
+        .unwrap_or(0);
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT user_id) FROM policy_acknowledgments
+             WHERE policy_id = ?1 AND policy_version = ?2",
+            params![policy_id, version as i64],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    Ok((count as usize, version))
 }
 
 pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {
