@@ -235,7 +235,7 @@ impl PacketCapture {
 
     async fn capture_loop(
         interface_name: &str,
-        _promiscuous: bool,
+        promiscuous: bool,
         running: Arc<RwLock<bool>>,
         packets: Arc<RwLock<Vec<PacketInfo>>>,
         filters: Arc<RwLock<Vec<CaptureFilter>>>,
@@ -243,7 +243,10 @@ impl PacketCapture {
         tx: broadcast::Sender<CaptureEvent>,
     ) -> Result<()> {
         let interface = Self::find_interface(interface_name)?;
-        let (_, mut rx) = match datalink::channel(&interface, Default::default()) {
+        // Promiscuous mode was previously accepted and then discarded here:
+        // the channel was opened with Default::default(), so the caller's
+        // setting had no effect and the UI claimed to enable it.
+        let (_, mut rx) = match datalink::channel(&interface, Self::channel_config(promiscuous)) {
             Ok(Channel::Ethernet(tx, rx)) => (tx, rx),
             Ok(_) => return Err(CaptureError::Pcap("Unexpected channel type".to_string())),
             Err(e) => return Err(CaptureError::Pcap(e.to_string())),
@@ -285,6 +288,17 @@ impl PacketCapture {
         }
 
         Ok(())
+    }
+
+    /// Channel configuration, including the requested promiscuous mode.
+    ///
+    /// Promiscuous capture usually requires elevated privileges; when it is
+    /// unavailable the OS reports fewer frames, which is why the setting is
+    /// surfaced in the session record rather than assumed.
+    fn channel_config(promiscuous: bool) -> datalink::Config {
+        let mut config = datalink::Config::default();
+        config.promiscuous = promiscuous;
+        config
     }
 
     fn find_interface(name: &str) -> Result<NetworkInterface> {
@@ -551,6 +565,14 @@ mod tests {
     fn test_format_tcp_flags() {
         // SYN flag
         assert_eq!(0x02, 0x02);
+    }
+
+    #[test]
+    fn channel_config_honours_promiscuous_request() {
+        // Regression: promiscuous mode was accepted and then discarded, so the
+        // UI reported it enabled while the channel ignored it.
+        assert!(PacketCapture::channel_config(true).promiscuous);
+        assert!(!PacketCapture::channel_config(false).promiscuous);
     }
 
     #[test]
