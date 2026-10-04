@@ -6,8 +6,8 @@ and what to do first.
 
 ## Verified baseline
 
-`main` @ `a5bac0f`. **294 Rust tests pass, 0 failures** (283 prior + 11 in
-`crates/bounty`). **19 Playwright tests pass** (17 + 2 audit), all with
+`main` @ `3ad7850`. **294 Rust tests pass, 0 failures** (283 prior + 11 in
+`crates/bounty`). **20 Playwright tests pass** (17 + 3 audit), all with
 `--retries=0` so no green test is hiding a flake.
 
 ```bash
@@ -25,8 +25,28 @@ pnpm exec playwright test tests/sr_control_audit.spec.ts \
   --workers=1 --retries=0 --timeout=1500000 --global-timeout=2700000
 ```
 
-Audit result: **54 sections, 0 controls faking success, 0 console errors.**
-That last figure started at 4 and is now 0 because of the loader guards below.
+Audit result: **54 sections, `all_flags=0`, 0 console errors** — no control
+faking success, no dead control, no unreachable section. That figure started at
+18 flags and 4 console errors.
+
+### The audit's own false positives (found and fixed)
+
+Worth recording, because it is the same failure mode the old grep had:
+
+- **16 `no-listener` reports were wrong.** The audit classified controls lazily,
+  interleaved with clicking them. `newOpBtn` navigates on click, which replaces
+  `#contentArea` and detaches the delegation root, so every *later* control was
+  reported dead. All 16 were wired via `#contentArea` delegation. Fixed by
+  splitting into two passes — classify everything, then click.
+  `delegated dashboard controls are not misreported as dead` now guards it.
+- **2 `no-provenance` reports were the harness's fault.** `switchTeam()`
+  early-returns when the team is already active, so clicking a team tab did not
+  force `renderSidebar()` and `gray-dashboard` / `white-dashboard` never
+  materialised. Fixed by calling `switchTeam` directly, with a click fallback.
+
+A standalone test asserts the prototype hook sees `#contentArea`'s listener, so
+if delegation detection ever breaks the audit fails loudly instead of quietly
+emitting confident nonsense.
 
 ### Trap: `globalTimeout`, not just `timeout`
 
@@ -114,11 +134,11 @@ Skips destructive controls and secret/file inputs rather than clicking them.
 The four null cases share one shape: the command answers `null` when nothing is
 configured, and the loader treated that as a crash. They now guard and say so.
 
-**Caveat on scope.** The audit reports `all_flags=18` but only `fake-success`
-asserts; `no-listener` and `no-provenance` are *recorded, not yet adjudicated*.
-Read them before treating the suite as clean. `no-listener` in particular will
-include controls that are genuinely decorative, and controls whose handler is
-attached by code the audit skipped.
+**Caveat on scope.** The audit now reports `all_flags=0`, but only
+`fake-success` and the delegation regression test *assert*. The audit skips
+destructive controls and secret/file inputs rather than clicking them, so those
+paths remain unexercised by design. A clean run means "nothing found in the paths
+this audit can safely walk", not "the UI is correct".
 
 ### 3. `assetSearch` / `profileSearch` wired
 
@@ -156,10 +176,9 @@ bytecode, and a hotspot ranking is not a verdict.
 ## Next
 
 - **`CWE→OWASP` qualified review** — still open, still gating §5.1. See below.
-- **Run the audit's `(a)`/`(c)` arms and triage the output.** `(b)` asserts and is
-  clean; the 18 recorded `no-listener` / `no-provenance` flags are unreviewed.
-- **Wire `crates/bounty` into the UI and `src/main.rs`.** The crate is built and
-  tested but not yet exposed over IPC, so nothing in the app calls it yet.
+- **Build the bounty UI.** The IPC commands are registered and
+  `ipc_contract` 3/3, but no template calls them yet. Branch on
+  `available`; when false, render the disabled reason — never an empty list.
 - **Decide the `cargo fmt` question** (687 diffs, above).
 
 ## Open questions — yours, not the engineer's
