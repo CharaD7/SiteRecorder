@@ -4799,7 +4799,9 @@
             if (!container) return;
 
             let html = '';
-            for (const [name, steps] of Object.entries(playbooks)) {
+            // The command answers null when no playbooks are configured.
+            // Object.entries(null) throws; treat it as an empty library.
+            for (const [name, steps] of Object.entries(playbooks || {})) {
                 html += `
                     <div class="finding-card mb-2">
                         <div class="finding-card-header" onclick="toggleFindingCard(this)">
@@ -4844,6 +4846,12 @@
             const feeds = await invoke('blueteam_get_threat_feeds');
             const container = $('#threatFeedsContainer');
             if (!container) return;
+            // A null reply means none are configured, not a failed enumeration;
+            // say so rather than leaving the panel silently empty.
+            if (!Array.isArray(feeds) || feeds.length === 0) {
+                container.innerHTML = '<div class="text-tertiary">No threat feeds loaded.</div>';
+                return;
+            }
             container.innerHTML = feeds.map(f => `
                 <div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border-secondary);">
                     <span class="status-dot ${f.enabled ? 'online' : 'offline'}"></span>
@@ -4862,6 +4870,10 @@
             const actors = await invoke('blueteam_get_threat_actors');
             const container = $('#threatActorsContainer');
             if (!container) return;
+            if (!Array.isArray(actors) || actors.length === 0) {
+                container.innerHTML = '<div class="text-tertiary">No threat actors loaded.</div>';
+                return;
+            }
             container.innerHTML = actors.map(a => `
                 <div class="finding-card">
                     <div class="finding-card-header" onclick="toggleFindingCard(this)">
@@ -4885,6 +4897,10 @@
             const indicators = await invoke('blueteam_get_indicators');
             const container = $('#indicatorsContainer');
             if (!container) return;
+            if (!Array.isArray(indicators) || indicators.length === 0) {
+                container.innerHTML = '<div class="text-tertiary">No indicators loaded.</div>';
+                return;
+            }
             container.innerHTML = indicators.map(i => `
                 <div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border-secondary);">
                     <span class="badge badge-${i.severity?.toLowerCase() === 'critical' ? 'critical' : i.severity?.toLowerCase() === 'high' ? 'high' : 'info'}">${i.indicator_type?.replace(/_/g, ' ')}</span>
