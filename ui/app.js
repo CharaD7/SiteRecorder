@@ -7222,20 +7222,34 @@
     }
 
     function scanEndpoints() {
+        // Previously waited two seconds, invented four endpoints with
+        // vulnerability counts, and reported "4 endpoints discovered". The
+        // list renderer already carried a DEMO DATA advisory, so the UI
+        // contradicted itself: it labelled the data as fake while announcing a
+        // successful discovery. No network sweep is implemented, so this
+        // refuses rather than reporting success for work never performed.
         const container = $('#endpointList');
-        container.innerHTML = '<div class="card"><div class="card-body"><div class="flex items-center gap-3"><div class="spinner spinner-sm"></div><span>Scanning network for endpoints...</span></div></div></div>';
+        if (!container) return;
 
-        setTimeout(() => {
-            state.data.endpoints = [
-                { id: 'ep_1', name: 'DC-01', os: 'Windows Server 2022', ip: '10.0.1.10', protected: true, vulnerabilities: 2, isolated: false, lastSeen: Date.now() },
-                { id: 'ep_2', name: 'WEB-01', os: 'Ubuntu 22.04', ip: '10.0.1.20', protected: true, vulnerabilities: 0, isolated: false, lastSeen: Date.now() },
-                { id: 'ep_3', name: 'WS-001', os: 'Windows 11', ip: '10.0.2.50', protected: false, vulnerabilities: 5, isolated: false, lastSeen: Date.now() },
-                { id: 'ep_4', name: 'Unknown Device', os: 'Unknown', ip: '10.0.2.99', protected: false, vulnerabilities: 0, isolated: true, lastSeen: Date.now() },
-            ];
-            loadEndpoints();
-            showToast('success', 'Scan Complete', '4 endpoints discovered.');
-            addActivity('Endpoint scan: 4 devices found');
-        }, 2000);
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Endpoint discovery</span>
+                    <span class="badge badge-warning">Unavailable</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-sm mb-2">No network sweep was performed. Nothing was discovered.</p>
+                    <p class="text-sm text-tertiary mb-2">A real implementation would need:</p>
+                    <ul class="text-sm">
+                        <li>• An authorised target range, with the scope recorded alongside the results</li>
+                        <li>• Host discovery (ICMP, ARP and TCP probes) with rate limiting</li>
+                        <li>• OS and service fingerprinting, reported with the evidence for each guess</li>
+                    </ul>
+                </div>
+            </div>`;
+
+        showToast('warning', 'Not Available',
+            'Endpoint discovery is not implemented; no devices were scanned.');
     }
 
     // ========================================
