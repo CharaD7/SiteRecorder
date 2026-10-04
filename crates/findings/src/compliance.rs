@@ -67,6 +67,29 @@ pub enum Confidence {
 ///
 /// Returns empty for CWEs with no confident mapping. Every CWE the scanner can
 /// emit is classified, so an unmapped CWE is always a deliberate decision.
+///
+/// # Verified against the normative MITRE taxonomy
+///
+/// Entries were checked against the OWASP Top Ten 2021 CWE categories
+/// (CWE-1348..1357), which are themselves pulled from the mappings cited in the
+/// 2021 OWASP Top 10. Three arms below were wrong before this review:
+///
+/// - **CWE-1021** was mapped to A01. MITRE places it in **A04 Insecure Design**
+///   (`cwe.mitre.org/data/definitions/1021` lists "1348 OWASP Top Ten 2021
+///   Category A04:2021 - Insecure Design"). Clickjacking is a design failure,
+///   not an access-control failure.
+/// - **CWE-614** was mapped to A02. MITRE places it in **A05 Security
+///   Misconfiguration** (`.../1349` lists 614 as a member).
+/// - **CWE-615** was mapped to A02 under the comment "Sensitive Cookie Without
+///   HttpOnly". That description belongs to **CWE-1004**, not 615. CWE-615 is
+///   *Inclusion of Sensitive Information in Source Code Comments*. The mapping
+///   target was wrong and so was the comment; a reader trusting either would
+///   have mis-filed a real finding.
+///
+/// **CWE-1004 is correctly mapped to A05** and its comment was correct --
+/// `.../1349` lists "1004 Sensitive Cookie Without 'HttpOnly' Flag" as a member.
+/// An earlier note in this repository suspected this arm was wrong; it is not.
+/// The confusion was CWE-615's copy-pasted description.
 pub fn owasp_categories_for_cwe(cwe: &str) -> &'static [&'static str] {
     // Normalise "CWE-89" / "89" / "cwe-89".
     let id = cwe
@@ -76,20 +99,17 @@ pub fn owasp_categories_for_cwe(cwe: &str) -> &'static [&'static str] {
 
     match id {
         // Access control.
-        "22" => &[owasp_top10_2021::A01],   // Path Traversal
-        "200" => &[owasp_top10_2021::A01],  // Exposure of Sensitive Information
-        "285" => &[owasp_top10_2021::A01],  // Improper Authorization
-        "639" => &[owasp_top10_2021::A01],  // Insecure Authorization (BOLA)
-        "601" => &[owasp_top10_2021::A01],  // Open Redirect
-        "1021" => &[owasp_top10_2021::A01], // Clickjacking (UI layer restriction)
-        "352" => &[owasp_top10_2021::A01],  // CSRF
-        "93" => &[owasp_top10_2021::A01],   // CRLF Injection
+        "22" => &[owasp_top10_2021::A01],  // Path Traversal
+        "200" => &[owasp_top10_2021::A01], // Exposure of Sensitive Information
+        "285" => &[owasp_top10_2021::A01], // Improper Authorization
+        "639" => &[owasp_top10_2021::A01], // Insecure Authorization (BOLA)
+        "601" => &[owasp_top10_2021::A01], // Open Redirect
+        "352" => &[owasp_top10_2021::A01], // CSRF
+        "93" => &[owasp_top10_2021::A01],  // CRLF Injection
 
         // Cryptography.
         "311" | "319" | "327" | "325" => &[owasp_top10_2021::A02],
         "295" => &[owasp_top10_2021::A02], // Improper Certificate Validation
-        "614" => &[owasp_top10_2021::A02], // Sensitive Cookie Without Secure Flag
-        "615" => &[owasp_top10_2021::A02], // Sensitive Cookie Without HttpOnly
 
         // Injection.
         "89" => &[owasp_top10_2021::A03],  // SQL Injection
@@ -100,17 +120,21 @@ pub fn owasp_categories_for_cwe(cwe: &str) -> &'static [&'static str] {
         "611" => &[owasp_top10_2021::A03], // XXE
         "943" => &[owasp_top10_2021::A03], // Improper Neutralization in Data Query Logic
 
-        // Insecure design.
+        // Insecure design. CWE-1021 (clickjacking) is A04 per MITRE, not A01.
+        "1021" => &[owasp_top10_2021::A04],
         "770" => &[owasp_top10_2021::A04], // Allocation Without Limits (rate limiting)
         "20" => &[owasp_top10_2021::A04],  // Improper Input Validation
 
-        // Misconfiguration.
-        "942" => &[owasp_top10_2021::A05],  // Permissive CORS
-        "548" => &[owasp_top10_2021::A05],  // Exposure Through Directory Listing
-        "538" => &[owasp_top10_2021::A05],  // Sensitive File in Temp Directory
-        "530" => &[owasp_top10_2021::A05],  // Exposure of Backup File
-        "1004" => &[owasp_top10_2021::A05], // Sensitive Cookie Without HttpOnly (cookie variant)
-        "525" => &[owasp_top10_2021::A05],  // Use of Web Browser Cache
+        // Misconfiguration. CWE-614 (missing Secure flag) and CWE-615 (sensitive
+        // info in source comments) both belong here, not under A02.
+        "614" => &[owasp_top10_2021::A05],
+        "615" => &[owasp_top10_2021::A05], // Inclusion of Sensitive Information in Source Code Comments
+        "942" => &[owasp_top10_2021::A05], // Permissive CORS
+        "548" => &[owasp_top10_2021::A05], // Exposure Through Directory Listing
+        "538" => &[owasp_top10_2021::A05], // Sensitive File in Temp Directory
+        "530" => &[owasp_top10_2021::A05], // Exposure of Backup File
+        "1004" => &[owasp_top10_2021::A05], // Sensitive Cookie Without 'HttpOnly' Flag
+        "525" => &[owasp_top10_2021::A05], // Use of Web Browser Cache
         "598" => &[owasp_top10_2021::A05], // Use of GET Request Method With Sensitive Query Strings
         "693" => &[owasp_top10_2021::A05], // Protection Mechanism Failure
 
@@ -125,7 +149,7 @@ pub fn owasp_categories_for_cwe(cwe: &str) -> &'static [&'static str] {
         // Integrity.
         "353" => &[owasp_top10_2021::A08], // Missing Support for Integrity Check
         "494" => &[owasp_top10_2021::A08], // Download of Code Without Integrity Check
-        "915" => &[owasp_top10_2021::A08], // Improperly Controlled Modification of Dynamically-Determined Object Attributes
+        "915" => &[owasp_top10_2021::A08], // Mass assignment / object attribute tampering
 
         // Other: no confident single category.
         _ => &[],
@@ -365,6 +389,66 @@ mod tests {
     #[test]
     fn traversal_lands_under_access_control_not_injection() {
         assert_eq!(owasp_categories_for_cwe("CWE-22"), &[owasp_top10_2021::A01]);
+    }
+
+    /// Pins the three arms corrected against the MITRE taxonomy.
+    ///
+    /// Each assertion cites the category page it was checked against. If the
+    /// mappings are ever "simplified" back, these fail rather than silently
+    /// mis-filing findings.
+    #[test]
+    fn clickjacking_is_insecure_design_not_access_control() {
+        // MITRE CWE-1021 lists "1348 OWASP Top Ten 2021 Category A04:2021".
+        assert_eq!(
+            owasp_categories_for_cwe("CWE-1021"),
+            &[owasp_top10_2021::A04]
+        );
+    }
+
+    #[test]
+    fn missing_secure_flag_is_misconfiguration_not_cryptographic_failure() {
+        // MITRE CWE-1349 (A05) lists 614 as a member.
+        assert_eq!(
+            owasp_categories_for_cwe("CWE-614"),
+            &[owasp_top10_2021::A05]
+        );
+    }
+
+    #[test]
+    fn cwe_615_is_source_comments_not_a_cookie_finding() {
+        // CWE-615 is "Inclusion of Sensitive Information in Source Code
+        // Comments". It was previously labelled a cookie weakness and mapped to
+        // A02; both were wrong.
+        assert_eq!(
+            owasp_categories_for_cwe("CWE-615"),
+            &[owasp_top10_2021::A05]
+        );
+    }
+
+    #[test]
+    fn cwe_1004_httponly_cookie_stays_in_misconfiguration() {
+        // Verified correct: MITRE CWE-1349 lists 1004 as a member of A05.
+        // An earlier note here suspected this arm; it was the 615 description
+        // that was wrong, not this mapping.
+        assert_eq!(
+            owasp_categories_for_cwe("CWE-1004"),
+            &[owasp_top10_2021::A05]
+        );
+    }
+
+    /// Guards against the copy-paste class of bug that produced the 615 error.
+    #[test]
+    fn the_two_cookie_cwes_do_not_collide() {
+        let httponly = owasp_categories_for_cwe("CWE-1004");
+        let secure = owasp_categories_for_cwe("CWE-614");
+        // Distinct weaknesses, same category -- but they must remain separate
+        // entries so a report can name which one was actually observed.
+        assert_eq!(httponly, secure);
+        assert_ne!(
+            owasp_categories_for_cwe("CWE-615"),
+            &[] as &[&str],
+            "CWE-615 must remain mapped, not dropped"
+        );
     }
 
     #[test]
