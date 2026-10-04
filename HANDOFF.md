@@ -6,10 +6,11 @@ and what to do first.
 
 ## Verified baseline
 
-`main` @ `82dfcd4` plus the bounty UI. **299 Rust tests pass, 0 failures**
-(283 prior + 11 in `crates/bounty` + 5 new CWE-mapping tests). **21 Playwright
-tests pass** (17 + 4 audit), all with `--retries=0` so no green test is hiding a
-flake.
+`main` @ `6d88ad8`. **304 Rust tests pass, 0 failures** (283 prior + 11 in
+`crates/bounty` + 5 CWE-mapping + 5 more). **25 Playwright tests pass**
+(17 non-audit + 8 audit), all with `--retries=0` so no green test is hiding a
+flake. `cargo fmt --all -- --check` is clean; `cargo check --all-targets` has
+zero warnings.
 
 ```bash
 cargo test --workspace --no-fail-fast
@@ -328,21 +329,27 @@ bytecode, and a hotspot ranking is not a verdict.
 
 ## Next
 
-- **`CWE→OWASP` qualified review** — still open, still gating §5.1. See below.
-- **Build the bounty UI.** The IPC commands are registered and
-  `ipc_contract` 3/3, but no template calls them yet. Branch on
-  `available`; when false, render the disabled reason — never an empty list.
-- **CWE→OWASP reviewed and corrected.** Three arms were wrong; see below.
-- **Decide whether ChainScope should be installed.** Until it is, the bounty
-  panel is permanently in its disabled state — which is honest, but means the
-  triage path has never been exercised against a live tool.
+- **~29 loaders still have no loading state.** `showSkeleton()` exists and 3
+  panes use it; `grep -c "async function load" ui/app.js` returns 33. Each
+  remaining loader needs one call, ideally with the two existing browser tests
+  extended per pane rather than one bulk edit.
+- **`CWE→OWASP` still needs a human sign-off.** I corrected three arms against
+  the MITRE taxonomy, but I am not a qualified reviewer. §5.1 and the readiness
+  number still depend on this being reviewed by someone who can own it.
+- **Run `cs immune triage` once for real.** `list`, `scope` and `meta` are
+  verified against the live tool. `triage` fetches sources and builds a SQLite
+  code graph over the network; it takes minutes and its output parsing is still
+  only covered by my own fixtures — the same class of fixture that hid the
+  `True`/`None` parser bugs.
 
 ## Open questions — yours, not the engineer's
 
 - **CWE→OWASP needs qualified review.** `crates/findings/src/compliance.rs`,
-  `owasp_categories_for_cwe`. Six mappings are low-confidence; **CWE `1004` I
-  believe is simply wrong**. This gate holds the §5.1 scores and the readiness
-  number.
+  `owasp_categories_for_cwe`. **Partially done:** three arms were corrected
+  against the MITRE taxonomy (1021→A04, 614→A05, 615→A05), and the belief that
+  CWE `1004` was wrong turned out to be incorrect — see the CWE section. The
+  remaining arms are still operator-knowledge mappings. This gate holds the §5.1
+  scores and the readiness number, and I cannot sign it off.
 - **Deployment model** — single hardened workstation vs shared multi-user
   backend with RBAC. Unresolved.
 - **Agent model/inference residency** — deferred by you. Currently inert by
