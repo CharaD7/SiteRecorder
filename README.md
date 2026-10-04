@@ -4,8 +4,10 @@ A cross-platform desktop application built in Rust that automates full-site trav
 
 ## Documentation
 
-- **[Build Order](BUILD_ORDER.md)** - Decision record and implementation sequencing
-- **[UI Redesign Plan](UI_REDESIGN_PLAN.md)** - The specification this project is built against
+- **[Handoff](HANDOFF.md)** - current verified state and what to do first
+
+`BUILD_ORDER.md` (decision record and sequencing) and `UI_REDESIGN_PLAN.md` (the
+specification) are kept untracked. See `HANDOFF.md` for why.
 
 ## Current state, honestly
 
