@@ -150,6 +150,51 @@ loudly. That is intentional — it should be changed deliberately.
 skeleton before `await` and swaps it for real content after. The `.skeleton` CSS
 is already there to receive it.
 
+> **Superseded** — see "Loading states — closed for the three main panes" below.
+> The gap above is now measured, fixed for `#findingsList` / `#assetList` /
+> `#profileList`, and covered by two browser tests. ~30 other loaders remain.
+
+## Loading states — closed for the three main panes
+
+The gap measured earlier was real: `.skeleton` was defined but never emitted,
+and 33 `load*` functions rendered nothing before awaiting. The worst case was
+not a blank pane but **stale rows presented with nothing to indicate they were
+stale**, which reads as current.
+
+Now shipped for `#findingsList`, `#assetList`, `#profileList`:
+- `showSkeleton(pane, rows)` / `clearSkeleton(pane)` in `app.js`
+- `.skeleton-row`, `.skeleton-list`, `.skeleton-row-title|badge|icon` in CSS,
+  mirroring `.finding-card` geometry so the pane does not jump
+- `aria-busy` while loading, cleared on **every** exit path including errors —
+  a pane stuck at `aria-busy` would tell assistive tech it loads forever
+- `@media (prefers-reduced-motion: reduce)`: shimmer off, placeholder still
+  visible. Nothing in the app honoured that setting before.
+
+Measured in-browser:
+
+```
+MIDFLIGHT:      {"skeletonRows":3,"ariaBusy":"true","findingCards":0,"hasRealContent":false}
+REDUCED_MOTION: {"animationName":"none","height":12,"visible":true}
+```
+
+**Two bugs my own fix introduced, both caught by the test:**
+
+1. I gated the skeleton on `dataset.loaded` to avoid re-shimmering on filter
+   changes. Wrong: the attribute lives on the container, which survives section
+   switches, so a genuine refresh never showed one — reproducing the original
+   stale-rows bug. Removed the gate entirely.
+2. The test patched `window.__TAURI__.invoke` *after* boot to inject a delay.
+   `app.js` captures that into `state.tauri` during init (app.js:71), so the
+   override was silently ignored and the test reported "no skeleton" — an
+   artefact of the test, not the app. Fixed with `addInitScript` via a shared
+   `delayListFindings` helper.
+
+Worth noting: bug 2 is the same shape as every other mistake in this file — a
+plausible reading produced by instrumentation that was not doing what it
+appeared to.
+
+**Still not done:** ~30 other loaders. The helper is there; each needs a call.
+
 ## Three bugs the "ChainScope is absent" belief produced
 
 Worth recording, because each one is a case of trusting a plausible inference

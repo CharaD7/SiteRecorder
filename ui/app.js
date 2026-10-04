@@ -3416,8 +3416,10 @@
     async function loadAuthProfiles() {
         const list = $('#profileList');
         if (!list) return;
+        showSkeleton(list, 2);
 
         if (state.data.authProfiles.length === 0) {
+            clearSkeleton(list);
             list.innerHTML = `<div class="empty-state">
                 <div class="empty-state-icon">🔒</div>
                 <div class="empty-state-title">No Profiles Yet</div>
@@ -3426,6 +3428,7 @@
             return;
         }
 
+        clearSkeleton(list);
         list.innerHTML = state.data.authProfiles.map(p => `
             <div style="padding:12px; border:1px solid var(--border-primary); border-radius:8px; margin-bottom:8px; cursor:pointer;"
                  data-search="${escapeHtml([p.name, p.target, p.type].filter(Boolean).join(' ').toLowerCase())}"
@@ -5288,10 +5291,19 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) {
+            showToast('error', 'Load Failed', String(e));
+            // Error path: clear the busy flag so the pane does not sit
+            // claiming to be loading forever.
+            clearSkeleton($('#assetList'));
+        }
     }
 
     async function loadAssets() {
+        const container = $('#assetList');
+        // Placeholder before the await, so a slow backend shows a loading state
+        // rather than an empty pane that reads as "no assets".
+        if (container) showSkeleton(container, 3);
         try {
             const assets = await invoke('cross_get_assets');
             $('#totalAssets').textContent = assets.length;
@@ -5302,6 +5314,7 @@ async function listBountyPrograms() {
 
             const container = $('#assetList');
             if (!container) return;
+            clearSkeleton(container);
             container.innerHTML = assets.map(a => `
                 <div class="finding-card" data-search="${escapeHtml([
                     a.name, a.asset_type, a.environment, a.criticality, a.owner, ...(a.tags || [])
@@ -5918,10 +5931,64 @@ async function listBountyPrograms() {
         }
     }
 
+    // -------------------------------------------------------------------
+    // Loading states
+    // -------------------------------------------------------------------
+
+    /**
+     * Placeholder markup for a card list, mirroring .finding-card geometry.
+     *
+     * `rows` controls how many placeholders render so the pane roughly holds
+     * its previous height and does not jump when content arrives. Title widths
+     * vary so it does not read as a uniform grid.
+     */
+    function skeletonRows(rows) {
+        const widths = ['is-medium', '', 'is-short', 'is-medium', ''];
+        return Array.from({ length: rows }, (_, i) => `
+            <div class="skeleton-row">
+                <div class="skeleton skeleton-row-icon"></div>
+                <div class="skeleton skeleton-row-title ${widths[i % widths.length]}"></div>
+                <div class="skeleton skeleton-row-badge"></div>
+            </div>`).join('');
+    }
+
+    /**
+     * Show a loading placeholder in `pane`, replacing whatever is there.
+     *
+     * Replacing rather than overlaying is the whole point. Leaving the previous
+     * rows on screen underneath meant a pane mid-refresh showed stale data with
+     * no indication it was stale -- which reads as current. That is the same
+     * failure mode as every other fabrication this codebase has had: a
+     * plausible-looking result that is not the one just requested.
+     *
+     * `aria-busy` carries the state for assistive tech independently of the
+     * animation, which is suppressed under prefers-reduced-motion.
+     */
+    function showSkeleton(pane, rows = 3) {
+        if (!pane) return null;
+        const previous = pane.innerHTML;
+        pane.setAttribute('aria-busy', 'true');
+        pane.innerHTML = `<div class="skeleton-list">${skeletonRows(rows)}</div>`;
+        return previous;
+    }
+
+    /** Clear the busy state once real content (or a real error) is in place. */
+    function clearSkeleton(pane) {
+        if (!pane) return;
+        pane.removeAttribute('aria-busy');
+    }
+
     async function loadFindings() {
         const container = $('#findingsList');
         const search = ($('#findingSearch')?.value || '').trim().toLowerCase();
         const statusFilter = $('#findingStatusFilter')?.value || '';
+
+        // Always replace with a placeholder before awaiting. An earlier version gated
+        // this on `dataset.loaded`, which was wrong: that attribute lives on the
+        // container, which survives section switches, so a refresh after the
+        // pane was painted once never showed a skeleton -- and the pane was
+        // again showing stale rows with nothing to say so.
+        if (container) showSkeleton(container, 3);
 
         let findings = [];
         try {
@@ -5938,6 +6005,7 @@ async function listBountyPrograms() {
                 </div>`;
             }
             setFindingsCounts([], 0);
+            if (container) clearSkeleton(container);
             return;
         }
 
@@ -5961,6 +6029,7 @@ async function listBountyPrograms() {
         loadPolicies();
 
         if (!container) return;
+        clearSkeleton(container);
 
         if (findings.length === 0) {
             container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div>

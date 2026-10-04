@@ -1890,6 +1890,86 @@ select.input[data-custom-select-initialized="true"] {
     100% { background-position: -200% 0; }
 }
 
+/* ------------------------------------------------------------------
+   Skeleton placeholders for panes awaiting backend data.
+   Previously `.skeleton` was defined here but never emitted anywhere, so
+   a pane mid-load showed its previous contents with no indication they
+   were stale -- which reads as current data. These blocks mirror the real
+   card geometry so the pane does not jump when content arrives.
+   ------------------------------------------------------------------ */
+.skeleton-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+/* One placeholder row, matching .finding-card's box and header padding. */
+.skeleton-row {
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    border-left: 3px solid var(--border-secondary);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.skeleton-row-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+}
+
+.skeleton-row-title {
+    height: 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.skeleton-row-badge {
+    height: 18px;
+    width: 64px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+}
+
+/* A short trailing title should not stretch the full pane width, so a
+   couple of rows use a fixed width to look like real text of varying length. */
+.skeleton-row-title.is-short { flex: 0 1 32%; }
+.skeleton-row-title.is-medium { flex: 0 1 55%; }
+
+@keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+/* Respect the OS setting. The shimmer is decoration only -- the pane is
+   already marked aria-busy and resolves to real content either way -- so
+   dropping the motion costs nothing functionally. */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background: var(--bg-tertiary);
+    }
+    .skeleton-list {
+        animation: none;
+    }
+    .skeleton-row {
+        animation: skeleton-pulse 2s ease-in-out infinite;
+    }
+    /* Suppress the other decorative motion too. */
+    .spinner {
+        animation-duration: 2.4s;
+    }
+    .progress-bar,
+    .skeleton-row-title,
+    .skeleton-row-badge,
+    .skeleton-row-icon {
+        transition: none;
+    }
+}
+
 /* === Tooltip === */
 .tooltip {
     position: relative;
