@@ -4245,6 +4245,9 @@
     function setupWeb3Security() {
         $('#scanContractBtn')?.addEventListener('click', scanContract);
         $('#analyzeWalletBtn')?.addEventListener('click', analyzeWallet);
+        $('#bountyListBtn')?.addEventListener('click', listBountyPrograms);
+        $('#bountyTriageBtn')?.addEventListener('click', triageBountyProgram);
+        setupBounty();
 
         $$('#content-web3security .tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -4256,6 +4259,129 @@
                 if (tabContent) tabContent.style.display = '';
             });
         });
+    }
+
+    // ---------------------------------------------------------------
+    // Bug bounty triage (delegates to the external ChainScope toolkit)
+    // ---------------------------------------------------------------
+
+    /**
+     * Ask the backend whether ChainScope is installed, and render either the
+     * controls or the reason triage is disabled.
+     *
+     * The important branch is the disabled one. An empty program list is a
+     * plausible-looking result meaning "nothing was retrieved"; rendering it
+     * without the reason would claim the programs do not exist. So the disabled
+     * state always names the missing dependency.
+     */
+    async function setupBounty() {
+        const badge = $('#bountyAvailability');
+        const status = $('#bountyStatus');
+        const controls = $('#bountyControls');
+        if (!badge || !status || !controls) return;
+
+        let availability;
+        try {
+            availability = await invoke('bounty_status');
+        } catch (e) {
+            badge.textContent = 'unavailable';
+            badge.className = 'badge badge-error';
+            status.innerHTML = `<div class="text-sm">Could not determine ChainScope availability: ${escapeHtml(String(e))}. No program data is shown.</div>`;
+            return;
+        }
+
+        if (!availability || availability.available !== true) {
+            badge.textContent = 'disabled';
+            badge.className = 'badge badge-error';
+            // reason comes from the backend; never substitute our own wording,
+            // so the UI and the crate cannot disagree about why.
+            status.innerHTML = `
+                <div class="advisory-banner">
+                    <span class="advisory-banner-icon">🚫</span>
+                    <div>
+                        <div class="advisory-banner-title">Bounty triage unavailable</div>
+                        <div class="advisory-banner-body">${escapeHtml(availability?.reason || 'ChainScope is unavailable.')}</div>
+                    </div>
+                </div>`;
+            controls.style.display = 'none';
+            return;
+        }
+
+        badge.textContent = 'ready';
+        badge.className = 'badge badge-success';
+        controls.style.display = '';
+    }
+async function listBountyPrograms() {
+        const results = $('#bountyResults');
+        if (!results) return;
+        results.innerHTML = '<div class="text-tertiary">Querying ChainScope…</div>';
+        try {
+            const programs = await invoke('bounty_programs');
+            if (!Array.isArray(programs) || programs.length === 0) {
+                // Distinguish "tool reachable, catalogue empty" from "tool absent".
+                results.innerHTML = '<div class="text-tertiary">ChainScope returned no programs. The toolkit was reachable and reported an empty catalogue.</div>';
+                return;
+            }
+            results.innerHTML = programs.map(p => `
+                <div class="finding-card mb-2">
+                    <div class="finding-card-header">
+                        <div class="flex items-center gap-3">
+                            <span class="font-medium">${escapeHtml(p.project || p.slug || 'unknown program')}</span>
+                            <span class="badge badge-info">${escapeHtml(p.slug || '')}</span>
+                            <span class="badge badge-warning">${p.max_bounty != null ? '$' + Number(p.max_bounty).toLocaleString() : 'bounty not reported'}</span>
+                            ${p.audits != null ? `<span class="badge badge-secondary">${p.audits} audit(s)</span>` : ''}
+                        </div>
+                    </div>
+                </div>`).join('');
+        } catch (e) {
+            results.innerHTML = `<div class="text-sm">ChainScope failed: ${escapeHtml(String(e))}. No programs were retrieved.</div>`;
+        }
+    }
+
+    async function triageBountyProgram() {
+        const results = $('#bountyResults');
+        const slug = $('#bountySlug')?.value?.trim();
+        if (!results) return;
+        if (!slug) {
+            results.innerHTML = '<div class="text-sm">Enter a program slug first. Nothing was submitted.</div>';
+            return;
+        }
+        results.innerHTML = `<div class="text-tertiary">Triage running for <strong>${escapeHtml(slug)}</strong> — fetching scope and indexing source. This can take several minutes…</div>`;
+        try {
+            const report = await invoke('bounty_triage', { slug });
+            if (!report || (report.fetched ?? 0) === 0) {
+                results.innerHTML = `
+                    <div class="text-sm">
+                        Nothing was indexed for <strong>${escapeHtml(slug)}</strong>
+                        (${report?.errors ?? 0} fetch error(s)). No hotspots are shown because none were produced.
+                        This is not a verdict on the program's security.
+                    </div>`;
+                return;
+            }
+            const hotspots = Array.isArray(report.hotspots) ? report.hotspots : [];
+            results.innerHTML = `
+                <div class="text-sm mb-2">
+                    Indexed ${report.fetched} source(s) for <strong>${escapeHtml(slug)}</strong>
+                    (${report.errors} error(s)). Hotspots are places to read, not findings.
+                </div>
+                ${hotspots.length === 0
+                    ? '<div class="text-tertiary">The index produced no ranked hotspots.</div>'
+                    : hotspots.map(h => `
+                        <div class="finding-card mb-2">
+                            <div class="finding-card-header">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-medium">${escapeHtml(h.function || '?')}</span>
+                                    ${h.score != null ? `<span class="badge badge-warning">score ${escapeHtml(String(h.score))}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="finding-card-body">
+                                <div class="text-sm text-tertiary">${escapeHtml(h.file || '?')}${h.line != null ? ':' + escapeHtml(String(h.line)) : ''}</div>
+                                ${(h.reasons || []).length ? `<div class="text-sm mt-1">${h.reasons.map(r => `<span class="badge badge-info mr-1">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
+                            </div>
+                        </div>`).join('')}`;
+        } catch (e) {
+            results.innerHTML = `<div class="text-sm">Triage failed: ${escapeHtml(String(e))}. No hotspots were produced.</div>`;
+        }
     }
 
     async function scanContract() {

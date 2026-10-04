@@ -1403,6 +1403,41 @@
             </div>
         </div>
     </div>
+
+    <!-- Bug bounty triage. Backed by the external ChainScope toolkit; the
+         panel renders its own disabled state rather than an empty list. -->
+    <div class="card mb-4" id="bountyCard">
+        <div class="card-header">
+            <span class="card-title">🐛 Bug Bounty Triage</span>
+            <span class="badge badge-info" id="bountyAvailability">checking…</span>
+        </div>
+        <div class="card-body">
+            <p class="text-tertiary">
+                Lists Immunefi programs and ranks hotspots in their in-scope
+                contract source via ChainScope. A hotspot is a place worth
+                reading &mdash; <strong>not</strong> a vulnerability, and not a
+                verdict. ChainScope maps source; it does not audit deployed
+                bytecode.
+            </p>
+
+            <div id="bountyStatus" class="mt-3"></div>
+
+            <div id="bountyControls" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label" for="bountyMinBounty">Minimum max-bounty (USD)</label>
+                    <input type="number" class="input" id="bountyMinBounty" value="0" min="0" step="10000">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="bountySlug">Program slug</label>
+                    <input type="text" class="input" id="bountySlug" placeholder="e.g. aera">
+                </div>
+                <button class="btn btn-primary" id="bountyListBtn">List Programs</button>
+                <button class="btn btn-secondary" id="bountyTriageBtn">Triage Scope</button>
+            </div>
+
+            <div id="bountyResults" class="mt-4"></div>
+        </div>
+    </div>
 </template>
 
 <!-- Gray Team: ATT&CK Matrix -->

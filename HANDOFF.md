@@ -6,9 +6,10 @@ and what to do first.
 
 ## Verified baseline
 
-`main` @ `3ad7850`. **294 Rust tests pass, 0 failures** (283 prior + 11 in
-`crates/bounty`). **20 Playwright tests pass** (17 + 3 audit), all with
-`--retries=0` so no green test is hiding a flake.
+`main` @ `82dfcd4` plus the bounty UI. **299 Rust tests pass, 0 failures**
+(283 prior + 11 in `crates/bounty` + 5 new CWE-mapping tests). **21 Playwright
+tests pass** (17 + 4 audit), all with `--retries=0` so no green test is hiding a
+flake.
 
 ```bash
 cargo test --workspace --no-fail-fast
@@ -66,6 +67,51 @@ This predates this session's work. `crates/bounty` *is* fmt-clean; the other 687
 are not. **Not fixed here** — a 687-file reformat would bury the substantive
 commits. Either commit that as a standalone "reformat" change or amend the
 claim here.
+
+## CWE→OWASP review — done, three corrections
+
+`crates/findings/src/compliance.rs`. Every arm checked against the OWASP Top Ten
+2021 CWE categories (CWE-1348..1357), which MITRE derives from the mappings
+cited in the 2021 OWASP Top 10.
+
+| CWE | was | now | why |
+|---|---|---|---|
+| 1021 (clickjacking) | A01 | **A04** | MITRE lists 1021 under "1348 OWASP Top Ten 2021 Category A04:2021 - Insecure Design". A design failure, not access control. |
+| 614 (missing Secure flag) | A02 | **A05** | Listed under 1349 (A05). |
+| 615 | A02 | **A05** | Both the category *and* the comment were wrong — see below. |
+
+**The handoff's suspicion about CWE-1004 was wrong, and the reason matters.**
+1004 → A05 is correct; MITRE lists "1004 Sensitive Cookie Without 'HttpOnly'
+Flag" under 1349. The actual bug was next to it: CWE-615 was commented
+*"Sensitive Cookie Without HttpOnly"* — which is **1004's description**, not
+615's. CWE-615 is *Inclusion of Sensitive Information in Source Code Comments*.
+A copy-paste made two distinct weaknesses look interchangeable, and the
+comment would have led a reviewer to mis-file a real finding regardless of the
+category. Five tests now pin these arms, each citing the page it was checked
+against.
+
+These feed the OWASP readiness score, so the three were shifting findings
+between categories rather than merely mislabelling them.
+
+### 5. Bounty panel built (`red-web3`)
+
+The IPC commands now have a caller. The panel lives on the Web3 page and asks
+`bounty_status` on entry.
+
+The branch that matters is the **disabled** one, because ChainScope is absent
+here. `available: false` renders the backend's own `reason` and hides the
+controls — never an empty results area, which would assert that no bounty
+programs exist. The reason string is taken verbatim from the crate rather than
+reworded in JS, so the UI and the crate cannot disagree about why it is off.
+
+`listBountyPrograms` distinguishes "tool reachable, catalogue empty" from
+"tool absent". `triageBountyProgram` refuses a blank slug without submitting,
+and states plainly when nothing was indexed — including that this is not a
+verdict on the program's security.
+
+The stub answers `bounty_status` with `available: false` to mirror the real
+machine. A test asserts the badge, the reason, hidden controls, that
+`bounty_status` was genuinely invoked, and that `#bountyResults` is empty.
 
 ## Ground rule (load-bearing, not stylistic)
 
@@ -179,7 +225,10 @@ bytecode, and a hotspot ranking is not a verdict.
 - **Build the bounty UI.** The IPC commands are registered and
   `ipc_contract` 3/3, but no template calls them yet. Branch on
   `available`; when false, render the disabled reason — never an empty list.
-- **Decide the `cargo fmt` question** (687 diffs, above).
+- **CWE→OWASP reviewed and corrected.** Three arms were wrong; see below.
+- **Decide whether ChainScope should be installed.** Until it is, the bounty
+  panel is permanently in its disabled state — which is honest, but means the
+  triage path has never been exercised against a live tool.
 
 ## Open questions — yours, not the engineer's
 
