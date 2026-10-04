@@ -4191,7 +4191,8 @@
         try {
             const result = await invoke('web3_scan_contract', { chain });
             displayContractResults(result);
-            addActivity(`Web3 contract audit: ${chain} (score: ${result.score.toFixed(0)}/100)`);
+            const scoreText = result.score != null ? `score: ${result.score.toFixed(0)}/100` : 'no score — analysis not implemented';
+            addActivity(`Web3 contract audit: ${chain} (${scoreText})`);
         } catch (e) {
             showToast('error', 'Audit Failed', String(e));
         }
@@ -4221,18 +4222,39 @@
             </div>
         `).join('');
 
+        // No score is shown unless one was actually computed. "Findings (0)"
+        // alone would read as a clean contract.
+        const scoreBadge = result.score != null
+            ? `<span class="badge badge-${result.score >= 80 ? 'success' : result.score >= 60 ? 'warning' : 'error'}">
+                   Score: ${result.score.toFixed(0)}/100
+               </span>`
+            : '<span class="badge badge-warning">No score — not analysed</span>';
+
+        const coverageHtml = result.coverage && !result.coverage.implemented ? `
+            <div class="card mb-4">
+                <div class="card-header">
+                    <span class="card-title">Analysis not performed</span>
+                    <span class="badge badge-warning">Unavailable</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-sm mb-2">${escapeHtml(result.coverage.unavailable_reason)}</p>
+                    <p class="text-sm text-tertiary mb-2"><strong>Examined:</strong> ${escapeHtml(result.coverage.examined)}</p>
+                    <p class="text-sm text-tertiary mb-2"><strong>A real analysis would need:</strong></p>
+                    <ul class="text-sm">${result.coverage.requires.map(r => `<li>• ${escapeHtml(r)}</li>`).join('')}</ul>
+                </div>
+            </div>` : '';
+
         container.innerHTML = `
             <div class="card mb-4">
                 <div class="card-header">
                     <span class="card-title">Smart Contract Audit — ${result.chain}</span>
-                    <span class="badge badge-${result.score >= 80 ? 'success' : result.score >= 60 ? 'warning' : 'error'}">
-                        Score: ${result.score.toFixed(0)}/100
-                    </span>
+                    ${scoreBadge}
                 </div>
             </div>
+            ${coverageHtml}
             <div class="card">
                 <div class="card-header"><span class="card-title">Findings (${result.findings.length})</span></div>
-                <div class="card-body">${findingsHtml}</div>
+                <div class="card-body">${findingsHtml || '<div class="text-sm text-tertiary">No findings — nothing was analysed.</div>'}</div>
             </div>
         `;
     }
@@ -4280,8 +4302,8 @@
             <div class="card mb-4">
                 <div class="card-header">
                     <span class="card-title">Wallet Security — ${result.chain}</span>
-                    <span class="badge badge-${result.risk_score >= 70 ? 'critical' : result.risk_score >= 40 ? 'warning' : 'success'}">
-                        Risk: ${result.risk_score.toFixed(0)}/100
+                    <span class="badge badge-${result.risk_score != null ? (result.risk_score >= 70 ? 'critical' : result.risk_score >= 40 ? 'warning' : 'success') : 'warning'}">
+                        Risk: ${result.risk_score != null ? result.risk_score.toFixed(0) + '/100' : 'not analysed'}
                     </span>
                 </div>
             </div>
