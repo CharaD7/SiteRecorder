@@ -75,6 +75,7 @@ os-pentest = { path = "crates/os-pentest" }
 mobile = { path = "crates/mobile" }
 cloud = { path = "crates/cloud" }
 web3 = { path = "crates/web3" }
+bounty = { path = "crates/bounty" }
 gray-team = { path = "crates/gray-team" }
 blue-team = { path = "crates/blue-team" }
 white-team = { path = "crates/white-team" }

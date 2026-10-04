@@ -26,6 +26,7 @@ use os_pentest::{OsPentest, OsScanConfig, TargetOs};
 use mobile::{MobileAnalyzer, MobileScanConfig, MobileTarget};
 use cloud::{CloudAuditor, CloudScanConfig, CloudProvider};
 use web3::{Web3Auditor, ContractScanConfig, WalletSecurityConfig, Blockchain};
+use bounty::{BountyProgram, BountyMeta, ChainScope, ProgramScope, TriageReport};
 use gray_team::GrayTeam;
 use blue_team::{BlueTeam, IncidentSeverity, IncidentCategory};
 use white_team::WhiteTeam;
@@ -1030,6 +1031,73 @@ async fn cloud_scan(
 }
 
 // ==================== WEB3 SECURITY COMMANDS ====================
+
+// ========================================
+// Bounty triage (delegates to the external ChainScope toolkit)
+// ========================================
+
+/// What the UI receives from every bounty command.
+///
+/// `available` is the field to branch on. When it is false, `programs`,
+/// `hotspots` and `entries` are empty because nothing was retrieved -- NOT
+/// because the search came back empty -- and `reason` says so. The UI must not
+/// render an empty state that implies "no matching programs".
+#[derive(Debug, Clone, Serialize)]
+struct BountyAvailability {
+    available: bool,
+    binary: Option<String>,
+    reason: String,
+}
+
+/// The error every bounty command returns when ChainScope is not installed.
+///
+/// Shared so the message cannot drift between commands, and so the UI always
+/// receives the same "disabled, and here is why" text rather than a generic
+/// failure it might render as an empty result.
+fn bounty_unavailable() -> String {
+    bounty::BountyError::ToolUnavailable.to_string()
+}
+
+#[tauri::command]
+async fn bounty_status() -> BountyAvailability {
+    let availability = ChainScope::availability();
+    BountyAvailability {
+        available: availability.is_available(),
+        binary: availability.binary().map(str::to_string),
+        reason: availability.reason(),
+    }
+}
+
+/// List Immunefi programs, or report why no list could be produced.
+#[tauri::command]
+async fn bounty_programs() -> Result<Vec<BountyProgram>, String> {
+    let cs = ChainScope::discover().ok_or_else(bounty_unavailable)?;
+    cs.programs().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn bounty_scope(slug: String) -> Result<ProgramScope, String> {
+    let cs = ChainScope::discover().ok_or_else(bounty_unavailable)?;
+    cs.scope(&slug).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn bounty_meta(slug: String) -> Result<BountyMeta, String> {
+    let cs = ChainScope::discover().ok_or_else(bounty_unavailable)?;
+    cs.meta(&slug).await.map_err(|e| e.to_string())
+}
+
+/// Full triage: scope -> fetch sources -> index -> rank hotspots.
+///
+/// Hotspots are places worth reading, not vulnerabilities. The verdict stays
+/// with the analyst.
+#[tauri::command]
+async fn bounty_triage(slug: String, max_fetch: Option<usize>) -> Result<TriageReport, String> {
+    let cs = ChainScope::discover().ok_or_else(bounty_unavailable)?;
+    cs.triage(&slug, max_fetch.unwrap_or(12))
+        .await
+        .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 async fn web3_scan_contract(
@@ -2309,6 +2377,12 @@ fn run_gui_mode() {
             // Web3 security commands
             web3_scan_contract,
             web3_analyze_wallet,
+            // Bounty triage commands (external ChainScope toolkit)
+            bounty_status,
+            bounty_programs,
+            bounty_scope,
+            bounty_meta,
+            bounty_triage,
             // API Scanner commands
             api_scan,
             // Gray Team commands

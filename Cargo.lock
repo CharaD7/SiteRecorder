@@ -6344,6 +6344,7 @@ dependencies = [
  "auth-profiles",
  "base64 0.21.7",
  "blue-team",
+ "bounty",
  "browser",
  "chrono",
  "clap",
