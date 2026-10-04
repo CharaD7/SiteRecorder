@@ -308,34 +308,34 @@ impl Web3Auditor {
 }
 
 fn calculate_summary(findings: &[ContractFinding]) -> ContractSummary {
-        let mut critical = 0;
-        let mut high = 0;
-        let mut medium = 0;
-        let mut low = 0;
-        let mut info = 0;
-        let mut optimization = 0;
+    let mut critical = 0;
+    let mut high = 0;
+    let mut medium = 0;
+    let mut low = 0;
+    let mut info = 0;
+    let mut optimization = 0;
 
-        for finding in findings {
-            match finding.severity {
-                ContractSeverity::Critical => critical += 1,
-                ContractSeverity::High => high += 1,
-                ContractSeverity::Medium => medium += 1,
-                ContractSeverity::Low => low += 1,
-                ContractSeverity::Info => info += 1,
-                ContractSeverity::Optimization => optimization += 1,
-            }
-        }
-
-        ContractSummary {
-            total_checks: critical + high + medium + low + info + optimization,
-            findings_count: critical + high + medium + low + info,
-            critical_count: critical,
-            high_count: high,
-            medium_count: medium,
-            low_count: low,
-            optimization_count: optimization,
+    for finding in findings {
+        match finding.severity {
+            ContractSeverity::Critical => critical += 1,
+            ContractSeverity::High => high += 1,
+            ContractSeverity::Medium => medium += 1,
+            ContractSeverity::Low => low += 1,
+            ContractSeverity::Info => info += 1,
+            ContractSeverity::Optimization => optimization += 1,
         }
     }
+
+    ContractSummary {
+        total_checks: critical + high + medium + low + info + optimization,
+        findings_count: critical + high + medium + low + info,
+        critical_count: critical,
+        high_count: high,
+        medium_count: medium,
+        low_count: low,
+        optimization_count: optimization,
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -380,8 +380,15 @@ mod tests {
     fn contract_scan_states_what_was_not_done() {
         let result = Web3Auditor::scan_contract(&cfg());
         assert!(!result.coverage.implemented);
-        assert!(result.coverage.unavailable_reason.contains("not implemented"));
-        assert!(result.coverage.requires.iter().any(|r| r.contains("source")));
+        assert!(result
+            .coverage
+            .unavailable_reason
+            .contains("not implemented"));
+        assert!(result
+            .coverage
+            .requires
+            .iter()
+            .any(|r| r.contains("source")));
     }
 
     /// The old code was input-independent; that is what made the fabrication
@@ -405,7 +412,10 @@ mod tests {
             check_categories: vec![WalletCheck::Approvals],
         });
         assert!(result.findings.is_empty());
-        assert!(result.risk_score.is_none(), "zeros would imply a clean wallet");
+        assert!(
+            result.risk_score.is_none(),
+            "zeros would imply a clean wallet"
+        );
         assert!(result.exposure.is_none());
         assert!(!result.coverage.implemented);
     }

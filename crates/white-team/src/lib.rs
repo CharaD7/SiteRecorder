@@ -394,38 +394,38 @@ impl WhiteTeam {
                 name: "CIS Controls".to_string(),
                 version: "v8".to_string(),
                 description: "Center for Internet Security Critical Security Controls".to_string(),
-                categories: vec![
-                    ComplianceCategory {
-                        id: "cis-ig1".to_string(),
-                        name: "IG1 - Basic".to_string(),
-                        description: "Essential cyber hygiene".to_string(),
-                        controls: vec![
-                            Control {
-                                id: "CIS-1.1".to_string(),
-                                name: "Inventory of Enterprise Assets".to_string(),
-                                description: "Establish and maintain detailed inventory of enterprise assets.".to_string(),
-                                status: ControlStatus::Implemented,
-                                evidence: vec!["Asset inventory spreadsheet".to_string()],
-                                gaps: vec![],
-                                owner: "IT Team".to_string(),
-                                due_date: None,
-                                completed_date: Some("2024-01-15".to_string()),
-                            },
-                            Control {
-                                id: "CIS-2.1".to_string(),
-                                name: "Inventory of Software Assets".to_string(),
-                                description: "Establish and maintain a software inventory.".to_string(),
-                                status: ControlStatus::InProgress,
-                                evidence: vec![],
-                                gaps: vec!["Automated discovery needed".to_string()],
-                                owner: "IT Team".to_string(),
-                                due_date: Some("2024-12-31".to_string()),
-                                completed_date: None,
-                            },
-                        ],
-                        score: 75.0,
-                    },
-                ],
+                categories: vec![ComplianceCategory {
+                    id: "cis-ig1".to_string(),
+                    name: "IG1 - Basic".to_string(),
+                    description: "Essential cyber hygiene".to_string(),
+                    controls: vec![
+                        Control {
+                            id: "CIS-1.1".to_string(),
+                            name: "Inventory of Enterprise Assets".to_string(),
+                            description:
+                                "Establish and maintain detailed inventory of enterprise assets."
+                                    .to_string(),
+                            status: ControlStatus::Implemented,
+                            evidence: vec!["Asset inventory spreadsheet".to_string()],
+                            gaps: vec![],
+                            owner: "IT Team".to_string(),
+                            due_date: None,
+                            completed_date: Some("2024-01-15".to_string()),
+                        },
+                        Control {
+                            id: "CIS-2.1".to_string(),
+                            name: "Inventory of Software Assets".to_string(),
+                            description: "Establish and maintain a software inventory.".to_string(),
+                            status: ControlStatus::InProgress,
+                            evidence: vec![],
+                            gaps: vec!["Automated discovery needed".to_string()],
+                            owner: "IT Team".to_string(),
+                            due_date: Some("2024-12-31".to_string()),
+                            completed_date: None,
+                        },
+                    ],
+                    score: 75.0,
+                }],
                 overall_score: 72.0,
             },
             ComplianceFramework {
@@ -433,27 +433,25 @@ impl WhiteTeam {
                 name: "PCI DSS".to_string(),
                 version: "v4.0".to_string(),
                 description: "Payment Card Industry Data Security Standard".to_string(),
-                categories: vec![
-                    ComplianceCategory {
-                        id: "pci-req1".to_string(),
-                        name: "Network Security".to_string(),
-                        description: "Install and maintain network security controls.".to_string(),
-                        controls: vec![
-                            Control {
-                                id: "PCI-1.1".to_string(),
-                                name: "Network Security Controls".to_string(),
-                                description: "Processes and mechanisms for network security controls are defined.".to_string(),
-                                status: ControlStatus::Implemented,
-                                evidence: vec!["Firewall rules documented".to_string()],
-                                gaps: vec![],
-                                owner: "Security Team".to_string(),
-                                due_date: None,
-                                completed_date: Some("2024-02-01".to_string()),
-                            },
-                        ],
-                        score: 85.0,
-                    },
-                ],
+                categories: vec![ComplianceCategory {
+                    id: "pci-req1".to_string(),
+                    name: "Network Security".to_string(),
+                    description: "Install and maintain network security controls.".to_string(),
+                    controls: vec![Control {
+                        id: "PCI-1.1".to_string(),
+                        name: "Network Security Controls".to_string(),
+                        description:
+                            "Processes and mechanisms for network security controls are defined."
+                                .to_string(),
+                        status: ControlStatus::Implemented,
+                        evidence: vec!["Firewall rules documented".to_string()],
+                        gaps: vec![],
+                        owner: "Security Team".to_string(),
+                        due_date: None,
+                        completed_date: Some("2024-02-01".to_string()),
+                    }],
+                    score: 85.0,
+                }],
                 overall_score: 82.0,
             },
             ComplianceFramework {
@@ -461,27 +459,24 @@ impl WhiteTeam {
                 name: "SOC 2".to_string(),
                 version: "2017".to_string(),
                 description: "Service Organization Control 2 - Trust Services Criteria".to_string(),
-                categories: vec![
-                    ComplianceCategory {
-                        id: "soc2-cc".to_string(),
-                        name: "Common Criteria".to_string(),
-                        description: "Control environment and monitoring.".to_string(),
-                        controls: vec![
-                            Control {
-                                id: "CC-1".to_string(),
-                                name: "Control Environment".to_string(),
-                                description: "Demonstrates commitment to integrity and ethical values.".to_string(),
-                                status: ControlStatus::Implemented,
-                                evidence: vec!["Code of conduct".to_string(), "Org chart".to_string()],
-                                gaps: vec![],
-                                owner: "Management".to_string(),
-                                due_date: None,
-                                completed_date: Some("2024-01-01".to_string()),
-                            },
-                        ],
-                        score: 88.0,
-                    },
-                ],
+                categories: vec![ComplianceCategory {
+                    id: "soc2-cc".to_string(),
+                    name: "Common Criteria".to_string(),
+                    description: "Control environment and monitoring.".to_string(),
+                    controls: vec![Control {
+                        id: "CC-1".to_string(),
+                        name: "Control Environment".to_string(),
+                        description: "Demonstrates commitment to integrity and ethical values."
+                            .to_string(),
+                        status: ControlStatus::Implemented,
+                        evidence: vec!["Code of conduct".to_string(), "Org chart".to_string()],
+                        gaps: vec![],
+                        owner: "Management".to_string(),
+                        due_date: None,
+                        completed_date: Some("2024-01-01".to_string()),
+                    }],
+                    score: 88.0,
+                }],
                 overall_score: 85.0,
             },
         ]
@@ -578,14 +573,12 @@ impl WhiteTeam {
                 effective_date: "2024-01-01".to_string(),
                 review_date: "2025-01-01".to_string(),
                 content: "1. Purpose\n2. Scope\n3. Policy Statements...".to_string(),
-                acknowledgments: vec![
-                    Acknowledgment {
-                        user_id: "user1".to_string(),
-                        user_name: "John Doe".to_string(),
-                        acknowledged_at: "2024-01-15T10:00:00Z".to_string(),
-                        version: "2.1".to_string(),
-                    },
-                ],
+                acknowledgments: vec![Acknowledgment {
+                    user_id: "user1".to_string(),
+                    user_name: "John Doe".to_string(),
+                    acknowledged_at: "2024-01-15T10:00:00Z".to_string(),
+                    version: "2.1".to_string(),
+                }],
             },
             Policy {
                 id: Uuid::new_v4().to_string(),
@@ -632,17 +625,15 @@ impl WhiteTeam {
                 contract_end: "2025-12-31".to_string(),
                 services: vec!["IaaS".to_string(), "Managed Database".to_string()],
                 data_access: vec!["Customer PII".to_string(), "Financial data".to_string()],
-                assessments: vec![
-                    VendorAssessment {
-                        id: Uuid::new_v4().to_string(),
-                        assessment_date: "2024-06-15".to_string(),
-                        assessor: "Security Team".to_string(),
-                        score: 85.0,
-                        findings: vec!["Minor logging gaps".to_string()],
-                        recommendations: vec!["Enable comprehensive audit logging".to_string()],
-                        next_assessment_date: "2025-06-15".to_string(),
-                    },
-                ],
+                assessments: vec![VendorAssessment {
+                    id: Uuid::new_v4().to_string(),
+                    assessment_date: "2024-06-15".to_string(),
+                    assessor: "Security Team".to_string(),
+                    score: 85.0,
+                    findings: vec!["Minor logging gaps".to_string()],
+                    recommendations: vec!["Enable comprehensive audit logging".to_string()],
+                    next_assessment_date: "2025-06-15".to_string(),
+                }],
                 documents: vec!["SOC 2 Type II".to_string(), "ISO 27001".to_string()],
             },
             Vendor {
@@ -655,8 +646,14 @@ impl WhiteTeam {
                 contact_email: "compliance@payflow.example.com".to_string(),
                 contract_start: "2023-06-01".to_string(),
                 contract_end: "2025-05-31".to_string(),
-                services: vec!["Payment Processing".to_string(), "Fraud Detection".to_string()],
-                data_access: vec!["Cardholder data".to_string(), "Transaction records".to_string()],
+                services: vec![
+                    "Payment Processing".to_string(),
+                    "Fraud Detection".to_string(),
+                ],
+                data_access: vec![
+                    "Cardholder data".to_string(),
+                    "Transaction records".to_string(),
+                ],
                 assessments: vec![],
                 documents: vec!["PCI DSS Attestation".to_string()],
             },
@@ -673,16 +670,14 @@ impl WhiteTeam {
                 duration_minutes: 45,
                 required: true,
                 completion_rate: 87.5,
-                enrollments: vec![
-                    TrainingEnrollment {
-                        user_id: "user1".to_string(),
-                        user_name: "John Doe".to_string(),
-                        enrolled_at: "2024-01-01".to_string(),
-                        completed_at: Some("2024-01-15".to_string()),
-                        score: Some(92.0),
-                        status: EnrollmentStatus::Completed,
-                    },
-                ],
+                enrollments: vec![TrainingEnrollment {
+                    user_id: "user1".to_string(),
+                    user_name: "John Doe".to_string(),
+                    enrolled_at: "2024-01-01".to_string(),
+                    completed_at: Some("2024-01-15".to_string()),
+                    score: Some(92.0),
+                    status: EnrollmentStatus::Completed,
+                }],
             },
             TrainingModule {
                 id: Uuid::new_v4().to_string(),
@@ -718,14 +713,44 @@ impl WhiteTeam {
             overdue_items: 5,
             upcoming_reviews: 8,
             frameworks: vec![
-                FrameworkSummary { name: "CIS v8".to_string(), score: 72.0, controls_total: 15, controls_passed: 11 },
-                FrameworkSummary { name: "PCI DSS".to_string(), score: 82.0, controls_total: 12, controls_passed: 10 },
-                FrameworkSummary { name: "SOC 2".to_string(), score: 85.0, controls_total: 8, controls_passed: 7 },
+                FrameworkSummary {
+                    name: "CIS v8".to_string(),
+                    score: 72.0,
+                    controls_total: 15,
+                    controls_passed: 11,
+                },
+                FrameworkSummary {
+                    name: "PCI DSS".to_string(),
+                    score: 82.0,
+                    controls_total: 12,
+                    controls_passed: 10,
+                },
+                FrameworkSummary {
+                    name: "SOC 2".to_string(),
+                    score: 85.0,
+                    controls_total: 8,
+                    controls_passed: 7,
+                },
             ],
             risk_trend: vec![
-                RiskTrendPoint { date: "2024-06".to_string(), open_count: 15, closed_count: 3, avg_score: 14.2 },
-                RiskTrendPoint { date: "2024-07".to_string(), open_count: 13, closed_count: 5, avg_score: 13.1 },
-                RiskTrendPoint { date: "2024-08".to_string(), open_count: 12, closed_count: 4, avg_score: 12.5 },
+                RiskTrendPoint {
+                    date: "2024-06".to_string(),
+                    open_count: 15,
+                    closed_count: 3,
+                    avg_score: 14.2,
+                },
+                RiskTrendPoint {
+                    date: "2024-07".to_string(),
+                    open_count: 13,
+                    closed_count: 5,
+                    avg_score: 13.1,
+                },
+                RiskTrendPoint {
+                    date: "2024-08".to_string(),
+                    open_count: 12,
+                    closed_count: 4,
+                    avg_score: 12.5,
+                },
             ],
         }
     }

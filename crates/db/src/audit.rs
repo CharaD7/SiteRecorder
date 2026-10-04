@@ -164,16 +164,16 @@ pub fn verify_integrity(conn: &rusqlite::Connection) -> Result<IntegrityReport> 
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, i64>(0)?,   // seq
-            row.get::<_, String>(1)?, // id
-            row.get::<_, String>(2)?, // timestamp
-            row.get::<_, String>(3)?, // actor
-            row.get::<_, String>(4)?, // action
+            row.get::<_, i64>(0)?,            // seq
+            row.get::<_, String>(1)?,         // id
+            row.get::<_, String>(2)?,         // timestamp
+            row.get::<_, String>(3)?,         // actor
+            row.get::<_, String>(4)?,         // action
             row.get::<_, Option<String>>(5)?, // target
             row.get::<_, Option<String>>(6)?, // details
             row.get::<_, Option<String>>(7)?, // ip_address
-            row.get::<_, String>(8)?, // prev_hash
-            row.get::<_, String>(9)?, // hash
+            row.get::<_, String>(8)?,         // prev_hash
+            row.get::<_, String>(9)?,         // hash
         ))
     })?;
 
@@ -197,8 +197,14 @@ pub fn verify_integrity(conn: &rusqlite::Connection) -> Result<IntegrityReport> 
         }
 
         let recomputed = compute_hash(
-            &id, &timestamp, &actor, &action, target.as_deref(), details.as_deref(),
-            ip.as_deref(), &prev_hash,
+            &id,
+            &timestamp,
+            &actor,
+            &action,
+            target.as_deref(),
+            details.as_deref(),
+            ip.as_deref(),
+            &prev_hash,
         );
 
         if recomputed != hash {
@@ -278,7 +284,10 @@ mod tests {
 
         // Tamper with the first entry's content, leaving its hash untouched.
         db.conn()
-            .execute("UPDATE audit_log SET action = 'deleted_everything' WHERE seq = 1", [])
+            .execute(
+                "UPDATE audit_log SET action = 'deleted_everything' WHERE seq = 1",
+                [],
+            )
             .unwrap();
 
         let report = verify_integrity(db.conn()).unwrap();
@@ -314,7 +323,10 @@ mod tests {
         assert!(verify_or_err(db.conn()).is_ok());
 
         db.conn()
-            .execute("UPDATE audit_log SET actor = 'someone_else' WHERE seq = 1", [])
+            .execute(
+                "UPDATE audit_log SET actor = 'someone_else' WHERE seq = 1",
+                [],
+            )
             .unwrap();
         assert!(verify_or_err(db.conn()).is_err());
     }

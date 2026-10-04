@@ -33,10 +33,21 @@ type Result<T> = std::result::Result<T, AuthError>;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AuthType {
     None,
-    Basic { username: String, password: String },
-    Bearer { token: String },
-    ApiKey { key: String, header: String, location: ApiKeyLocation },
-    Cookie { cookies: HashMap<String, String> },
+    Basic {
+        username: String,
+        password: String,
+    },
+    Bearer {
+        token: String,
+    },
+    ApiKey {
+        key: String,
+        header: String,
+        location: ApiKeyLocation,
+    },
+    Cookie {
+        cookies: HashMap<String, String>,
+    },
     FormBased {
         login_url: String,
         username_field: String,
@@ -113,7 +124,10 @@ impl AuthSession {
     }
 
     pub fn is_expired(&self, max_age_minutes: i64) -> bool {
-        Utc::now().signed_duration_since(self.last_activity).num_minutes() > max_age_minutes
+        Utc::now()
+            .signed_duration_since(self.last_activity)
+            .num_minutes()
+            > max_age_minutes
     }
 }
 
@@ -146,30 +160,35 @@ impl AuthEngine {
             AuthType::Basic { username, password } => {
                 self.authenticate_basic(username, password).await
             }
-            AuthType::Bearer { token } => {
-                self.authenticate_bearer(token).await
+            AuthType::Bearer { token } => self.authenticate_bearer(token).await,
+            AuthType::ApiKey {
+                key,
+                header,
+                location,
+            } => {
+                self.authenticate_api_key(key, header, location.clone())
+                    .await
             }
-            AuthType::ApiKey { key, header, location } => {
-                self.authenticate_api_key(key, header, location.clone()).await
+            AuthType::Cookie { cookies } => self.authenticate_cookies(cookies.clone()).await,
+            AuthType::FormBased { .. } => self.authenticate_form_based(auth_type).await,
+            AuthType::OAuth2 { .. } => self.authenticate_oauth2(auth_type).await,
+            AuthType::Ntlm {
+                username,
+                password,
+                domain,
+            } => {
+                self.authenticate_ntlm(username, password, domain.clone())
+                    .await
             }
-            AuthType::Cookie { cookies } => {
-                self.authenticate_cookies(cookies.clone()).await
+            AuthType::MutualTls {
+                cert_path,
+                key_path,
+                ca_path,
+            } => {
+                self.authenticate_mtls(cert_path, key_path, ca_path.clone())
+                    .await
             }
-            AuthType::FormBased { .. } => {
-                self.authenticate_form_based(auth_type).await
-            }
-            AuthType::OAuth2 { .. } => {
-                self.authenticate_oauth2(auth_type).await
-            }
-            AuthType::Ntlm { username, password, domain } => {
-                self.authenticate_ntlm(username, password, domain.clone()).await
-            }
-            AuthType::MutualTls { cert_path, key_path, ca_path } => {
-                self.authenticate_mtls(cert_path, key_path, ca_path.clone()).await
-            }
-            AuthType::Custom { headers } => {
-                self.authenticate_custom(headers.clone()).await
-            }
+            AuthType::Custom { headers } => self.authenticate_custom(headers.clone()).await,
         }
     }
 
@@ -194,10 +213,9 @@ impl AuthEngine {
         let mut session = AuthSession::new(AuthType::Bearer {
             token: token.to_string(),
         });
-        session.headers.insert(
-            "Authorization".to_string(),
-            format!("Bearer {}", token),
-        );
+        session
+            .headers
+            .insert("Authorization".to_string(), format!("Bearer {}", token));
         session.is_authenticated = true;
         session.last_activity = Utc::now();
         Ok(session)
@@ -220,8 +238,12 @@ impl AuthEngine {
                 session.headers.insert(header.to_string(), key.to_string());
             }
             ApiKeyLocation::Query => {
-                session.metadata.insert("api_key_query_param".to_string(), header.to_string());
-                session.metadata.insert("api_key_value".to_string(), key.to_string());
+                session
+                    .metadata
+                    .insert("api_key_query_param".to_string(), header.to_string());
+                session
+                    .metadata
+                    .insert("api_key_value".to_string(), key.to_string());
             }
             ApiKeyLocation::Cookie => {
                 session.cookies.insert(header.to_string(), key.to_string());
@@ -244,7 +266,17 @@ impl AuthEngine {
     }
 
     async fn authenticate_form_based(&self, auth_type: &AuthType) -> Result<AuthSession> {
-        let (login_url, username_field, password_field, username, password, extra_fields, csrf_field, success_indicator, failure_indicator) = match auth_type {
+        let (
+            login_url,
+            username_field,
+            password_field,
+            username,
+            password,
+            extra_fields,
+            csrf_field,
+            success_indicator,
+            failure_indicator,
+        ) = match auth_type {
             AuthType::FormBased {
                 login_url,
                 username_field,
@@ -266,7 +298,11 @@ impl AuthEngine {
                 success_indicator.clone(),
                 failure_indicator.clone(),
             ),
-            _ => return Err(AuthError::AuthError("Invalid auth type for form-based auth".to_string())),
+            _ => {
+                return Err(AuthError::AuthError(
+                    "Invalid auth type for form-based auth".to_string(),
+                ))
+            }
         };
 
         let mut form_data: Vec<(String, String)> = Vec::new();
@@ -325,8 +361,11 @@ impl AuthEngine {
         let document = Html::parse_document(&body);
 
         // Try meta tags first
-        let meta_selector = Selector::parse(&format!("meta[name='{}'], meta[name='csrf-token'], meta[name='_csrf']", field_name))
-            .map_err(|e| AuthError::ParseError(e.to_string()))?;
+        let meta_selector = Selector::parse(&format!(
+            "meta[name='{}'], meta[name='csrf-token'], meta[name='_csrf']",
+            field_name
+        ))
+        .map_err(|e| AuthError::ParseError(e.to_string()))?;
         if let Some(el) = document.select(&meta_selector).next() {
             if let Some(token) = el.value().attr("content") {
                 return Ok(token.to_string());
@@ -348,7 +387,10 @@ impl AuthEngine {
         for el in document.select(&hidden_selector) {
             if let Some(name) = el.value().attr("name") {
                 let name_lower = name.to_lowercase();
-                if name_lower.contains("csrf") || name_lower.contains("token") || name_lower == "_token" {
+                if name_lower.contains("csrf")
+                    || name_lower.contains("token")
+                    || name_lower == "_token"
+                {
                     if let Some(token) = el.value().attr("value") {
                         return Ok(token.to_string());
                     }
@@ -375,7 +417,11 @@ impl AuthEngine {
                 scope.clone(),
                 grant_type.clone(),
             ),
-            _ => return Err(AuthError::AuthError("Invalid auth type for OAuth2".to_string())),
+            _ => {
+                return Err(AuthError::AuthError(
+                    "Invalid auth type for OAuth2".to_string(),
+                ))
+            }
         };
 
         let mut params: Vec<(String, String)> = vec![
@@ -415,7 +461,9 @@ impl AuthEngine {
             .as_str()
             .ok_or_else(|| AuthError::OAuthError("No access token in response".to_string()))?
             .to_string();
-        let refresh_token = token_response["refresh_token"].as_str().map(|s| s.to_string());
+        let refresh_token = token_response["refresh_token"]
+            .as_str()
+            .map(|s| s.to_string());
         let expires_in = token_response["expires_in"].as_u64().unwrap_or(3600);
         let expires_at = Some(Utc::now() + chrono::Duration::seconds(expires_in as i64));
 
@@ -424,11 +472,17 @@ impl AuthEngine {
             "Authorization".to_string(),
             format!("Bearer {}", access_token),
         );
-        session.metadata.insert("access_token".to_string(), access_token);
+        session
+            .metadata
+            .insert("access_token".to_string(), access_token);
         if let Some(rt) = &refresh_token {
-            session.metadata.insert("refresh_token".to_string(), rt.clone());
+            session
+                .metadata
+                .insert("refresh_token".to_string(), rt.clone());
         }
-        session.metadata.insert("expires_at".to_string(), expires_at.unwrap().to_rfc3339());
+        session
+            .metadata
+            .insert("expires_at".to_string(), expires_at.unwrap().to_rfc3339());
         session.is_authenticated = true;
         session.last_activity = Utc::now();
         Ok(session)
@@ -451,8 +505,12 @@ impl AuthEngine {
             None => username.to_string(),
         };
 
-        session.metadata.insert("ntlm_username".to_string(), full_username);
-        session.metadata.insert("ntlm_password".to_string(), password.to_string());
+        session
+            .metadata
+            .insert("ntlm_username".to_string(), full_username);
+        session
+            .metadata
+            .insert("ntlm_password".to_string(), password.to_string());
         session.is_authenticated = true;
         session.last_activity = Utc::now();
         Ok(session)
@@ -470,8 +528,12 @@ impl AuthEngine {
             ca_path: ca_path.clone(),
         });
 
-        session.metadata.insert("cert_path".to_string(), cert_path.to_string());
-        session.metadata.insert("key_path".to_string(), key_path.to_string());
+        session
+            .metadata
+            .insert("cert_path".to_string(), cert_path.to_string());
+        session
+            .metadata
+            .insert("key_path".to_string(), key_path.to_string());
         if let Some(ca) = &ca_path {
             session.metadata.insert("ca_path".to_string(), ca.clone());
         }
@@ -498,7 +560,9 @@ impl AuthEngine {
         body: Option<&str>,
     ) -> Result<Response> {
         let mut request = self.client.request(
-            method.parse().map_err(|e| AuthError::AuthError(format!("Invalid method: {}", e)))?,
+            method
+                .parse()
+                .map_err(|e| AuthError::AuthError(format!("Invalid method: {}", e)))?,
             url,
         );
 
@@ -526,10 +590,13 @@ impl AuthEngine {
         {
             if let Some(param) = session.metadata.get("api_key_query_param") {
                 if let Some(value) = session.metadata.get("api_key_value") {
-                    let mut url = Url::parse(url).map_err(|e| AuthError::ParseError(e.to_string()))?;
+                    let mut url =
+                        Url::parse(url).map_err(|e| AuthError::ParseError(e.to_string()))?;
                     url.query_pairs_mut().append_pair(param, value);
                     request = self.client.request(
-                        method.parse().map_err(|e| AuthError::AuthError(format!("{}", e)))?,
+                        method
+                            .parse()
+                            .map_err(|e| AuthError::AuthError(format!("{}", e)))?,
                         url.as_str(),
                     );
                 }
@@ -547,7 +614,13 @@ impl AuthEngine {
 
     pub async fn refresh_session(&self, session: &mut AuthSession) -> Result<()> {
         match &session.auth_type {
-            AuthType::OAuth2 { token_url, client_id, client_secret, refresh_token, .. } => {
+            AuthType::OAuth2 {
+                token_url,
+                client_id,
+                client_secret,
+                refresh_token,
+                ..
+            } => {
                 if let Some(refresh) = refresh_token {
                     let params: Vec<(String, String)> = vec![
                         ("grant_type".to_string(), "refresh_token".to_string()),
@@ -560,17 +633,25 @@ impl AuthEngine {
                     let token_response: serde_json::Value = response.json().await?;
 
                     let new_token = token_response["access_token"].as_str().unwrap_or("");
-                    session.headers.insert("Authorization".to_string(), format!("Bearer {}", new_token));
-                    session.metadata.insert("access_token".to_string(), new_token.to_string());
+                    session
+                        .headers
+                        .insert("Authorization".to_string(), format!("Bearer {}", new_token));
+                    session
+                        .metadata
+                        .insert("access_token".to_string(), new_token.to_string());
 
                     if let Some(new_refresh) = token_response["refresh_token"].as_str() {
-                        session.metadata.insert("refresh_token".to_string(), new_refresh.to_string());
+                        session
+                            .metadata
+                            .insert("refresh_token".to_string(), new_refresh.to_string());
                     }
 
                     session.last_activity = Utc::now();
                     Ok(())
                 } else {
-                    Err(AuthError::AuthError("No refresh token available".to_string()))
+                    Err(AuthError::AuthError(
+                        "No refresh token available".to_string(),
+                    ))
                 }
             }
             AuthType::FormBased { .. } => {
@@ -583,7 +664,10 @@ impl AuthEngine {
     }
 
     pub async fn save_session(&self, session: AuthSession) {
-        self.sessions.write().await.insert(session.id.clone(), session);
+        self.sessions
+            .write()
+            .await
+            .insert(session.id.clone(), session);
     }
 
     pub async fn get_session(&self, id: &str) -> Option<AuthSession> {

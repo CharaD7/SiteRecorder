@@ -69,60 +69,63 @@ pub enum Confidence {
 /// emit is classified, so an unmapped CWE is always a deliberate decision.
 pub fn owasp_categories_for_cwe(cwe: &str) -> &'static [&'static str] {
     // Normalise "CWE-89" / "89" / "cwe-89".
-    let id = cwe.trim().trim_start_matches("CWE-").trim_start_matches("cwe-");
+    let id = cwe
+        .trim()
+        .trim_start_matches("CWE-")
+        .trim_start_matches("cwe-");
 
     match id {
         // Access control.
-        "22" => &[owasp_top10_2021::A01],           // Path Traversal
-        "200" => &[owasp_top10_2021::A01],          // Exposure of Sensitive Information
-        "285" => &[owasp_top10_2021::A01],          // Improper Authorization
-        "639" => &[owasp_top10_2021::A01],          // Insecure Authorization (BOLA)
-        "601" => &[owasp_top10_2021::A01],          // Open Redirect
-        "1021" => &[owasp_top10_2021::A01],         // Clickjacking (UI layer restriction)
-        "352" => &[owasp_top10_2021::A01],          // CSRF
-        "93" => &[owasp_top10_2021::A01],           // CRLF Injection
+        "22" => &[owasp_top10_2021::A01],   // Path Traversal
+        "200" => &[owasp_top10_2021::A01],  // Exposure of Sensitive Information
+        "285" => &[owasp_top10_2021::A01],  // Improper Authorization
+        "639" => &[owasp_top10_2021::A01],  // Insecure Authorization (BOLA)
+        "601" => &[owasp_top10_2021::A01],  // Open Redirect
+        "1021" => &[owasp_top10_2021::A01], // Clickjacking (UI layer restriction)
+        "352" => &[owasp_top10_2021::A01],  // CSRF
+        "93" => &[owasp_top10_2021::A01],   // CRLF Injection
 
         // Cryptography.
         "311" | "319" | "327" | "325" => &[owasp_top10_2021::A02],
-        "295" => &[owasp_top10_2021::A02],          // Improper Certificate Validation
-        "614" => &[owasp_top10_2021::A02],          // Sensitive Cookie Without Secure Flag
-        "615" => &[owasp_top10_2021::A02],          // Sensitive Cookie Without HttpOnly
+        "295" => &[owasp_top10_2021::A02], // Improper Certificate Validation
+        "614" => &[owasp_top10_2021::A02], // Sensitive Cookie Without Secure Flag
+        "615" => &[owasp_top10_2021::A02], // Sensitive Cookie Without HttpOnly
 
         // Injection.
-        "89" => &[owasp_top10_2021::A03],           // SQL Injection
-        "79" => &[owasp_top10_2021::A03],           // XSS
-        "77" => &[owasp_top10_2021::A03],           // Command Injection
-        "94" => &[owasp_top10_2021::A03],           // Code Injection
-        "98" => &[owasp_top10_2021::A03],           // PHP File Inclusion
-        "611" => &[owasp_top10_2021::A03],          // XXE
-        "943" => &[owasp_top10_2021::A03],          // Improper Neutralization in Data Query Logic
+        "89" => &[owasp_top10_2021::A03],  // SQL Injection
+        "79" => &[owasp_top10_2021::A03],  // XSS
+        "77" => &[owasp_top10_2021::A03],  // Command Injection
+        "94" => &[owasp_top10_2021::A03],  // Code Injection
+        "98" => &[owasp_top10_2021::A03],  // PHP File Inclusion
+        "611" => &[owasp_top10_2021::A03], // XXE
+        "943" => &[owasp_top10_2021::A03], // Improper Neutralization in Data Query Logic
 
         // Insecure design.
-        "770" => &[owasp_top10_2021::A04],          // Allocation Without Limits (rate limiting)
-        "20" => &[owasp_top10_2021::A04],           // Improper Input Validation
+        "770" => &[owasp_top10_2021::A04], // Allocation Without Limits (rate limiting)
+        "20" => &[owasp_top10_2021::A04],  // Improper Input Validation
 
         // Misconfiguration.
-        "942" => &[owasp_top10_2021::A05],          // Permissive CORS
-        "548" => &[owasp_top10_2021::A05],          // Exposure Through Directory Listing
-        "538" => &[owasp_top10_2021::A05],          // Sensitive File in Temp Directory
-        "530" => &[owasp_top10_2021::A05],          // Exposure of Backup File
-        "1004" => &[owasp_top10_2021::A05],         // Sensitive Cookie Without HttpOnly (cookie variant)
-        "525" => &[owasp_top10_2021::A05],          // Use of Web Browser Cache
-        "598" => &[owasp_top10_2021::A05],          // Use of GET Request Method With Sensitive Query Strings
-        "693" => &[owasp_top10_2021::A05],          // Protection Mechanism Failure
+        "942" => &[owasp_top10_2021::A05],  // Permissive CORS
+        "548" => &[owasp_top10_2021::A05],  // Exposure Through Directory Listing
+        "538" => &[owasp_top10_2021::A05],  // Sensitive File in Temp Directory
+        "530" => &[owasp_top10_2021::A05],  // Exposure of Backup File
+        "1004" => &[owasp_top10_2021::A05], // Sensitive Cookie Without HttpOnly (cookie variant)
+        "525" => &[owasp_top10_2021::A05],  // Use of Web Browser Cache
+        "598" => &[owasp_top10_2021::A05], // Use of GET Request Method With Sensitive Query Strings
+        "693" => &[owasp_top10_2021::A05], // Protection Mechanism Failure
 
         // Components. CWE-1104 (unmaintained third-party components) is the
         // canonical A06 mapping; it previously duplicated an A05 arm.
         "1035" | "1104" | "937" => &[owasp_top10_2021::A06],
 
         // Authentication.
-        "306" => &[owasp_top10_2021::A07],          // Missing Authentication for Critical Function
-        "798" => &[owasp_top10_2021::A07],          // Use of Hard-coded Credentials
+        "306" => &[owasp_top10_2021::A07], // Missing Authentication for Critical Function
+        "798" => &[owasp_top10_2021::A07], // Use of Hard-coded Credentials
 
         // Integrity.
-        "353" => &[owasp_top10_2021::A08],          // Missing Support for Integrity Check
-        "494" => &[owasp_top10_2021::A08],          // Download of Code Without Integrity Check
-        "915" => &[owasp_top10_2021::A08],          // Improperly Controlled Modification of Dynamically-Determined Object Attributes
+        "353" => &[owasp_top10_2021::A08], // Missing Support for Integrity Check
+        "494" => &[owasp_top10_2021::A08], // Download of Code Without Integrity Check
+        "915" => &[owasp_top10_2021::A08], // Improperly Controlled Modification of Dynamically-Determined Object Attributes
 
         // Other: no confident single category.
         _ => &[],
@@ -276,7 +279,9 @@ pub fn assess(framework: &Framework, findings: &[FindingProjection]) -> ControlA
     let complete = unmapped == 0 && framework.complete;
     let readiness = if complete && !framework.controls.is_empty() {
         let failing = with_findings.len() as f64;
-        Some(((framework.controls.len() as f64 - failing) / framework.controls.len() as f64) * 100.0)
+        Some(
+            ((framework.controls.len() as f64 - failing) / framework.controls.len() as f64) * 100.0,
+        )
     } else {
         None
     };
@@ -321,7 +326,11 @@ mod tests {
             id: "f1".into(),
             cwe_id: cwe.map(|s| s.to_string()),
             severity: sev.into(),
-            status: if counts { "new".into() } else { "false_positive".into() },
+            status: if counts {
+                "new".into()
+            } else {
+                "false_positive".into()
+            },
             counts_against_posture: counts,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: "2026-01-01T00:00:00Z".into(),
@@ -331,10 +340,7 @@ mod tests {
 
     #[test]
     fn sqli_maps_to_injection() {
-        assert_eq!(
-            owasp_categories_for_cwe("CWE-89"),
-            &[owasp_top10_2021::A03]
-        );
+        assert_eq!(owasp_categories_for_cwe("CWE-89"), &[owasp_top10_2021::A03]);
     }
 
     #[test]
@@ -352,22 +358,13 @@ mod tests {
     fn xss_and_sqli_share_the_injection_category() {
         // Both are injection, so they legitimately collapse to the same
         // category. They must still land there, not under access control.
-        assert_eq!(
-            owasp_categories_for_cwe("CWE-79"),
-            &[owasp_top10_2021::A03]
-        );
-        assert_eq!(
-            owasp_categories_for_cwe("CWE-89"),
-            &[owasp_top10_2021::A03]
-        );
+        assert_eq!(owasp_categories_for_cwe("CWE-79"), &[owasp_top10_2021::A03]);
+        assert_eq!(owasp_categories_for_cwe("CWE-89"), &[owasp_top10_2021::A03]);
     }
 
     #[test]
     fn traversal_lands_under_access_control_not_injection() {
-        assert_eq!(
-            owasp_categories_for_cwe("CWE-22"),
-            &[owasp_top10_2021::A01]
-        );
+        assert_eq!(owasp_categories_for_cwe("CWE-22"), &[owasp_top10_2021::A01]);
     }
 
     #[test]
@@ -381,11 +378,10 @@ mod tests {
         // The CWEs the scanner actually emits.
         let emitted = [
             "CWE-1004", "CWE-1021", "CWE-1104", "CWE-20", "CWE-200", "CWE-22", "CWE-285",
-            "CWE-295", "CWE-306", "CWE-319", "CWE-327", "CWE-352", "CWE-353", "CWE-444",
-            "CWE-525", "CWE-530", "CWE-538", "CWE-548", "CWE-598", "CWE-601", "CWE-611",
-            "CWE-614", "CWE-615", "CWE-639", "CWE-644", "CWE-650", "CWE-693", "CWE-749",
-            "CWE-77", "CWE-770", "CWE-79", "CWE-89", "CWE-915", "CWE-93", "CWE-94",
-            "CWE-942", "CWE-943", "CWE-98",
+            "CWE-295", "CWE-306", "CWE-319", "CWE-327", "CWE-352", "CWE-353", "CWE-444", "CWE-525",
+            "CWE-530", "CWE-538", "CWE-548", "CWE-598", "CWE-601", "CWE-611", "CWE-614", "CWE-615",
+            "CWE-639", "CWE-644", "CWE-650", "CWE-693", "CWE-749", "CWE-77", "CWE-770", "CWE-79",
+            "CWE-89", "CWE-915", "CWE-93", "CWE-94", "CWE-942", "CWE-943", "CWE-98",
         ];
 
         // Deliberately unmapped: no single OWASP category applies confidently.
@@ -455,8 +451,14 @@ mod tests {
     fn clean_absence_never_claims_compliance() {
         // The note must always be present: zero findings is not a clean bill.
         let a = assess(&owasp_top10(), &[]);
-        assert!(a.notes.iter().any(|n| n.contains("NOT evidence of compliance")));
-        assert!(a.notes.iter().any(|n| n.contains("Verify before reporting")));
+        assert!(a
+            .notes
+            .iter()
+            .any(|n| n.contains("NOT evidence of compliance")));
+        assert!(a
+            .notes
+            .iter()
+            .any(|n| n.contains("Verify before reporting")));
     }
 
     #[test]

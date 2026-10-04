@@ -203,7 +203,10 @@ pub fn validate_profile(profile: &AuthProfile) -> Vec<String> {
     if profile.target_url.trim().is_empty() {
         errors.push("target_url is empty".to_string());
     } else if url::Url::parse(&profile.target_url).is_err() {
-        errors.push(format!("target_url is not a valid URL: {}", profile.target_url));
+        errors.push(format!(
+            "target_url is not a valid URL: {}",
+            profile.target_url
+        ));
     }
 
     if let Some(login_url) = &profile.login_url {
@@ -214,10 +217,16 @@ pub fn validate_profile(profile: &AuthProfile) -> Vec<String> {
 
     if requires_secret(&profile.auth_type) {
         if profile.username.as_deref().unwrap_or("").trim().is_empty() {
-            errors.push(format!("auth_type {:?} requires a username", profile.auth_type));
+            errors.push(format!(
+                "auth_type {:?} requires a username",
+                profile.auth_type
+            ));
         }
         if profile.encrypted_password.is_none() {
-            errors.push(format!("auth_type {:?} requires a stored credential", profile.auth_type));
+            errors.push(format!(
+                "auth_type {:?} requires a stored credential",
+                profile.auth_type
+            ));
         }
     }
 
@@ -327,9 +336,13 @@ impl AuthProfileManager {
 
     pub fn create_profile(&self, profile: &AuthProfile) -> Result<()> {
         let now = Utc::now().to_rfc3339();
-        let mfa_config_json = profile.mfa_config.as_ref()
+        let mfa_config_json = profile
+            .mfa_config
+            .as_ref()
             .and_then(|m| serde_json::to_string(m).ok());
-        let headers_json = profile.custom_headers.as_ref()
+        let headers_json = profile
+            .custom_headers
+            .as_ref()
             .map(|h| serde_json::to_string(h).unwrap_or_default());
 
         self.conn.execute(
@@ -361,13 +374,54 @@ impl AuthProfileManager {
     }
 
     pub fn get_profile(&self, id: &str) -> Result<Option<AuthProfile>> {
-        let result = self.conn.query_row(
-            "SELECT id, name, target_url, auth_type, username, encrypted_password,
+        let result = self
+            .conn
+            .query_row(
+                "SELECT id, name, target_url, auth_type, username, encrypted_password,
                     login_url, mfa_config, custom_headers, login_script,
                     session_ttl_minutes, reauth_strategy, created_at, updated_at, last_used
              FROM auth_profiles WHERE id = ?1",
-            [id],
-            |row| {
+                [id],
+                |row| {
+                    let auth_type_str: String = row.get(3)?;
+                    let mfa_json: Option<String> = row.get(7)?;
+                    let headers_json: Option<String> = row.get(8)?;
+                    let reauth_str: String = row.get(11)?;
+
+                    Ok(AuthProfile {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        target_url: row.get(2)?,
+                        auth_type: AuthType::from_str(&auth_type_str),
+                        username: row.get(4)?,
+                        encrypted_password: row.get(5)?,
+                        login_url: row.get(6)?,
+                        mfa_config: mfa_json.and_then(|j| serde_json::from_str(&j).ok()),
+                        custom_headers: headers_json.and_then(|j| serde_json::from_str(&j).ok()),
+                        login_script: row.get(9)?,
+                        session_ttl_minutes: row.get(10)?,
+                        reauth_strategy: ReauthStrategy::from_str(&reauth_str),
+                        created_at: row.get(12)?,
+                        updated_at: row.get(13)?,
+                        last_used: row.get(14)?,
+                    })
+                },
+            )
+            .optional()?;
+
+        Ok(result)
+    }
+
+    pub fn list_profiles(&self) -> Result<Vec<AuthProfile>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, target_url, auth_type, username, encrypted_password,
+                    login_url, mfa_config, custom_headers, login_script,
+                    session_ttl_minutes, reauth_strategy, created_at, updated_at, last_used
+             FROM auth_profiles ORDER BY updated_at DESC",
+        )?;
+
+        let profiles = stmt
+            .query_map([], |row| {
                 let auth_type_str: String = row.get(3)?;
                 let mfa_json: Option<String> = row.get(7)?;
                 let headers_json: Option<String> = row.get(8)?;
@@ -390,54 +444,21 @@ impl AuthProfileManager {
                     updated_at: row.get(13)?,
                     last_used: row.get(14)?,
                 })
-            },
-        ).optional()?;
-
-        Ok(result)
-    }
-
-    pub fn list_profiles(&self) -> Result<Vec<AuthProfile>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, name, target_url, auth_type, username, encrypted_password,
-                    login_url, mfa_config, custom_headers, login_script,
-                    session_ttl_minutes, reauth_strategy, created_at, updated_at, last_used
-             FROM auth_profiles ORDER BY updated_at DESC"
-        )?;
-
-        let profiles = stmt.query_map([], |row| {
-            let auth_type_str: String = row.get(3)?;
-            let mfa_json: Option<String> = row.get(7)?;
-            let headers_json: Option<String> = row.get(8)?;
-            let reauth_str: String = row.get(11)?;
-
-            Ok(AuthProfile {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                target_url: row.get(2)?,
-                auth_type: AuthType::from_str(&auth_type_str),
-                username: row.get(4)?,
-                encrypted_password: row.get(5)?,
-                login_url: row.get(6)?,
-                mfa_config: mfa_json.and_then(|j| serde_json::from_str(&j).ok()),
-                custom_headers: headers_json.and_then(|j| serde_json::from_str(&j).ok()),
-                login_script: row.get(9)?,
-                session_ttl_minutes: row.get(10)?,
-                reauth_strategy: ReauthStrategy::from_str(&reauth_str),
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-                last_used: row.get(14)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(profiles)
     }
 
     pub fn update_profile(&self, profile: &AuthProfile) -> Result<()> {
         let now = Utc::now().to_rfc3339();
-        let mfa_config_json = profile.mfa_config.as_ref()
+        let mfa_config_json = profile
+            .mfa_config
+            .as_ref()
             .and_then(|m| serde_json::to_string(m).ok());
-        let headers_json = profile.custom_headers.as_ref()
+        let headers_json = profile
+            .custom_headers
+            .as_ref()
             .map(|h| serde_json::to_string(h).unwrap_or_default());
 
         self.conn.execute(
@@ -468,8 +489,10 @@ impl AuthProfileManager {
     }
 
     pub fn delete_profile(&self, id: &str) -> Result<()> {
-        self.conn.execute("DELETE FROM auth_sessions WHERE profile_id = ?1", [id])?;
-        self.conn.execute("DELETE FROM auth_profiles WHERE id = ?1", [id])?;
+        self.conn
+            .execute("DELETE FROM auth_sessions WHERE profile_id = ?1", [id])?;
+        self.conn
+            .execute("DELETE FROM auth_profiles WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -489,7 +512,11 @@ impl AuthProfileManager {
         cookies_json: Option<&str>,
         ttl_minutes: i64,
     ) -> Result<String> {
-        let session_id = format!("sess_{}_{}", Utc::now().timestamp_millis(), uuid::Uuid::new_v4());
+        let session_id = format!(
+            "sess_{}_{}",
+            Utc::now().timestamp_millis(),
+            uuid::Uuid::new_v4()
+        );
         let now = Utc::now();
         let expires = now + chrono::Duration::minutes(ttl_minutes);
 
@@ -512,33 +539,39 @@ impl AuthProfileManager {
     pub fn get_valid_session(&self, profile_id: &str) -> Result<Option<(String, Option<String>)>> {
         let now = Utc::now().to_rfc3339();
 
-        let result = self.conn.query_row(
-            "SELECT id, cookies FROM auth_sessions
+        let result = self
+            .conn
+            .query_row(
+                "SELECT id, cookies FROM auth_sessions
              WHERE profile_id = ?1 AND expires_at > ?2
              ORDER BY created_at DESC LIMIT 1",
-            params![profile_id, now],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-        ).optional()?;
+                params![profile_id, now],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()?;
 
         Ok(result)
     }
 
     pub fn invalidate_session(&self, session_id: &str) -> Result<()> {
-        self.conn.execute("DELETE FROM auth_sessions WHERE id = ?1", [session_id])?;
+        self.conn
+            .execute("DELETE FROM auth_sessions WHERE id = ?1", [session_id])?;
         Ok(())
     }
 
     pub fn invalidate_all_sessions(&self, profile_id: &str) -> Result<()> {
-        self.conn.execute("DELETE FROM auth_sessions WHERE profile_id = ?1", [profile_id])?;
+        self.conn.execute(
+            "DELETE FROM auth_sessions WHERE profile_id = ?1",
+            [profile_id],
+        )?;
         Ok(())
     }
 
     pub fn cleanup_expired_sessions(&self) -> Result<usize> {
         let now = Utc::now().to_rfc3339();
-        let count = self.conn.execute(
-            "DELETE FROM auth_sessions WHERE expires_at <= ?1",
-            [now],
-        )?;
+        let count = self
+            .conn
+            .execute("DELETE FROM auth_sessions WHERE expires_at <= ?1", [now])?;
         Ok(count)
     }
 
@@ -563,21 +596,22 @@ impl AuthProfileManager {
         let limit = limit.unwrap_or(100);
         let mut stmt = self.conn.prepare(
             "SELECT id, timestamp, actor, action, target, details, ip_address
-             FROM audit_log ORDER BY timestamp DESC LIMIT ?1"
+             FROM audit_log ORDER BY timestamp DESC LIMIT ?1",
         )?;
 
-        let entries = stmt.query_map([limit], |row| {
-            Ok(AuditEntry {
-                id: row.get(0)?,
-                timestamp: row.get(1)?,
-                actor: row.get(2)?,
-                action: row.get(3)?,
-                target: row.get(4)?,
-                details: row.get(5)?,
-                ip_address: row.get(6)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+        let entries = stmt
+            .query_map([limit], |row| {
+                Ok(AuditEntry {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    actor: row.get(2)?,
+                    action: row.get(3)?,
+                    target: row.get(4)?,
+                    details: row.get(5)?,
+                    ip_address: row.get(6)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(entries)
     }
@@ -601,10 +635,9 @@ impl TotpGenerator {
         use base64::Engine;
         use totp_rs::{Algorithm, TOTP};
 
-        let secret_bytes = base64::engine::general_purpose::STANDARD.decode(secret)
-            .or_else(|_| {
-                base64::engine::general_purpose::STANDARD_NO_PAD.decode(secret)
-            })
+        let secret_bytes = base64::engine::general_purpose::STANDARD
+            .decode(secret)
+            .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(secret))
             .map_err(|e| AuthProfileError::TotpError(format!("Invalid secret: {}", e)))?;
 
         let totp = TOTP::new(
@@ -615,18 +648,18 @@ impl TotpGenerator {
             secret_bytes,
             None,
             "SiteRecorder".to_string(),
-        ).map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
+        )
+        .map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
 
-        let code = totp.generate_current()
+        let code = totp
+            .generate_current()
             .map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
 
-        let remaining = totp.next_step(Utc::now().timestamp() as u64).saturating_sub(
-            Utc::now().timestamp() as u64 - (Utc::now().timestamp() as u64 % 30)
-        );
+        let remaining = totp
+            .next_step(Utc::now().timestamp() as u64)
+            .saturating_sub(Utc::now().timestamp() as u64 - (Utc::now().timestamp() as u64 % 30));
 
-        let next_code = totp.generate(
-            Utc::now().timestamp() as u64 + 30
-        );
+        let next_code = totp.generate(Utc::now().timestamp() as u64 + 30);
 
         Ok(TotpResult {
             code,
@@ -639,10 +672,9 @@ impl TotpGenerator {
         use base64::Engine;
         use totp_rs::{Algorithm, TOTP};
 
-        let secret_bytes = base64::engine::general_purpose::STANDARD.decode(secret)
-            .or_else(|_| {
-                base64::engine::general_purpose::STANDARD_NO_PAD.decode(secret)
-            })
+        let secret_bytes = base64::engine::general_purpose::STANDARD
+            .decode(secret)
+            .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(secret))
             .map_err(|e| AuthProfileError::TotpError(format!("Invalid secret: {}", e)))?;
 
         let totp = TOTP::new(
@@ -653,14 +685,15 @@ impl TotpGenerator {
             secret_bytes,
             None,
             "SiteRecorder".to_string(),
-        ).map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
+        )
+        .map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
 
         Ok(totp.check(code, Utc::now().timestamp() as u64))
     }
 
     pub fn generate_secret() -> String {
-        use rand::RngCore;
         use base64::Engine;
+        use rand::RngCore;
         let mut secret = [0u8; 20];
         rand::thread_rng().fill_bytes(&mut secret);
         base64::engine::general_purpose::STANDARD.encode(&secret)
@@ -670,10 +703,9 @@ impl TotpGenerator {
         use base64::Engine;
         use totp_rs::{Algorithm, TOTP};
 
-        let secret_bytes = base64::engine::general_purpose::STANDARD.decode(secret)
-            .or_else(|_| {
-                base64::engine::general_purpose::STANDARD_NO_PAD.decode(secret)
-            })
+        let secret_bytes = base64::engine::general_purpose::STANDARD
+            .decode(secret)
+            .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(secret))
             .map_err(|e| AuthProfileError::TotpError(format!("Invalid secret: {}", e)))?;
 
         let totp = TOTP::new(
@@ -684,7 +716,8 @@ impl TotpGenerator {
             secret_bytes,
             Some(issuer.to_string()),
             account.to_string(),
-        ).map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
+        )
+        .map_err(|e| AuthProfileError::TotpError(e.to_string()))?;
 
         Ok(totp.get_url())
     }
@@ -776,12 +809,9 @@ mod tests {
         };
         manager.create_profile(&profile).unwrap();
 
-        let session_id = manager.create_session(
-            "profile_1",
-            Some("token_abc"),
-            None,
-            30,
-        ).unwrap();
+        let session_id = manager
+            .create_session("profile_1", Some("token_abc"), None, 30)
+            .unwrap();
 
         let session = manager.get_valid_session("profile_1").unwrap();
         assert!(session.is_some());
@@ -811,20 +841,40 @@ mod tests {
     fn test_audit_log() {
         let manager = AuthProfileManager::new_in_memory().unwrap();
 
-        manager.add_audit_entry("admin", "login", None, Some("Successful login"), Some("127.0.0.1")).unwrap();
-        manager.add_audit_entry("admin", "scan_start", Some("https://example.com"), None, None).unwrap();
+        manager
+            .add_audit_entry(
+                "admin",
+                "login",
+                None,
+                Some("Successful login"),
+                Some("127.0.0.1"),
+            )
+            .unwrap();
+        manager
+            .add_audit_entry(
+                "admin",
+                "scan_start",
+                Some("https://example.com"),
+                None,
+                None,
+            )
+            .unwrap();
 
         let entries = manager.list_audit_entries(None).unwrap();
         assert_eq!(entries.len(), 2);
     }
 }
 
-
 #[cfg(test)]
 mod validation_tests {
     use super::*;
 
-    fn profile(url: &str, auth_type: AuthType, user: Option<&str>, secret: Option<&str>) -> AuthProfile {
+    fn profile(
+        url: &str,
+        auth_type: AuthType,
+        user: Option<&str>,
+        secret: Option<&str>,
+    ) -> AuthProfile {
         AuthProfile {
             id: "p1".into(),
             name: "Test".into(),
@@ -846,7 +896,12 @@ mod validation_tests {
 
     #[test]
     fn validate_accepts_a_well_formed_profile() {
-        let p = profile("https://example.com", AuthType::Form, Some("u"), Some("enc"));
+        let p = profile(
+            "https://example.com",
+            AuthType::Form,
+            Some("u"),
+            Some("enc"),
+        );
         assert!(validate_profile(&p).is_empty());
     }
 

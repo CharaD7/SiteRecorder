@@ -116,7 +116,10 @@ pub fn get_by_username(conn: &rusqlite::Connection, username: &str) -> Result<Op
 
 pub fn list(conn: &rusqlite::Connection) -> Result<Vec<User>> {
     let mut stmt = conn
-        .prepare(&format!("SELECT {} FROM users ORDER BY created_at ASC", SELECT_COLS))
+        .prepare(&format!(
+            "SELECT {} FROM users ORDER BY created_at ASC",
+            SELECT_COLS
+        ))
         .map_err(map_err)?;
     let rows = stmt
         .query_map([], row_to_user)
@@ -224,7 +227,10 @@ mod tests {
             role: Role::Viewer,
         };
         create(db.conn(), new.clone()).unwrap();
-        assert!(create(db.conn(), new).is_err(), "duplicate username must fail");
+        assert!(
+            create(db.conn(), new).is_err(),
+            "duplicate username must fail"
+        );
     }
 
     #[test]

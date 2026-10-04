@@ -453,10 +453,26 @@ impl BlueTeam {
             alerts_last_7d: 87,
             false_positive_rate: 0.23,
             top_alert_sources: vec![
-                AlertSource { name: "EDR".to_string(), count: 45, severity: AlertSeverity::High },
-                AlertSource { name: "SIEM".to_string(), count: 32, severity: AlertSeverity::Medium },
-                AlertSource { name: "Firewall".to_string(), count: 28, severity: AlertSeverity::Low },
-                AlertSource { name: "Email Gateway".to_string(), count: 12, severity: AlertSeverity::Critical },
+                AlertSource {
+                    name: "EDR".to_string(),
+                    count: 45,
+                    severity: AlertSeverity::High,
+                },
+                AlertSource {
+                    name: "SIEM".to_string(),
+                    count: 32,
+                    severity: AlertSeverity::Medium,
+                },
+                AlertSource {
+                    name: "Firewall".to_string(),
+                    count: 28,
+                    severity: AlertSeverity::Low,
+                },
+                AlertSource {
+                    name: "Email Gateway".to_string(),
+                    count: 12,
+                    severity: AlertSeverity::Critical,
+                },
             ],
             severity_distribution: SeverityDistribution {
                 critical: 3,
@@ -475,7 +491,8 @@ impl BlueTeam {
             Alert {
                 id: Uuid::new_v4().to_string(),
                 title: "Suspicious PowerShell Execution".to_string(),
-                description: "Encoded PowerShell command detected on workstation WS-001".to_string(),
+                description: "Encoded PowerShell command detected on workstation WS-001"
+                    .to_string(),
                 severity: AlertSeverity::High,
                 status: AlertStatus::New,
                 source: "EDR".to_string(),
@@ -540,7 +557,12 @@ impl BlueTeam {
         ]
     }
 
-    pub fn create_incident(title: &str, description: &str, severity: IncidentSeverity, category: IncidentCategory) -> Incident {
+    pub fn create_incident(
+        title: &str,
+        description: &str,
+        severity: IncidentSeverity,
+        category: IncidentCategory,
+    ) -> Incident {
         let now = Utc::now();
         Incident {
             id: format!("INC-{}", Utc::now().timestamp_millis()),
@@ -550,16 +572,14 @@ impl BlueTeam {
             status: IncidentStatus::New,
             category,
             source_alert_ids: Vec::new(),
-            timeline: vec![
-                TimelineEvent {
-                    id: Uuid::new_v4().to_string(),
-                    timestamp: now.to_rfc3339(),
-                    actor: "System".to_string(),
-                    action: "Incident Created".to_string(),
-                    details: format!("Incident '{}' created", title),
-                    event_type: TimelineEventType::Detection,
-                },
-            ],
+            timeline: vec![TimelineEvent {
+                id: Uuid::new_v4().to_string(),
+                timestamp: now.to_rfc3339(),
+                actor: "System".to_string(),
+                action: "Incident Created".to_string(),
+                details: format!("Incident '{}' created", title),
+                event_type: TimelineEventType::Detection,
+            }],
             assignee: None,
             team: "SOC".to_string(),
             impact: "Under investigation".to_string(),
@@ -624,13 +644,25 @@ impl BlueTeam {
             ThreatActor {
                 id: Uuid::new_v4().to_string(),
                 name: "APT28".to_string(),
-                aliases: vec!["Fancy Bear".to_string(), "Sofacy".to_string(), "STRONTIUM".to_string()],
+                aliases: vec![
+                    "Fancy Bear".to_string(),
+                    "Sofacy".to_string(),
+                    "STRONTIUM".to_string(),
+                ],
                 description: "Russian state-sponsored cyber espionage group.".to_string(),
                 motivation: "Espionage".to_string(),
                 sophistication: "High".to_string(),
                 country: Some("Russia".to_string()),
-                sector_targets: vec!["Government".to_string(), "Defense".to_string(), "Energy".to_string()],
-                mitre_techniques: vec!["T1566".to_string(), "T1059".to_string(), "T1003".to_string()],
+                sector_targets: vec![
+                    "Government".to_string(),
+                    "Defense".to_string(),
+                    "Energy".to_string(),
+                ],
+                mitre_techniques: vec![
+                    "T1566".to_string(),
+                    "T1059".to_string(),
+                    "T1003".to_string(),
+                ],
                 indicators: vec!["185.220.101.*".to_string(), "update-msdn.com".to_string()],
                 last_seen: Some(Utc::now().to_rfc3339()),
             },
@@ -638,12 +670,21 @@ impl BlueTeam {
                 id: Uuid::new_v4().to_string(),
                 name: "Lazarus Group".to_string(),
                 aliases: vec!["Hidden Cobra".to_string(), "Guardians of Peace".to_string()],
-                description: "North Korean state-sponsored group targeting financial institutions.".to_string(),
+                description: "North Korean state-sponsored group targeting financial institutions."
+                    .to_string(),
                 motivation: "Financial gain".to_string(),
                 sophistication: "High".to_string(),
                 country: Some("North Korea".to_string()),
-                sector_targets: vec!["Financial".to_string(), "Cryptocurrency".to_string(), "Gaming".to_string()],
-                mitre_techniques: vec!["T1486".to_string(), "T1490".to_string(), "T1059".to_string()],
+                sector_targets: vec![
+                    "Financial".to_string(),
+                    "Cryptocurrency".to_string(),
+                    "Gaming".to_string(),
+                ],
+                mitre_techniques: vec![
+                    "T1486".to_string(),
+                    "T1490".to_string(),
+                    "T1059".to_string(),
+                ],
                 indicators: vec!["175.45.176.*".to_string(), "swift-mt799.com".to_string()],
                 last_seen: Some((Utc::now() - Duration::days(7)).to_rfc3339()),
             },
@@ -681,7 +722,8 @@ impl BlueTeam {
             Indicator {
                 id: Uuid::new_v4().to_string(),
                 indicator_type: IndicatorType::FileHash,
-                value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+                value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    .to_string(),
                 confidence: 100,
                 severity: AlertSeverity::Critical,
                 source: "VirusTotal".to_string(),
@@ -694,7 +736,11 @@ impl BlueTeam {
         ]
     }
 
-    pub fn create_forensics_case(title: &str, description: &str, case_type: ForensicsType) -> ForensicsCase {
+    pub fn create_forensics_case(
+        title: &str,
+        description: &str,
+        case_type: ForensicsType,
+    ) -> ForensicsCase {
         let now = Utc::now();
         ForensicsCase {
             id: format!("CASE-{}", Utc::now().timestamp_millis()),
@@ -703,16 +749,14 @@ impl BlueTeam {
             case_type,
             status: ForensicsStatus::Open,
             evidence: Vec::new(),
-            timeline: vec![
-                TimelineEvent {
-                    id: Uuid::new_v4().to_string(),
-                    timestamp: now.to_rfc3339(),
-                    actor: "Examiner".to_string(),
-                    action: "Case Opened".to_string(),
-                    details: format!("Case '{}' created", title),
-                    event_type: TimelineEventType::Note,
-                },
-            ],
+            timeline: vec![TimelineEvent {
+                id: Uuid::new_v4().to_string(),
+                timestamp: now.to_rfc3339(),
+                actor: "Examiner".to_string(),
+                action: "Case Opened".to_string(),
+                details: format!("Case '{}' created", title),
+                event_type: TimelineEventType::Note,
+            }],
             examiner: "forensics_analyst".to_string(),
             created_at: now.to_rfc3339(),
             updated_at: now.to_rfc3339(),
@@ -759,10 +803,7 @@ impl BlueTeam {
                     severity: AlertSeverity::High,
                 },
             ],
-            network_indicators: vec![
-                "185.220.101.42:443".to_string(),
-                "tor-c2.onion".to_string(),
-            ],
+            network_indicators: vec!["185.220.101.42:443".to_string(), "tor-c2.onion".to_string()],
             file_indicators: vec![
                 "C:\\Windows\\Temp\\svchost.exe".to_string(),
                 "C:\\Users\\Public\\readme.txt".to_string(),
@@ -770,18 +811,30 @@ impl BlueTeam {
             registry_indicators: vec![
                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Update".to_string(),
             ],
-            mitre_techniques: vec!["T1486".to_string(), "T1055".to_string(), "T1547".to_string()],
+            mitre_techniques: vec![
+                "T1486".to_string(),
+                "T1055".to_string(),
+                "T1547".to_string(),
+            ],
             risk_score: 95,
         }
     }
 
-    pub fn create_hunt_hypothesis(title: &str, description: &str, mitre_technique: &str) -> HuntHypothesis {
+    pub fn create_hunt_hypothesis(
+        title: &str,
+        description: &str,
+        mitre_technique: &str,
+    ) -> HuntHypothesis {
         HuntHypothesis {
             id: Uuid::new_v4().to_string(),
             title: title.to_string(),
             description: description.to_string(),
             mitre_technique: mitre_technique.to_string(),
-            data_sources: vec!["EDR".to_string(), "Windows Event Logs".to_string(), "Sysmon".to_string()],
+            data_sources: vec![
+                "EDR".to_string(),
+                "Windows Event Logs".to_string(),
+                "Sysmon".to_string(),
+            ],
             search_queries: match mitre_technique {
                 "T1059" => vec![
                     "EventID=4688 AND NewProcessName=*powershell*".to_string(),
@@ -802,32 +855,41 @@ impl BlueTeam {
 
     pub fn get_ir_playbooks() -> HashMap<String, Vec<String>> {
         let mut playbooks = HashMap::new();
-        playbooks.insert("Ransomware".to_string(), vec![
-            "1. Isolate affected systems from network".to_string(),
-            "2. Identify patient zero and scope".to_string(),
-            "3. Preserve evidence (memory, disk)".to_string(),
-            "4. Notify management and legal".to_string(),
-            "5. Engage incident response team".to_string(),
-            "6. Determine ransomware variant".to_string(),
-            "7. Check for data exfiltration".to_string(),
-            "8. Begin recovery from backups".to_string(),
-        ]);
-        playbooks.insert("Phishing".to_string(), vec![
-            "1. Identify affected users".to_string(),
-            "2. Block sender and malicious URLs".to_string(),
-            "3. Reset compromised credentials".to_string(),
-            "4. Check for malware execution".to_string(),
-            "5. Send awareness notification".to_string(),
-        ]);
-        playbooks.insert("Data Breach".to_string(), vec![
-            "1. Determine scope of data exposed".to_string(),
-            "2. Identify attack vector".to_string(),
-            "3. Contain the breach".to_string(),
-            "4. Preserve forensic evidence".to_string(),
-            "5. Notify affected parties".to_string(),
-            "6. Engage legal and compliance".to_string(),
-            "7. File regulatory notifications".to_string(),
-        ]);
+        playbooks.insert(
+            "Ransomware".to_string(),
+            vec![
+                "1. Isolate affected systems from network".to_string(),
+                "2. Identify patient zero and scope".to_string(),
+                "3. Preserve evidence (memory, disk)".to_string(),
+                "4. Notify management and legal".to_string(),
+                "5. Engage incident response team".to_string(),
+                "6. Determine ransomware variant".to_string(),
+                "7. Check for data exfiltration".to_string(),
+                "8. Begin recovery from backups".to_string(),
+            ],
+        );
+        playbooks.insert(
+            "Phishing".to_string(),
+            vec![
+                "1. Identify affected users".to_string(),
+                "2. Block sender and malicious URLs".to_string(),
+                "3. Reset compromised credentials".to_string(),
+                "4. Check for malware execution".to_string(),
+                "5. Send awareness notification".to_string(),
+            ],
+        );
+        playbooks.insert(
+            "Data Breach".to_string(),
+            vec![
+                "1. Determine scope of data exposed".to_string(),
+                "2. Identify attack vector".to_string(),
+                "3. Contain the breach".to_string(),
+                "4. Preserve forensic evidence".to_string(),
+                "5. Notify affected parties".to_string(),
+                "6. Engage legal and compliance".to_string(),
+                "7. File regulatory notifications".to_string(),
+            ],
+        );
         playbooks
     }
 }

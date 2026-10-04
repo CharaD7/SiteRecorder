@@ -59,9 +59,9 @@ impl Exporter {
         path: P,
     ) -> Result<(), ExportError> {
         let mut wtr = csv::Writer::from_path(path)?;
-        
+
         wtr.write_record(&["session_id", "timestamp", "url", "action", "metadata"])?;
-        
+
         for record in data {
             wtr.write_record(&[
                 &record.session_id,
@@ -71,7 +71,7 @@ impl Exporter {
                 &record.metadata.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -141,10 +141,13 @@ impl Exporter {
         data: &[RecordingData],
         path: P,
     ) -> Result<(), ExportError> {
-        use printpdf::{PdfDocument, Mm};
+        use printpdf::{Mm, PdfDocument};
 
         let (doc, page1, layer1) = PdfDocument::new(
-            &format!("SiteRecorder Export - {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")),
+            &format!(
+                "SiteRecorder Export - {}",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
+            ),
             Mm(210.0),
             Mm(297.0),
             "Layer 1",
@@ -152,11 +155,31 @@ impl Exporter {
 
         let current_layer = doc.get_page(page1).get_layer(layer1);
 
-        let font = doc.add_builtin_font(printpdf::BuiltinFont::Helvetica).map_err(|e| ExportError::PdfError(e.to_string()))?;
-        current_layer.use_text("SiteRecorder Recording Export", 18.0, Mm(20.0), Mm(260.0), &font);
+        let font = doc
+            .add_builtin_font(printpdf::BuiltinFont::Helvetica)
+            .map_err(|e| ExportError::PdfError(e.to_string()))?;
+        current_layer.use_text(
+            "SiteRecorder Recording Export",
+            18.0,
+            Mm(20.0),
+            Mm(260.0),
+            &font,
+        );
 
-        current_layer.use_text(&format!("Generated: {}", Utc::now().format("%Y-%m-%d %H:%M:%S")), 10.0, Mm(20.0), Mm(250.0), &font);
-        current_layer.use_text(&format!("Total Records: {}", data.len()), 10.0, Mm(20.0), Mm(244.0), &font);
+        current_layer.use_text(
+            &format!("Generated: {}", Utc::now().format("%Y-%m-%d %H:%M:%S")),
+            10.0,
+            Mm(20.0),
+            Mm(250.0),
+            &font,
+        );
+        current_layer.use_text(
+            &format!("Total Records: {}", data.len()),
+            10.0,
+            Mm(20.0),
+            Mm(244.0),
+            &font,
+        );
 
         let mut y_pos = 230.0;
 
@@ -185,7 +208,13 @@ impl Exporter {
             };
 
             current_layer.use_text(&session_display, 8.0, Mm(20.0), Mm(y_pos), &font);
-            current_layer.use_text(&record.timestamp.format("%Y-%m-%d %H:%M").to_string(), 8.0, Mm(60.0), Mm(y_pos), &font);
+            current_layer.use_text(
+                &record.timestamp.format("%Y-%m-%d %H:%M").to_string(),
+                8.0,
+                Mm(60.0),
+                Mm(y_pos),
+                &font,
+            );
             current_layer.use_text(&url_display, 8.0, Mm(100.0), Mm(y_pos), &font);
             current_layer.use_text(&record.action, 8.0, Mm(150.0), Mm(y_pos), &font);
 
@@ -194,11 +223,16 @@ impl Exporter {
 
         if data.len() > 30 {
             y_pos -= 3.0;
-            current_layer.use_text(&format!("... and {} more records", data.len() - 30), 9.0, Mm(20.0), Mm(y_pos), &font);
+            current_layer.use_text(
+                &format!("... and {} more records", data.len() - 30),
+                9.0,
+                Mm(20.0),
+                Mm(y_pos),
+                &font,
+            );
         }
 
-        let file = std::fs::File::create(path)
-            .map_err(|e| ExportError::PdfError(e.to_string()))?;
+        let file = std::fs::File::create(path).map_err(|e| ExportError::PdfError(e.to_string()))?;
         doc.save(&mut std::io::BufWriter::new(file))
             .map_err(|e| ExportError::PdfError(e.to_string()))?;
 

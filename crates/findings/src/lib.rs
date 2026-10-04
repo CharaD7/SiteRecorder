@@ -7,12 +7,12 @@
 
 pub mod attack;
 pub mod compliance;
+pub mod ingest;
 pub mod metrics;
 pub mod policies;
 pub mod risk;
 pub mod training;
 pub mod vendors;
-pub mod ingest;
 
 use db::models::{AssetType, Finding, FindingStatus, Severity};
 use db::{DbError, Result};
@@ -41,11 +41,7 @@ const COLS: &str = "id, scan_id, asset_id, title, severity, status, category, cw
 fn row_to_finding(row: &Row<'_>) -> rusqlite::Result<Finding> {
     let json_to_vec = |raw: String| -> rusqlite::Result<Vec<String>> {
         serde_json::from_str(&raw).map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                0,
-                rusqlite::types::Type::Text,
-                Box::new(e),
-            )
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
         })
     };
 
@@ -65,11 +61,7 @@ fn row_to_finding(row: &Row<'_>) -> rusqlite::Result<Finding> {
         references: json_to_vec(row.get(12)?)?,
         mitre_techniques: json_to_vec(row.get(13)?)?,
         evidence: serde_json::from_str(&row.get::<_, String>(14)?).map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                14,
-                rusqlite::types::Type::Text,
-                Box::new(e),
-            )
+            rusqlite::Error::FromSqlConversionFailure(14, rusqlite::types::Type::Text, Box::new(e))
         })?,
         assignee: row.get(15)?,
         due_date: row.get(16)?,
@@ -217,9 +209,13 @@ pub fn list(conn: &rusqlite::Connection, filter: &FindingFilter) -> Result<Vec<F
 
     let mut stmt = conn.prepare(&sql).map_err(map_err)?;
     let refs: Vec<&dyn ToSql> = binds.iter().map(|b| b.as_ref()).collect();
-    let rows = stmt.query_map(refs.as_slice(), row_to_finding).map_err(map_err)?;
+    let rows = stmt
+        .query_map(refs.as_slice(), row_to_finding)
+        .map_err(map_err)?;
 
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)?)
+    Ok(rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(map_err)?)
 }
 
 pub fn count(conn: &rusqlite::Connection, filter: &FindingFilter) -> Result<i64> {
@@ -228,16 +224,14 @@ pub fn count(conn: &rusqlite::Connection, filter: &FindingFilter) -> Result<i64>
 
     let mut stmt = conn.prepare(&sql).map_err(map_err)?;
     let refs: Vec<&dyn ToSql> = binds.iter().map(|b| b.as_ref()).collect();
-    let n = stmt.query_row(refs.as_slice(), |r| r.get(0)).map_err(map_err)?;
+    let n = stmt
+        .query_row(refs.as_slice(), |r| r.get(0))
+        .map_err(map_err)?;
     Ok(n)
 }
 
 /// Transition a finding's status, stamping `updated_at`.
-pub fn set_status(
-    conn: &rusqlite::Connection,
-    id: &str,
-    status: FindingStatus,
-) -> Result<()> {
+pub fn set_status(conn: &rusqlite::Connection, id: &str, status: FindingStatus) -> Result<()> {
     let changed = conn
         .execute(
             "UPDATE findings SET status = ?2, updated_at = ?3 WHERE id = ?1",
@@ -358,7 +352,9 @@ pub fn attack_coverage(conn: &rusqlite::Connection) -> Result<attack::CoverageRe
 /// workflow state, not current posture.
 pub fn project_findings(conn: &rusqlite::Connection) -> Result<Vec<compliance::FindingProjection>> {
     let mut stmt = conn
-        .prepare("SELECT id, cwe_id, severity, status, created_at, updated_at, asset_id FROM findings")
+        .prepare(
+            "SELECT id, cwe_id, severity, status, created_at, updated_at, asset_id FROM findings",
+        )
         .map_err(map_err)?;
 
     let rows = stmt
@@ -377,7 +373,8 @@ pub fn project_findings(conn: &rusqlite::Connection) -> Result<Vec<compliance::F
 
     let mut out = Vec::new();
     for row in rows {
-        let (id, cwe_id, severity, status, created_at, updated_at, asset_id) = row.map_err(map_err)?;
+        let (id, cwe_id, severity, status, created_at, updated_at, asset_id) =
+            row.map_err(map_err)?;
         let counts = !matches!(status.as_str(), "false_positive" | "accepted");
         out.push(compliance::FindingProjection {
             id,
@@ -446,7 +443,8 @@ pub fn risk_register(conn: &rusqlite::Connection) -> Result<risk::RiskRegister> 
 
     let mut inputs = Vec::new();
     for row in rows {
-        let (id, title, severity, category, status, asset_id, criticality) = row.map_err(map_err)?;
+        let (id, title, severity, category, status, asset_id, criticality) =
+            row.map_err(map_err)?;
         inputs.push(risk::RiskInput {
             finding_id: id,
             title,
@@ -454,7 +452,10 @@ pub fn risk_register(conn: &rusqlite::Connection) -> Result<risk::RiskRegister> 
             category,
             asset_id,
             asset_criticality: criticality,
-            open: !matches!(status.as_str(), "false_positive" | "accepted" | "remediated"),
+            open: !matches!(
+                status.as_str(),
+                "false_positive" | "accepted" | "remediated"
+            ),
         });
     }
 
@@ -518,7 +519,9 @@ pub fn policy_library(
         )
         .map_err(map_err)?;
     let rows = stmt.query_map([], policy_from_row).map_err(map_err)?;
-    let all: Vec<policies::Policy> = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)?;
+    let all: Vec<policies::Policy> = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(map_err)?;
 
     Ok(policies::build_library(
         chrono::Utc::now(),
@@ -650,17 +653,53 @@ pub fn vendor_register(conn: &rusqlite::Connection) -> Result<vendors::VendorReg
 pub fn seed_training_modules(conn: &rusqlite::Connection) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
     let starters: Vec<(&str, &str, &str, &str, u32, bool)> = vec![
-        ("tm_phishing", "Recognising Phishing", "Spot phishing lures and report them.", "document", 20, true),
-        ("tm_passwords", "Password Hygiene", "Password managers, length, and reuse.", "document", 15, true),
-        ("tm_social", "Social Engineering", "Pretexting, vishing and tailgating.", "document", 20, false),
-        ("tm_reporting", "Reporting an Incident", "What to report and to whom, fast.", "document", 10, true),
+        (
+            "tm_phishing",
+            "Recognising Phishing",
+            "Spot phishing lures and report them.",
+            "document",
+            20,
+            true,
+        ),
+        (
+            "tm_passwords",
+            "Password Hygiene",
+            "Password managers, length, and reuse.",
+            "document",
+            15,
+            true,
+        ),
+        (
+            "tm_social",
+            "Social Engineering",
+            "Pretexting, vishing and tailgating.",
+            "document",
+            20,
+            false,
+        ),
+        (
+            "tm_reporting",
+            "Reporting an Incident",
+            "What to report and to whom, fast.",
+            "document",
+            10,
+            true,
+        ),
     ];
     for (id, title, desc, modality, mins, mandatory) in starters {
         conn.execute(
             "INSERT OR IGNORE INTO training_modules
              (id, title, description, modality, duration_mins, mandatory, created_at, updated_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?7)",
-            params![id, title, desc, modality, mins as i64, mandatory as i64, now],
+            params![
+                id,
+                title,
+                desc,
+                modality,
+                mins as i64,
+                mandatory as i64,
+                now
+            ],
         )
         .map_err(map_err)?;
     }
@@ -768,7 +807,9 @@ pub fn by_category(conn: &rusqlite::Connection) -> Result<Vec<(String, i64)>> {
     let rows = stmt
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
         .map_err(map_err)?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)?)
+    Ok(rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(map_err)?)
 }
 
 /// Resolve an asset for a scanned URL, creating one if absent.

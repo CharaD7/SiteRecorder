@@ -37,7 +37,10 @@ impl Default for ScanConfig {
     fn default() -> Self {
         Self {
             target: String::new(),
-            ports: vec![21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 27017],
+            ports: vec![
+                21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 1433, 1521, 3306,
+                3389, 5432, 5900, 6379, 8080, 8443, 27017,
+            ],
             timeout_ms: 2000,
             concurrency: 100,
             scan_type: ScanType::Syn,
@@ -259,7 +262,10 @@ impl NetworkScanner {
             .collect();
 
         if addrs.is_empty() {
-            return Err(NetworkError::ParseError(format!("Could not resolve: {}", target)));
+            return Err(NetworkError::ParseError(format!(
+                "Could not resolve: {}",
+                target
+            )));
         }
 
         Ok(addrs)
@@ -273,13 +279,17 @@ impl NetworkScanner {
         let chunks: Vec<&[u16]> = config.ports.chunks(config.concurrency).collect();
 
         for chunk in chunks {
-            let futures: Vec<_> = chunk.iter().map(|&port| {
-                let addr = SocketAddr::new(*ip, port);
-                async move {
-                    let result = Self::check_port(addr, timeout_dur, config.service_detection).await;
-                    result
-                }
-            }).collect();
+            let futures: Vec<_> = chunk
+                .iter()
+                .map(|&port| {
+                    let addr = SocketAddr::new(*ip, port);
+                    async move {
+                        let result =
+                            Self::check_port(addr, timeout_dur, config.service_detection).await;
+                        result
+                    }
+                })
+                .collect();
 
             let results = futures::future::join_all(futures).await;
             for result in results {
@@ -344,26 +354,22 @@ impl NetworkScanner {
                     response_time_ms: start.elapsed().as_millis() as u64,
                 })
             }
-            Ok(Err(_)) => {
-                Ok(PortResult {
-                    port: addr.port(),
-                    protocol: Protocol::Tcp,
-                    state: PortState::Closed,
-                    service: None,
-                    banner: None,
-                    response_time_ms: start.elapsed().as_millis() as u64,
-                })
-            }
-            Err(_) => {
-                Ok(PortResult {
-                    port: addr.port(),
-                    protocol: Protocol::Tcp,
-                    state: PortState::Filtered,
-                    service: None,
-                    banner: None,
-                    response_time_ms: timeout_dur.as_millis() as u64,
-                })
-            }
+            Ok(Err(_)) => Ok(PortResult {
+                port: addr.port(),
+                protocol: Protocol::Tcp,
+                state: PortState::Closed,
+                service: None,
+                banner: None,
+                response_time_ms: start.elapsed().as_millis() as u64,
+            }),
+            Err(_) => Ok(PortResult {
+                port: addr.port(),
+                protocol: Protocol::Tcp,
+                state: PortState::Filtered,
+                service: None,
+                banner: None,
+                response_time_ms: timeout_dur.as_millis() as u64,
+            }),
         }
     }
 
@@ -393,7 +399,10 @@ impl NetworkScanner {
             (8080, ("http-proxy", "HTTP Proxy")),
             (8443, ("https-alt", "HTTPS Alternate")),
             (27017, ("mongodb", "MongoDB Database")),
-        ].iter().cloned().collect();
+        ]
+        .iter()
+        .cloned()
+        .collect();
 
         services.get(&port).map(|(name, desc)| ServiceInfo {
             name: name.to_string(),
@@ -417,7 +426,10 @@ impl NetworkScanner {
 
         if matches!(addr.port(), 80 | 8080 | 8000 | 8888 | 3000 | 5000) {
             let host = addr.ip();
-            let request = format!("HEAD / HTTP/1.0\r\nHost: {}\r\nUser-Agent: siterecorder\r\n\r\n", host);
+            let request = format!(
+                "HEAD / HTTP/1.0\r\nHost: {}\r\nUser-Agent: siterecorder\r\n\r\n",
+                host
+            );
             if timeout(Duration::from_secs(2), stream.write_all(request.as_bytes()))
                 .await
                 .is_err()
@@ -455,7 +467,9 @@ impl NetworkScanner {
         let parts: Vec<&str> = trimmed.split('.').filter(|p| !p.is_empty()).collect();
         parts.len() >= 2
             && trimmed.len() >= 5
-            && parts.iter().all(|p| p.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            && parts
+                .iter()
+                .all(|p| p.chars().next().is_some_and(|c| c.is_ascii_digit()))
     }
 
     /// Extract a version string that follows the service name in a banner.
@@ -478,7 +492,8 @@ impl NetworkScanner {
         if needle_chars.len() <= haystack.len() {
             'outer: for i in 0..=(haystack.len() - needle_chars.len()) {
                 for j in 0..needle_chars.len() {
-                    if haystack[i + j].to_ascii_lowercase() != needle_chars[j].to_ascii_lowercase() {
+                    if haystack[i + j].to_ascii_lowercase() != needle_chars[j].to_ascii_lowercase()
+                    {
                         continue 'outer;
                     }
                 }
@@ -495,7 +510,8 @@ impl NetworkScanner {
             }
             // Read the version run: alphanumerics and dots (covers "8.9p1").
             let mut version = String::new();
-            while i < haystack.len() && (haystack[i].is_ascii_alphanumeric() || haystack[i] == '.') {
+            while i < haystack.len() && (haystack[i].is_ascii_alphanumeric() || haystack[i] == '.')
+            {
                 version.push(haystack[i]);
                 i += 1;
             }
@@ -536,22 +552,95 @@ impl NetworkScanner {
         response.iter().next().map(|name| name.to_string())
     }
 
-    pub async fn enumerate_subdomains(domain: &str, wordlist: Option<Vec<String>>) -> Result<SubdomainResult> {
+    pub async fn enumerate_subdomains(
+        domain: &str,
+        wordlist: Option<Vec<String>>,
+    ) -> Result<SubdomainResult> {
         let start = std::time::Instant::now();
 
         let default_wordlist = vec![
-            "www", "mail", "ftp", "localhost", "webmail", "smtp", "pop", "ns1", "ns2",
-            "webdisk", "admin", "blog", "dev", "test", "stage", "api", "secure", "vpn",
-            "m", "mobile", "shop", "store", "support", "portal", "forum", "bbs", "wiki",
-            "docs", "help", "status", "monitor", "git", "gitlab", "jenkins", "ci", "cdn",
-            "static", "img", "images", "video", "media", "assets", "files", "download",
-            "upload", "backup", "old", "new", "beta", "alpha", "demo", "staging", "prod",
-            "internal", "external", "remote", "office", "corp", "auth", "sso", "login",
-            "account", "accounts", "user", "users", "my", "app", "apps", "service",
-            "services", "ws", "api1", "api2", "v1", "v2", "v3", "graph", "graphql",
+            "www",
+            "mail",
+            "ftp",
+            "localhost",
+            "webmail",
+            "smtp",
+            "pop",
+            "ns1",
+            "ns2",
+            "webdisk",
+            "admin",
+            "blog",
+            "dev",
+            "test",
+            "stage",
+            "api",
+            "secure",
+            "vpn",
+            "m",
+            "mobile",
+            "shop",
+            "store",
+            "support",
+            "portal",
+            "forum",
+            "bbs",
+            "wiki",
+            "docs",
+            "help",
+            "status",
+            "monitor",
+            "git",
+            "gitlab",
+            "jenkins",
+            "ci",
+            "cdn",
+            "static",
+            "img",
+            "images",
+            "video",
+            "media",
+            "assets",
+            "files",
+            "download",
+            "upload",
+            "backup",
+            "old",
+            "new",
+            "beta",
+            "alpha",
+            "demo",
+            "staging",
+            "prod",
+            "internal",
+            "external",
+            "remote",
+            "office",
+            "corp",
+            "auth",
+            "sso",
+            "login",
+            "account",
+            "accounts",
+            "user",
+            "users",
+            "my",
+            "app",
+            "apps",
+            "service",
+            "services",
+            "ws",
+            "api1",
+            "api2",
+            "v1",
+            "v2",
+            "v3",
+            "graph",
+            "graphql",
         ];
 
-        let words = wordlist.unwrap_or_else(|| default_wordlist.iter().map(|s| s.to_string()).collect());
+        let words =
+            wordlist.unwrap_or_else(|| default_wordlist.iter().map(|s| s.to_string()).collect());
         let mut subdomains = Vec::new();
 
         for word in &words {
@@ -668,13 +757,7 @@ impl NetworkScanner {
             .as_deref()
             .map(|raw| {
                 raw.split(',')
-                    .map(|part| {
-                        part.split(':')
-                            .next_back()
-                            .unwrap_or("")
-                            .trim()
-                            .to_string()
-                    })
+                    .map(|part| part.split(':').next_back().unwrap_or("").trim().to_string())
                     .filter(|v| !v.is_empty())
                     .collect::<Vec<_>>()
             })
@@ -779,7 +862,11 @@ impl NetworkScanner {
             for ip in response.iter() {
                 records.push(DnsRecord {
                     name: domain.to_string(),
-                    record_type: if ip.is_ipv4() { "A".to_string() } else { "AAAA".to_string() },
+                    record_type: if ip.is_ipv4() {
+                        "A".to_string()
+                    } else {
+                        "AAAA".to_string()
+                    },
                     value: ip.to_string(),
                     ttl: None,
                 });
@@ -888,7 +975,10 @@ mod tests {
     #[test]
     fn no_version_in_banner_yields_none() {
         let svc = service_named("http");
-        assert_eq!(NetworkScanner::extract_version(&svc, "HTTP/1.1 400 Bad Request"), None);
+        assert_eq!(
+            NetworkScanner::extract_version(&svc, "HTTP/1.1 400 Bad Request"),
+            None
+        );
     }
 
     #[test]
@@ -899,7 +989,8 @@ mod tests {
 
     #[test]
     fn extracts_certificate_block() {
-        let dump = "some noise\n-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\ntrailing";
+        let dump =
+            "some noise\n-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\ntrailing";
         let pem = NetworkScanner::extract_first_certificate(dump).unwrap();
         assert!(pem.starts_with("-----BEGIN CERTIFICATE-----"));
         assert!(pem.ends_with("-----END CERTIFICATE-----"));
@@ -929,7 +1020,10 @@ mod tests {
 
     #[test]
     fn absent_field_yields_none() {
-        assert_eq!(NetworkScanner::match_field("nothing here", "Protocol  :"), None);
+        assert_eq!(
+            NetworkScanner::match_field("nothing here", "Protocol  :"),
+            None
+        );
     }
 
     // Regression: TLS 1.3 dropped the legacy "Protocol : / Cipher :" block, so
@@ -937,13 +1031,11 @@ mod tests {
 
     #[test]
     fn parses_tls13_new_line() {
-        let text = "    New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384\n    Server public key is 256 bit";
+        let text =
+            "    New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384\n    Server public key is 256 bit";
         assert_eq!(
             NetworkScanner::match_new_line(text),
-            Some((
-                "TLSv1.3".to_string(),
-                "TLS_AES_256_GCM_SHA384".to_string()
-            ))
+            Some(("TLSv1.3".to_string(), "TLS_AES_256_GCM_SHA384".to_string()))
         );
     }
 
@@ -1010,10 +1102,19 @@ mod tests {
 
         let out = Command::new("openssl")
             .args([
-                "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-                "-keyout", key.to_str()?,
-                "-out", cert.to_str()?,
-                "-days", "1", "-subj", "/CN=siterecorder-test",
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-keyout",
+                key.to_str()?,
+                "-out",
+                cert.to_str()?,
+                "-days",
+                "1",
+                "-subj",
+                "/CN=siterecorder-test",
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())

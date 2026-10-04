@@ -48,7 +48,12 @@ impl Notifier {
         Self { config }
     }
 
-    pub fn send(&self, title: &str, message: &str, _level: NotificationLevel) -> Result<(), NotifierError> {
+    pub fn send(
+        &self,
+        title: &str,
+        message: &str,
+        _level: NotificationLevel,
+    ) -> Result<(), NotifierError> {
         info!("Sending notification: {} - {}", title, message);
 
         #[cfg(not(target_os = "macos"))]
@@ -62,7 +67,7 @@ impl Notifier {
             if let Some(icon) = &self.config.icon {
                 notification.icon(icon);
             }
-            
+
             // Add sound if enabled
             if self.config.sound_enabled {
                 notification.sound_name("message-new-instant");
@@ -81,7 +86,7 @@ impl Notifier {
                 message.replace('"', "\\\""),
                 title.replace('"', "\\\"")
             );
-            
+
             std::process::Command::new("osascript")
                 .arg("-e")
                 .arg(&script)
@@ -116,7 +121,11 @@ impl Notifier {
         )
     }
 
-    pub fn notify_recording_stopped(&self, session_id: &str, duration_secs: u64) -> Result<(), NotifierError> {
+    pub fn notify_recording_stopped(
+        &self,
+        session_id: &str,
+        duration_secs: u64,
+    ) -> Result<(), NotifierError> {
         self.notify_success(
             "Recording Completed",
             &format!(
@@ -127,10 +136,7 @@ impl Notifier {
     }
 
     pub fn notify_crawl_started(&self, url: &str) -> Result<(), NotifierError> {
-        self.notify_info(
-            "Crawl Started",
-            &format!("Started crawling {}", url),
-        )
+        self.notify_info("Crawl Started", &format!("Started crawling {}", url))
     }
 
     pub fn notify_crawl_completed(&self, total_pages: usize) -> Result<(), NotifierError> {
@@ -141,10 +147,7 @@ impl Notifier {
     }
 
     pub fn notify_error_occurred(&self, error_msg: &str) -> Result<(), NotifierError> {
-        self.notify_error(
-            "Error Occurred",
-            error_msg,
-        )
+        self.notify_error("Error Occurred", error_msg)
     }
 
     pub fn notify_export_completed(&self, file_path: &str) -> Result<(), NotifierError> {

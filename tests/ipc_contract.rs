@@ -18,9 +18,7 @@ fn ui_commands() -> BTreeSet<String> {
         match rest.find('\'') {
             Some(end) => {
                 let name = &rest[..end];
-                if !name.is_empty()
-                    && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                {
+                if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                     found.insert(name.to_string());
                 }
                 rest = &rest[end + 1..];
@@ -38,7 +36,9 @@ fn registered_commands() -> BTreeSet<String> {
         .find("generate_handler![")
         .expect("generate_handler! block must exist");
     let body = &main_rs[start..];
-    let end = body.find("])").expect("generate_handler! block must terminate");
+    let end = body
+        .find("])")
+        .expect("generate_handler! block must terminate");
 
     body[..end]
         .lines()

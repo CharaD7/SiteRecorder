@@ -137,16 +137,16 @@ pub fn build_report(
 
     let mut by_modality: BTreeMap<String, i64> = BTreeMap::new();
     for m in &modules {
-        *by_modality.entry(m.modality.as_str().to_string()).or_insert(0) += 1;
+        *by_modality
+            .entry(m.modality.as_str().to_string())
+            .or_insert(0) += 1;
     }
 
     let sent: u64 = campaigns.iter().map(|c| c.sent_count).sum();
     let clicked: u64 = campaigns.iter().map(|c| c.clicked).sum();
     let submitted: u64 = campaigns.iter().map(|c| c.submitted).sum();
 
-    let mut notes = vec![
-        "Completion rates are measured from recorded assignments.".to_string(),
-    ];
+    let mut notes = vec!["Completion rates are measured from recorded assignments.".to_string()];
     if sent == 0 {
         notes.push(
             "No phishing campaign has been reported, so no click or submission \
@@ -248,14 +248,24 @@ mod tests {
     fn campaign_rates_aggregate_across_campaigns() {
         let c = vec![
             PhishingCampaign {
-                id: "c1".into(), name: "Q1".into(), template_url: None, audience: "all".into(),
+                id: "c1".into(),
+                name: "Q1".into(),
+                template_url: None,
+                audience: "all".into(),
                 launched_at: Some("2026-01-01T00:00:00Z".into()),
-                sent_count: 100, clicked: 20, submitted: 5,
+                sent_count: 100,
+                clicked: 20,
+                submitted: 5,
             },
             PhishingCampaign {
-                id: "c2".into(), name: "Q2".into(), template_url: None, audience: "all".into(),
+                id: "c2".into(),
+                name: "Q2".into(),
+                template_url: None,
+                audience: "all".into(),
                 launched_at: Some("2026-04-01T00:00:00Z".into()),
-                sent_count: 100, clicked: 10, submitted: 2,
+                sent_count: 100,
+                clicked: 10,
+                submitted: 2,
             },
         ];
         let r = build_report("2026-06-01T00:00:00Z", vec![], vec![], c);
@@ -267,8 +277,14 @@ mod tests {
     fn submissions_never_exceed_clicks() {
         // A data-entry error upstream would produce >100% if unguarded.
         let c = vec![PhishingCampaign {
-            id: "c".into(), name: "bad".into(), template_url: None, audience: "".into(),
-            launched_at: None, sent_count: 10, clicked: 1, submitted: 5,
+            id: "c".into(),
+            name: "bad".into(),
+            template_url: None,
+            audience: "".into(),
+            launched_at: None,
+            sent_count: 10,
+            clicked: 1,
+            submitted: 5,
         }];
         let r = build_report("2026-06-01T00:00:00Z", vec![], vec![], c);
         assert!(r.submission_rate.unwrap() > r.click_rate.unwrap());

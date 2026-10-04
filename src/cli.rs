@@ -51,7 +51,7 @@ pub struct CrawlArgs {
 pub enum Commands {
     /// Start recording with GUI (default)
     Gui,
-    
+
     /// Run in CLI mode without GUI
     Crawl {
         /// URL to start crawling from
@@ -146,14 +146,14 @@ pub enum Commands {
         #[arg(short = 'j', long, default_value = "1")]
         concurrency: usize,
     },
-    
+
     /// Resume an interrupted session
     Resume {
         /// Session ID to resume
         #[arg(value_name = "SESSION_ID")]
         session_id: String,
     },
-    
+
     /// List previous recording sessions
     List {
         /// Output directory to list sessions from
@@ -222,11 +222,10 @@ impl Commands {
                 login_script,
                 concurrency,
             } => {
-                let login_script = login_script
-                    .map(|path| {
-                        std::fs::read_to_string(&path)
-                            .unwrap_or_else(|e| panic!("Failed to read login script {}: {}", path, e))
-                    });
+                let login_script = login_script.map(|path| {
+                    std::fs::read_to_string(&path)
+                        .unwrap_or_else(|e| panic!("Failed to read login script {}: {}", path, e))
+                });
                 CrawlArgs {
                     url,
                     max_pages,
@@ -317,7 +316,8 @@ mod tests {
             "site-recorder",
             "crawl",
             "https://example.com",
-            "--max-pages", "100",
+            "--max-pages",
+            "100",
         ]);
         assert!(cli.is_ok());
     }
@@ -330,7 +330,8 @@ mod tests {
                 "site-recorder",
                 "crawl",
                 "https://example.com",
-                "--recording-mode", mode,
+                "--recording-mode",
+                mode,
             ]);
             assert!(cli.is_ok());
         }

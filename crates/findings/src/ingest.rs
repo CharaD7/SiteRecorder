@@ -49,7 +49,11 @@ fn slug(s: &str) -> String {
 }
 
 /// Convert a report into findings without writing anything.
-pub fn convert(report: &ScanReport, asset_id: Option<String>, user_id: Option<String>) -> Vec<Finding> {
+pub fn convert(
+    report: &ScanReport,
+    asset_id: Option<String>,
+    user_id: Option<String>,
+) -> Vec<Finding> {
     let mut out = Vec::new();
 
     for result in &report.results {
@@ -151,7 +155,11 @@ pub fn ingest_report(
     user_id: Option<&str>,
 ) -> Result<IngestOutcome> {
     let asset_id = resolve_or_create_asset(conn, &report.url, user_id)?;
-    let converted = convert(report, Some(asset_id.clone()), user_id.map(|s| s.to_string()));
+    let converted = convert(
+        report,
+        Some(asset_id.clone()),
+        user_id.map(|s| s.to_string()),
+    );
 
     let checks_considered = report.results.len();
     let checks_skipped = report
@@ -223,7 +231,12 @@ mod tests {
         }
     }
 
-    fn result(name: &str, status: ScanStatus, sev: ScanSev, f: Vec<VulnerabilityFinding>) -> ScanResult {
+    fn result(
+        name: &str,
+        status: ScanStatus,
+        sev: ScanSev,
+        f: Vec<VulnerabilityFinding>,
+    ) -> ScanResult {
         ScanResult {
             check_name: name.into(),
             status,
@@ -275,8 +288,18 @@ mod tests {
     #[test]
     fn errors_and_skips_are_not_findings() {
         let r = report(vec![
-            result("A", ScanStatus::Error, ScanSev::High, vec![finding("x", ScanSev::High)]),
-            result("B", ScanStatus::Skipped, ScanSev::High, vec![finding("y", ScanSev::High)]),
+            result(
+                "A",
+                ScanStatus::Error,
+                ScanSev::High,
+                vec![finding("x", ScanSev::High)],
+            ),
+            result(
+                "B",
+                ScanStatus::Skipped,
+                ScanSev::High,
+                vec![finding("y", ScanSev::High)],
+            ),
         ]);
         assert!(convert(&r, None, None).is_empty());
     }
@@ -313,15 +336,22 @@ mod tests {
 
     #[test]
     fn slug_normalises_check_names() {
-        assert_eq!(slug("Server-Side Request Forgery (SSRF)"), "server_side_request_forgery__ssrf_");
+        assert_eq!(
+            slug("Server-Side Request Forgery (SSRF)"),
+            "server_side_request_forgery__ssrf_"
+        );
     }
 
     #[test]
     fn end_to_end_creates_asset_and_rows() {
         let db = Db::open_in_memory().unwrap();
         let r = report(vec![
-            result("SQL Injection", ScanStatus::Vulnerable, ScanSev::Critical,
-                   vec![finding("SQLi", ScanSev::Critical)]),
+            result(
+                "SQL Injection",
+                ScanStatus::Vulnerable,
+                ScanSev::Critical,
+                vec![finding("SQLi", ScanSev::Critical)],
+            ),
             result("TLS", ScanStatus::NotVulnerable, ScanSev::High, vec![]),
         ]);
 
@@ -415,10 +445,18 @@ mod tests {
     fn coverage_reports_no_score_when_any_finding_unmapped() {
         let db = Db::open_in_memory().unwrap();
         let r = report(vec![
-            result("SQL Injection Detection", ScanStatus::Vulnerable, ScanSev::Critical,
-                   vec![finding("SQLi", ScanSev::Critical)]),
-            result("Clickjacking Detection", ScanStatus::Vulnerable, ScanSev::Medium,
-                   vec![finding("frame", ScanSev::Medium)]),
+            result(
+                "SQL Injection Detection",
+                ScanStatus::Vulnerable,
+                ScanSev::Critical,
+                vec![finding("SQLi", ScanSev::Critical)],
+            ),
+            result(
+                "Clickjacking Detection",
+                ScanStatus::Vulnerable,
+                ScanSev::Medium,
+                vec![finding("frame", ScanSev::Medium)],
+            ),
         ]);
         ingest_report(db.conn(), &r, None).unwrap();
 

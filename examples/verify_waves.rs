@@ -39,7 +39,11 @@ async fn main() {
         .unwrap();
         audit::verify_integrity(database.conn()).unwrap().valid
     };
-    check("wave1 audit chain valid", user, "chain intact after reopen path".into());
+    check(
+        "wave1 audit chain valid",
+        user,
+        "chain intact after reopen path".into(),
+    );
 
     // Tamper, confirm detection, on the real file.
     let tampered_detected = {
@@ -50,7 +54,11 @@ async fn main() {
             .unwrap();
         !audit::verify_integrity(database.conn()).unwrap().valid
     };
-    check("wave1 tamper detected", tampered_detected, "forged row rejected".into());
+    check(
+        "wave1 tamper detected",
+        tampered_detected,
+        "forged row rejected".into(),
+    );
 
     // ---- Wave 1.6: encryption round trip ----
     let key = db::crypto::DataKey::from_secret(b"verify-secret");
@@ -125,7 +133,11 @@ async fn main() {
                 |r| r.get(0),
             )
             .unwrap();
-        check("wave2 no fabricated clean findings", skipped == 0, "0 health-check rows".into());
+        check(
+            "wave2 no fabricated clean findings",
+            skipped == 0,
+            "0 health-check rows".into(),
+        );
     } else {
         check("wave2 real scan", false, "scan did not complete".into());
     }
@@ -133,7 +145,10 @@ async fn main() {
     // ---- Wave 2: filtering ----
     {
         let database = db::Db::open_in_memory().unwrap();
-        for (i, sev) in [Severity::Critical, Severity::High, Severity::Low].iter().enumerate() {
+        for (i, sev) in [Severity::Critical, Severity::High, Severity::Low]
+            .iter()
+            .enumerate()
+        {
             findings::insert(
                 database.conn(),
                 &Finding {
@@ -163,18 +178,32 @@ async fn main() {
         }
         let crit = findings::list(
             database.conn(),
-            &FindingFilter { severity: Some(Severity::Critical), ..Default::default() },
+            &FindingFilter {
+                severity: Some(Severity::Critical),
+                ..Default::default()
+            },
         )
         .unwrap();
-        check("wave2 severity filter", crit.len() == 1, "1 CRITICAL".into());
+        check(
+            "wave2 severity filter",
+            crit.len() == 1,
+            "1 CRITICAL".into(),
+        );
 
         findings::set_status(database.conn(), "f0", FindingStatus::FalsePositive).unwrap();
         let fp = findings::list(
             database.conn(),
-            &FindingFilter { status: Some(FindingStatus::FalsePositive), ..Default::default() },
+            &FindingFilter {
+                status: Some(FindingStatus::FalsePositive),
+                ..Default::default()
+            },
         )
         .unwrap();
-        check("wave2 status transition", fp.len() == 1, "1 false_positive".into());
+        check(
+            "wave2 status transition",
+            fp.len() == 1,
+            "1 false_positive".into(),
+        );
     }
 
     // ---- Wave 4 prerequisite: ATT&CK coverage from a real scan ----
@@ -182,7 +211,12 @@ async fn main() {
         let database = db::Db::open_in_memory().unwrap();
         ingest::ingest_report(database.conn(), report, None).unwrap();
         let cov = findings::attack_coverage(database.conn()).unwrap();
-        println!("  ATT&CK: {} techniques, complete={}, score={:?}", cov.techniques.len(), cov.complete, cov.score);
+        println!(
+            "  ATT&CK: {} techniques, complete={}, score={:?}",
+            cov.techniques.len(),
+            cov.complete,
+            cov.score
+        );
         println!("  {}", cov.describe());
         // Against a well-configured target the only findings are hardening gaps
         // (headers, clickjacking), which are deliberately unmapped. The correct
@@ -229,7 +263,8 @@ async fn main() {
         );
         check(
             "wave4 mapping yields techniques",
-            mapped.first().map(|f| f.mitre_techniques.as_slice()) == Some(&["T1190".to_string()][..]),
+            mapped.first().map(|f| f.mitre_techniques.as_slice())
+                == Some(&["T1190".to_string()][..]),
             format!("{:?}", mapped.first().map(|f| f.mitre_techniques.clone())),
         );
     }
@@ -241,7 +276,10 @@ async fn main() {
         let assessments = findings::assess_all(database.conn()).unwrap();
         for a in &assessments {
             println!("  compliance {}: {}", a.framework_id, a.describe());
-            println!("    categories with findings: {:?}", a.controls_with_findings);
+            println!(
+                "    categories with findings: {:?}",
+                a.controls_with_findings
+            );
         }
         check(
             "wave4.3.1 compliance assessment runs on real findings",
@@ -250,10 +288,11 @@ async fn main() {
         );
         check(
             "wave4.3.1 never claims compliance from absence",
-            assessments.iter().all(|a| a
-                .notes
-                .iter()
-                .any(|n| n.contains("NOT evidence of compliance"))),
+            assessments.iter().all(|a| {
+                a.notes
+                    .iter()
+                    .any(|n| n.contains("NOT evidence of compliance"))
+            }),
             "absence disclaimer present on every assessment".into(),
         );
     }
@@ -264,26 +303,49 @@ async fn main() {
         ingest::ingest_report(database.conn(), report, None).unwrap();
 
         // Age one finding so the aging buckets have more than one bucket.
-        database.conn().execute(
-            "UPDATE findings SET created_at = '2025-06-01T00:00:00Z' WHERE rowid = 1",
-            [],
-        ).unwrap();
-        findings::set_status(database.conn(),
-            &findings::list(database.conn(), &findings::FindingFilter::default())
-                .unwrap()[1].id, db::models::FindingStatus::Remediated).unwrap();
+        database
+            .conn()
+            .execute(
+                "UPDATE findings SET created_at = '2025-06-01T00:00:00Z' WHERE rowid = 1",
+                [],
+            )
+            .unwrap();
+        findings::set_status(
+            database.conn(),
+            &findings::list(database.conn(), &findings::FindingFilter::default()).unwrap()[1].id,
+            db::models::FindingStatus::Remediated,
+        )
+        .unwrap();
 
         let m = findings::metrics_report(database.conn(), 30).unwrap();
         println!("  metrics: {}", m.describe());
-        println!("    open={} aging={:?}", m.vulnerability.open, m.vulnerability.aging);
-        println!("    unavailable: {}", m.unavailable.iter().map(|u| u.name.clone()).collect::<Vec<_>>().join(", "));
-        check("wave4.3.7 metrics computed", m.vulnerability.total > 0,
-              format!("{} findings measured", m.vulnerability.total));
-        check("wave4.3.7 headline metrics refused",
-              m.unavailable.iter().any(|u| u.name.contains("MTTD")),
-              "MTTD reported unavailable with a reason".into());
-        check("wave4.3.7 every refusal has a reason",
-              m.unavailable.iter().all(|u| !u.reason.is_empty()),
-              "no unexplained refusals".into());
+        println!(
+            "    open={} aging={:?}",
+            m.vulnerability.open, m.vulnerability.aging
+        );
+        println!(
+            "    unavailable: {}",
+            m.unavailable
+                .iter()
+                .map(|u| u.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        check(
+            "wave4.3.7 metrics computed",
+            m.vulnerability.total > 0,
+            format!("{} findings measured", m.vulnerability.total),
+        );
+        check(
+            "wave4.3.7 headline metrics refused",
+            m.unavailable.iter().any(|u| u.name.contains("MTTD")),
+            "MTTD reported unavailable with a reason".into(),
+        );
+        check(
+            "wave4.3.7 every refusal has a reason",
+            m.unavailable.iter().all(|u| !u.reason.is_empty()),
+            "no unexplained refusals".into(),
+        );
     }
 
     // ---- Wave 4.3.3: §5.2 risk register from a real scan ----
@@ -300,16 +362,28 @@ async fn main() {
         let r = findings::risk_register(database.conn()).unwrap();
         println!("  risk: {}", r.describe());
         for e in r.entries.iter().take(4) {
-            println!("    [{}] {} score={} basis={}", e.level, e.title, e.score, e.impact_basis);
+            println!(
+                "    [{}] {} score={} basis={}",
+                e.level, e.title, e.score, e.impact_basis
+            );
         }
-        check("wave4.3.3 register populated from real findings",
-              !r.entries.is_empty(), format!("{} entries", r.entries.len()));
-        check("wave4.3.3 scores are ordered highest first",
-              r.entries.windows(2).all(|w| w[0].score >= w[1].score),
-              "descending by score".into());
-        check("wave4.3.3 quantitative models refused",
-              r.unavailable_models.iter().any(|m| m.name.contains("Monte Carlo")),
-              "Monte Carlo reported unavailable".into());
+        check(
+            "wave4.3.3 register populated from real findings",
+            !r.entries.is_empty(),
+            format!("{} entries", r.entries.len()),
+        );
+        check(
+            "wave4.3.3 scores are ordered highest first",
+            r.entries.windows(2).all(|w| w[0].score >= w[1].score),
+            "descending by score".into(),
+        );
+        check(
+            "wave4.3.3 quantitative models refused",
+            r.unavailable_models
+                .iter()
+                .any(|m| m.name.contains("Monte Carlo")),
+            "Monte Carlo reported unavailable".into(),
+        );
     }
 
     // ---- Wave 3.1: real TLS against a live host ----
@@ -396,7 +470,14 @@ async fn main() {
         "verified invariant holds".into(),
     );
 
-    println!("\n{}", if failures == 0 { "ALL LIVE CHECKS PASSED" } else { "SOME CHECKS FAILED" });
+    println!(
+        "\n{}",
+        if failures == 0 {
+            "ALL LIVE CHECKS PASSED"
+        } else {
+            "SOME CHECKS FAILED"
+        }
+    );
     if failures > 0 {
         std::process::exit(1);
     }

@@ -9,15 +9,14 @@ use tracing_subscriber::EnvFilter;
 use browser::{Browser, NavigationOptions, ScrollBehavior};
 use crawler::{CrawlConfig, Crawler};
 use exporter::{Exporter, RecordingData};
-use notifier::{Notifier, NotificationConfig};
+use notifier::{NotificationConfig, Notifier};
 use session::SessionManager;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env()
-            .add_directive(tracing::Level::INFO.into()))
+        .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .init();
 
     info!("SiteRecorder Demo - Simplified Mode");
@@ -25,7 +24,7 @@ async fn main() -> Result<()> {
 
     // Get URL from command line or use default
     let base_url = std::env::args()
-            .nth(1)
+        .nth(1)
         .unwrap_or_else(|| "https://example.com".to_string());
 
     info!("Crawling: {}", base_url);
@@ -93,7 +92,8 @@ async fn main() -> Result<()> {
                 }
 
                 // Show stats
-                info!("  Discovered: {} | Visited: {} | Remaining: {}",
+                info!(
+                    "  Discovered: {} | Visited: {} | Remaining: {}",
                     crawler.get_discovered_count(),
                     crawler.get_visited_count(),
                     crawler.get_remaining_count()

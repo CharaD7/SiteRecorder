@@ -80,15 +80,21 @@ pub fn techniques_for_check(check_name: &str) -> &'static [&'static str] {
 
         // Request handling.
         "HTTP Request Smuggling" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
-        "HTTP Verb Tampering" | "WebDAV / Verb Tampering" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
+        "HTTP Verb Tampering" | "WebDAV / Verb Tampering" => {
+            &[technique::EXPLOIT_PUBLIC_FACING_APP]
+        }
         "CRLF / Header Injection" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
         "Host Header Injection" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
-        "Open Redirect Detection" | "Open Redirect via API" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
+        "Open Redirect Detection" | "Open Redirect via API" => {
+            &[technique::EXPLOIT_PUBLIC_FACING_APP]
+        }
         "Web Cache Poisoning" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
         "CORS Misconfiguration" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
         "Mass Assignment / Auto-Binding" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
         "Insufficient Input Validation" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
-        "GraphQL Abuse" | "GraphQL Introspection Enabled" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
+        "GraphQL Abuse" | "GraphQL Introspection Enabled" => {
+            &[technique::EXPLOIT_PUBLIC_FACING_APP]
+        }
         "CSRF Vulnerability Detection" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
         "Subresource Integrity" => &[technique::EXPLOIT_PUBLIC_FACING_APP],
         "Missing Rate Limiting" => &[technique::BRUTE_FORCE],
@@ -164,11 +170,7 @@ pub fn coverage_from_checks(checks: &[String]) -> CoverageReport {
     }
 
     let complete = unmapped.is_empty();
-    let score = if complete {
-        Some(100.0)
-    } else {
-        None
-    };
+    let score = if complete { Some(100.0) } else { None };
 
     CoverageReport {
         techniques: techniques.into_keys().collect(),
@@ -266,7 +268,10 @@ mod tests {
             "Clickjacking Detection".into(),
         ]);
 
-        assert!(!report.complete, "an unmapped check means coverage is partial");
+        assert!(
+            !report.complete,
+            "an unmapped check means coverage is partial"
+        );
         assert_eq!(
             report.score, None,
             "a percentage over a partial mapping would be misleading"

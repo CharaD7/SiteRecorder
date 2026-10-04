@@ -32,9 +32,8 @@ pub struct CrawlConfig {
 
 impl CrawlConfig {
     pub fn new(base_url: &str) -> Result<Self, CrawlerError> {
-        let url = Url::parse(base_url)
-            .map_err(|e| CrawlerError::InvalidUrl(e.to_string()))?;
-        
+        let url = Url::parse(base_url).map_err(|e| CrawlerError::InvalidUrl(e.to_string()))?;
+
         Ok(Self {
             base_url: url,
             max_depth: 10,
@@ -86,7 +85,9 @@ impl Crawler {
             }
         }
 
-        let client = client_builder.build().expect("Failed to create HTTP client");
+        let client = client_builder
+            .build()
+            .expect("Failed to create HTTP client");
 
         Self {
             config,
@@ -114,7 +115,10 @@ impl Crawler {
             for element in document.select(&loc_selector) {
                 if let Some(text) = element.text().next() {
                     let url = text.trim().to_string();
-                    if !url.is_empty() && !self.visited.contains(&url) && !self.discovered.contains(&url) {
+                    if !url.is_empty()
+                        && !self.visited.contains(&url)
+                        && !self.discovered.contains(&url)
+                    {
                         if self.config.same_domain_only {
                             if let Ok(parsed) = Url::parse(&url) {
                                 if parsed.domain() == self.config.base_url.domain() {
@@ -136,13 +140,17 @@ impl Crawler {
         }
     }
 
-    pub fn extract_links_from_html(&self, html: &str, current_url: &str) -> Result<Vec<String>, CrawlerError> {
+    pub fn extract_links_from_html(
+        &self,
+        html: &str,
+        current_url: &str,
+    ) -> Result<Vec<String>, CrawlerError> {
         let document = Html::parse_document(html);
-        let selector = Selector::parse("a[href]")
-            .map_err(|e| CrawlerError::ParseError(e.to_string()))?;
+        let selector =
+            Selector::parse("a[href]").map_err(|e| CrawlerError::ParseError(e.to_string()))?;
 
-        let current = Url::parse(current_url)
-            .map_err(|e| CrawlerError::InvalidUrl(e.to_string()))?;
+        let current =
+            Url::parse(current_url).map_err(|e| CrawlerError::InvalidUrl(e.to_string()))?;
 
         let mut links = Vec::new();
 
@@ -254,8 +262,7 @@ impl Crawler {
     }
 
     pub fn is_same_domain(&self, url: &str) -> Result<bool, CrawlerError> {
-        let parsed = Url::parse(url)
-            .map_err(|e| CrawlerError::InvalidUrl(e.to_string()))?;
+        let parsed = Url::parse(url).map_err(|e| CrawlerError::InvalidUrl(e.to_string()))?;
         Ok(parsed.domain() == self.config.base_url.domain())
     }
 
@@ -280,7 +287,7 @@ mod tests {
     fn test_extract_links() {
         let config = CrawlConfig::new("https://example.com").unwrap();
         let crawler = Crawler::new(config);
-        
+
         let html = r#"
             <html>
                 <body>
@@ -290,8 +297,10 @@ mod tests {
                 </body>
             </html>
         "#;
-        
-        let links = crawler.extract_links_from_html(html, "https://example.com").unwrap();
+
+        let links = crawler
+            .extract_links_from_html(html, "https://example.com")
+            .unwrap();
         assert!(links.len() >= 2);
     }
 
@@ -299,7 +308,7 @@ mod tests {
     fn test_is_same_domain() {
         let config = CrawlConfig::new("https://example.com").unwrap();
         let crawler = Crawler::new(config);
-        
+
         assert!(crawler.is_same_domain("https://example.com/page").unwrap());
         assert!(!crawler.is_same_domain("https://other.com/page").unwrap());
     }

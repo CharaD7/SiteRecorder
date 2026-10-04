@@ -43,15 +43,16 @@ struct Migration {
 }
 
 /// Ordered migrations. Never edit an applied migration; add a new one.
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial_schema",
-    sql: include_str!("schema.sql"),
-},
-Migration {
-    version: 2,
-    name: "policies",
-    sql: r#"
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial_schema",
+        sql: include_str!("schema.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "policies",
+        sql: r#"
         CREATE TABLE IF NOT EXISTS policies (
             id          TEXT PRIMARY KEY,
             code        TEXT NOT NULL UNIQUE,
@@ -87,11 +88,11 @@ Migration {
         CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(status);
         CREATE INDEX IF NOT EXISTS idx_policy_ack_policy ON policy_acknowledgments(policy_id);
     "#,
-},
-Migration {
-    version: 3,
-    name: "vendor_risk_and_training",
-    sql: r#"
+    },
+    Migration {
+        version: 3,
+        name: "vendor_risk_and_training",
+        sql: r#"
         CREATE TABLE IF NOT EXISTS vendors (
             id            TEXT PRIMARY KEY,
             name          TEXT NOT NULL,
@@ -146,7 +147,8 @@ Migration {
         CREATE INDEX IF NOT EXISTS idx_vendors_tier ON vendors(tier);
         CREATE INDEX IF NOT EXISTS idx_training_assign_due ON training_assignments(due_at);
     "#,
-}];
+    },
+];
 
 /// Connection wrapper owning schema lifecycle.
 pub struct Db {
@@ -192,14 +194,19 @@ impl Db {
 
         let current: i64 = self
             .conn
-            .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+                [],
+                |r| r.get(0),
+            )
             .unwrap_or(0);
 
         for migration in MIGRATIONS.iter().filter(|m| m.version > current) {
             self.conn.execute_batch(migration.sql).map_err(|e| {
-                DbError::Migration(format!("v{} ({}): {}", migration.version, migration.name, e))
+                DbError::Migration(format!(
+                    "v{} ({}): {}",
+                    migration.version, migration.name, e
+                ))
             })?;
             self.conn.execute(
                 "INSERT INTO schema_version (version, name, applied_at) VALUES (?1, ?2, ?3)",
@@ -218,9 +225,11 @@ impl Db {
     pub fn version(&self) -> Result<i64> {
         Ok(self
             .conn
-            .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+                [],
+                |r| r.get(0),
+            )
             .unwrap_or(0))
     }
 
@@ -302,22 +311,30 @@ mod tests {
     #[test]
     fn deleting_asset_cascades_to_findings() {
         let db = Db::open_in_memory().unwrap();
-        db.conn().execute(
-            "INSERT INTO assets (id, name, asset_type, created_at, updated_at)
+        db.conn()
+            .execute(
+                "INSERT INTO assets (id, name, asset_type, created_at, updated_at)
              VALUES ('a1', 'prod', 'domain', 'now', 'now')",
-            [],
-        ).unwrap();
+                [],
+            )
+            .unwrap();
         db.conn().execute(
             "INSERT INTO findings (id, title, severity, category, created_at, updated_at, asset_id)
              VALUES ('f1', 'x', 'HIGH', 'web', 'now', 'now', 'a1')",
             [],
         ).unwrap();
 
-        db.conn().execute("DELETE FROM assets WHERE id = 'a1'", []).unwrap();
+        db.conn()
+            .execute("DELETE FROM assets WHERE id = 'a1'", [])
+            .unwrap();
 
         let remaining: i64 = db
             .conn()
-            .query_row("SELECT COUNT(*) FROM findings WHERE asset_id = 'a1'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM findings WHERE asset_id = 'a1'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(remaining, 0, "findings should cascade with their asset");
     }

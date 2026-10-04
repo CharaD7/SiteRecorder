@@ -123,10 +123,9 @@ impl ProviderRegistry {
     /// reaching out.
     pub async fn complete(&self, request: CompletionRequest) -> Result<Completion, AgentError> {
         let name = self.default.as_ref().ok_or(AgentError::NoProvider)?;
-        let provider = self
-            .providers
-            .get(name)
-            .ok_or_else(|| AgentError::ProviderUnavailable(name.clone(), "not registered".into()))?;
+        let provider = self.providers.get(name).ok_or_else(|| {
+            AgentError::ProviderUnavailable(name.clone(), "not registered".into())
+        })?;
         provider.complete(request).await
     }
 }
@@ -222,7 +221,10 @@ mod tests {
     async fn unconfigured_registry_fails_closed() {
         let reg = ProviderRegistry::new();
         assert!(reg.is_empty());
-        assert!(matches!(reg.complete(req()).await, Err(AgentError::NoProvider)));
+        assert!(matches!(
+            reg.complete(req()).await,
+            Err(AgentError::NoProvider)
+        ));
     }
 
     #[tokio::test]
@@ -255,7 +257,9 @@ mod tests {
         let r = Redactor::new();
         let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghij";
         assert!(!r.redact(jwt).contains("eyJhbGciOiJIUzI1NiJ9"));
-        assert!(!r.redact("Bearer abcdefghijklmnopqrstuvwxyz123456").contains("abcdefghij"));
+        assert!(!r
+            .redact("Bearer abcdefghijklmnopqrstuvwxyz123456")
+            .contains("abcdefghij"));
     }
 
     #[test]

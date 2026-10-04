@@ -163,7 +163,9 @@ pub fn secret_path() -> std::path::PathBuf {
 
 /// Convenience: load (or create) the secret and derive a [`DataKey`].
 pub fn default_key() -> Result<DataKey> {
-    Ok(DataKey::from_secret(&load_or_create_secret(&secret_path())?))
+    Ok(DataKey::from_secret(
+        &load_or_create_secret(&secret_path())?,
+    ))
 }
 
 #[cfg(test)]

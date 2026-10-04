@@ -322,84 +322,145 @@ impl GrayTeam {
                         name: "Initial Access".to_string(),
                         description: "Techniques to gain initial access to a network".to_string(),
                         short_name: "initial-access".to_string(),
-                        techniques: vec!["T1566".to_string(), "T1190".to_string(), "T1133".to_string(), "T1078".to_string()],
+                        techniques: vec![
+                            "T1566".to_string(),
+                            "T1190".to_string(),
+                            "T1133".to_string(),
+                            "T1078".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0002".to_string(),
                         name: "Execution".to_string(),
                         description: "Techniques to run malicious code".to_string(),
                         short_name: "execution".to_string(),
-                        techniques: vec!["T1059".to_string(), "T1204".to_string(), "T1053".to_string(), "T1106".to_string()],
+                        techniques: vec![
+                            "T1059".to_string(),
+                            "T1204".to_string(),
+                            "T1053".to_string(),
+                            "T1106".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0003".to_string(),
                         name: "Persistence".to_string(),
                         description: "Techniques to maintain access".to_string(),
                         short_name: "persistence".to_string(),
-                        techniques: vec!["T1547".to_string(), "T1053".to_string(), "T1136".to_string(), "T1543".to_string()],
+                        techniques: vec![
+                            "T1547".to_string(),
+                            "T1053".to_string(),
+                            "T1136".to_string(),
+                            "T1543".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0004".to_string(),
                         name: "Privilege Escalation".to_string(),
                         description: "Techniques to gain higher-level permissions".to_string(),
                         short_name: "privilege-escalation".to_string(),
-                        techniques: vec!["T1548".to_string(), "T1134".to_string(), "T1068".to_string(), "T1055".to_string()],
+                        techniques: vec![
+                            "T1548".to_string(),
+                            "T1134".to_string(),
+                            "T1068".to_string(),
+                            "T1055".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0005".to_string(),
                         name: "Defense Evasion".to_string(),
                         description: "Techniques to avoid detection".to_string(),
                         short_name: "defense-evasion".to_string(),
-                        techniques: vec!["T1070".to_string(), "T1036".to_string(), "T1027".to_string(), "T1140".to_string()],
+                        techniques: vec![
+                            "T1070".to_string(),
+                            "T1036".to_string(),
+                            "T1027".to_string(),
+                            "T1140".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0006".to_string(),
                         name: "Credential Access".to_string(),
                         description: "Techniques to steal credentials".to_string(),
                         short_name: "credential-access".to_string(),
-                        techniques: vec!["T1003".to_string(), "T1110".to_string(), "T1557".to_string(), "T1552".to_string()],
+                        techniques: vec![
+                            "T1003".to_string(),
+                            "T1110".to_string(),
+                            "T1557".to_string(),
+                            "T1552".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0007".to_string(),
                         name: "Discovery".to_string(),
                         description: "Techniques to learn about the environment".to_string(),
                         short_name: "discovery".to_string(),
-                        techniques: vec!["T1087".to_string(), "T1083".to_string(), "T1046".to_string(), "T1135".to_string()],
+                        techniques: vec![
+                            "T1087".to_string(),
+                            "T1083".to_string(),
+                            "T1046".to_string(),
+                            "T1135".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0008".to_string(),
                         name: "Lateral Movement".to_string(),
                         description: "Techniques to move through the environment".to_string(),
                         short_name: "lateral-movement".to_string(),
-                        techniques: vec!["T1021".to_string(), "T1570".to_string(), "T1563".to_string(), "T1080".to_string()],
+                        techniques: vec![
+                            "T1021".to_string(),
+                            "T1570".to_string(),
+                            "T1563".to_string(),
+                            "T1080".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0009".to_string(),
                         name: "Collection".to_string(),
                         description: "Techniques to gather data".to_string(),
                         short_name: "collection".to_string(),
-                        techniques: vec!["T1560".to_string(), "T1123".to_string(), "T1119".to_string(), "T1115".to_string()],
+                        techniques: vec![
+                            "T1560".to_string(),
+                            "T1123".to_string(),
+                            "T1119".to_string(),
+                            "T1115".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0011".to_string(),
                         name: "Command and Control".to_string(),
-                        description: "Techniques to communicate with compromised systems".to_string(),
+                        description: "Techniques to communicate with compromised systems"
+                            .to_string(),
                         short_name: "command-and-control".to_string(),
-                        techniques: vec!["T1071".to_string(), "T1572".to_string(), "T1001".to_string(), "T1105".to_string()],
+                        techniques: vec![
+                            "T1071".to_string(),
+                            "T1572".to_string(),
+                            "T1001".to_string(),
+                            "T1105".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0010".to_string(),
                         name: "Exfiltration".to_string(),
                         description: "Techniques to steal data".to_string(),
                         short_name: "exfiltration".to_string(),
-                        techniques: vec!["T1041".to_string(), "T1048".to_string(), "T1567".to_string(), "T1029".to_string()],
+                        techniques: vec![
+                            "T1041".to_string(),
+                            "T1048".to_string(),
+                            "T1567".to_string(),
+                            "T1029".to_string(),
+                        ],
                     },
                     AttckTactic {
                         id: "TA0040".to_string(),
                         name: "Impact".to_string(),
                         description: "Techniques to disrupt systems or data".to_string(),
                         short_name: "impact".to_string(),
-                        techniques: vec!["T1486".to_string(), "T1489".to_string(), "T1499".to_string(), "T1529".to_string()],
+                        techniques: vec![
+                            "T1486".to_string(),
+                            "T1489".to_string(),
+                            "T1499".to_string(),
+                            "T1529".to_string(),
+                        ],
                     },
                 ],
             },
@@ -407,15 +468,17 @@ impl GrayTeam {
                 id: "mobile".to_string(),
                 name: "Mobile".to_string(),
                 description: "Techniques targeting mobile devices".to_string(),
-                tactics: vec![
-                    AttckTactic {
-                        id: "TA0027".to_string(),
-                        name: "Initial Access".to_string(),
-                        description: "Mobile initial access techniques".to_string(),
-                        short_name: "initial-access".to_string(),
-                        techniques: vec!["T1444".to_string(), "T1476".to_string(), "T1401".to_string()],
-                    },
-                ],
+                tactics: vec![AttckTactic {
+                    id: "TA0027".to_string(),
+                    name: "Initial Access".to_string(),
+                    description: "Mobile initial access techniques".to_string(),
+                    short_name: "initial-access".to_string(),
+                    techniques: vec![
+                        "T1444".to_string(),
+                        "T1476".to_string(),
+                        "T1401".to_string(),
+                    ],
+                }],
             },
         ];
 
@@ -494,15 +557,18 @@ impl GrayTeam {
 
         let mut coverage = HashMap::new();
         for technique in &techniques {
-            coverage.insert(technique.id.clone(), TechniqueCoverage {
-                technique_id: technique.id.clone(),
-                covered: false,
-                detection_level: DetectionLevel::None,
-                prevention_level: PreventionLevel::None,
-                tested: false,
-                test_results: None,
-                notes: String::new(),
-            });
+            coverage.insert(
+                technique.id.clone(),
+                TechniqueCoverage {
+                    technique_id: technique.id.clone(),
+                    covered: false,
+                    detection_level: DetectionLevel::None,
+                    prevention_level: PreventionLevel::None,
+                    tested: false,
+                    test_results: None,
+                    notes: String::new(),
+                },
+            );
         }
 
         AttckMatrix {
@@ -532,7 +598,9 @@ impl GrayTeam {
             Threat {
                 id: Uuid::new_v4().to_string(),
                 name: "Spoofing of User Identity".to_string(),
-                description: "An attacker impersonates a legitimate user to gain unauthorized access.".to_string(),
+                description:
+                    "An attacker impersonates a legitimate user to gain unauthorized access."
+                        .to_string(),
                 stride_category: StrideCategory::Spoofing,
                 severity: ThreatSeverity::High,
                 likelihood: Likelihood::Medium,
@@ -549,7 +617,8 @@ impl GrayTeam {
             Threat {
                 id: Uuid::new_v4().to_string(),
                 name: "Tampering with Data in Transit".to_string(),
-                description: "An attacker modifies data being transmitted between components.".to_string(),
+                description: "An attacker modifies data being transmitted between components."
+                    .to_string(),
                 stride_category: StrideCategory::Tampering,
                 severity: ThreatSeverity::High,
                 likelihood: Likelihood::Medium,
@@ -566,7 +635,8 @@ impl GrayTeam {
             Threat {
                 id: Uuid::new_v4().to_string(),
                 name: "Information Disclosure via Error Messages".to_string(),
-                description: "Detailed error messages expose sensitive system information.".to_string(),
+                description: "Detailed error messages expose sensitive system information."
+                    .to_string(),
                 stride_category: StrideCategory::InformationDisclosure,
                 severity: ThreatSeverity::Medium,
                 likelihood: Likelihood::High,
@@ -583,7 +653,8 @@ impl GrayTeam {
             Threat {
                 id: Uuid::new_v4().to_string(),
                 name: "Denial of Service".to_string(),
-                description: "An attacker overwhelms the system to make it unavailable.".to_string(),
+                description: "An attacker overwhelms the system to make it unavailable."
+                    .to_string(),
                 stride_category: StrideCategory::DenialOfService,
                 severity: ThreatSeverity::Medium,
                 likelihood: Likelihood::Medium,
@@ -600,7 +671,8 @@ impl GrayTeam {
             Threat {
                 id: Uuid::new_v4().to_string(),
                 name: "Elevation of Privilege via Injection".to_string(),
-                description: "An attacker exploits injection flaws to gain elevated privileges.".to_string(),
+                description: "An attacker exploits injection flaws to gain elevated privileges."
+                    .to_string(),
                 stride_category: StrideCategory::ElevationOfPrivilege,
                 severity: ThreatSeverity::Critical,
                 likelihood: Likelihood::Medium,
@@ -641,10 +713,14 @@ impl GrayTeam {
                 AttackScenario {
                     id: Uuid::new_v4().to_string(),
                     name: "Credential Dumping".to_string(),
-                    description: "Attempt to dump credentials from compromised workstation".to_string(),
+                    description: "Attempt to dump credentials from compromised workstation"
+                        .to_string(),
                     attack_type: "Credential Access".to_string(),
                     mitre_techniques: vec!["T1003.001".to_string()],
-                    target_systems: vec!["Workstation".to_string(), "Domain Controller".to_string()],
+                    target_systems: vec![
+                        "Workstation".to_string(),
+                        "Domain Controller".to_string(),
+                    ],
                     expected_detection: true,
                     actual_detection: None,
                     red_team_notes: String::new(),
@@ -654,7 +730,8 @@ impl GrayTeam {
                 AttackScenario {
                     id: Uuid::new_v4().to_string(),
                     name: "Lateral Movement".to_string(),
-                    description: "Move from workstation to server using stolen credentials".to_string(),
+                    description: "Move from workstation to server using stolen credentials"
+                        .to_string(),
                     attack_type: "Lateral Movement".to_string(),
                     mitre_techniques: vec!["T1021.001".to_string(), "T1078".to_string()],
                     target_systems: vec!["Workstation".to_string(), "File Server".to_string()],
@@ -693,7 +770,8 @@ detection:
     condition: selection
 falsepositives:
     - Legitimate admin scripts
-level: medium"#.to_string(),
+level: medium"#
+                    .to_string(),
                 language: "YAML".to_string(),
                 mitre_techniques: vec!["T1059".to_string()],
                 tested: false,
@@ -724,7 +802,8 @@ detection:
 falsepositives:
     - Antivirus software
     - System processes
-level: high"#.to_string(),
+level: high"#
+                    .to_string(),
                 language: "YAML".to_string(),
                 mitre_techniques: vec!["T1003.001".to_string()],
                 tested: false,
@@ -738,11 +817,11 @@ level: high"#.to_string(),
 
     pub fn calculate_coverage_score(matrix: &AttckMatrix) -> f64 {
         let total = matrix.coverage.len();
-        if total == 0 { return 0.0; }
+        if total == 0 {
+            return 0.0;
+        }
 
-        let covered = matrix.coverage.values()
-            .filter(|c| c.covered)
-            .count();
+        let covered = matrix.coverage.values().filter(|c| c.covered).count();
 
         (covered as f64 / total as f64) * 100.0
     }
@@ -750,16 +829,28 @@ level: high"#.to_string(),
     pub fn get_apt_group_techniques(group: &str) -> Vec<String> {
         match group.to_lowercase().as_str() {
             "apt28" | "fancy bear" => vec![
-                "T1566".to_string(), "T1059".to_string(), "T1003".to_string(),
-                "T1055".to_string(), "T1078".to_string(), "T1021".to_string(),
+                "T1566".to_string(),
+                "T1059".to_string(),
+                "T1003".to_string(),
+                "T1055".to_string(),
+                "T1078".to_string(),
+                "T1021".to_string(),
             ],
             "apt29" | "cozy bear" => vec![
-                "T1566".to_string(), "T1059".to_string(), "T1003".to_string(),
-                "T1552".to_string(), "T1078".to_string(), "T1105".to_string(),
+                "T1566".to_string(),
+                "T1059".to_string(),
+                "T1003".to_string(),
+                "T1552".to_string(),
+                "T1078".to_string(),
+                "T1105".to_string(),
             ],
             "lazarus" => vec![
-                "T1566".to_string(), "T1486".to_string(), "T1490".to_string(),
-                "T1059".to_string(), "T1003".to_string(), "T1055".to_string(),
+                "T1566".to_string(),
+                "T1486".to_string(),
+                "T1490".to_string(),
+                "T1059".to_string(),
+                "T1003".to_string(),
+                "T1055".to_string(),
             ],
             _ => Vec::new(),
         }

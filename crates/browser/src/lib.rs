@@ -87,9 +87,14 @@ impl Browser {
             .map_err(|e| BrowserError::BrowserError(anyhow::anyhow!(e.to_string())))
     }
 
-    pub fn navigate(&self, tab: &Arc<Tab>, url: &str, options: &NavigationOptions) -> Result<(), BrowserError> {
+    pub fn navigate(
+        &self,
+        tab: &Arc<Tab>,
+        url: &str,
+        options: &NavigationOptions,
+    ) -> Result<(), BrowserError> {
         info!("Navigating to: {}", url);
-        
+
         tab.navigate_to(url)
             .map_err(|e| BrowserError::NavigationError(e.to_string()))?;
 
@@ -119,7 +124,7 @@ impl Browser {
 
     pub fn close_modals(&self, tab: &Arc<Tab>) -> Result<(), BrowserError> {
         debug!("Checking for modal dialogs...");
-        
+
         let modal_script = r#"
         (function() {
             let modalsClosed = 0;
@@ -241,7 +246,12 @@ impl Browser {
         Ok(())
     }
 
-    pub fn scroll_incremental(&self, tab: &Arc<Tab>, steps: u32, delay_ms: u64) -> Result<(), BrowserError> {
+    pub fn scroll_incremental(
+        &self,
+        tab: &Arc<Tab>,
+        steps: u32,
+        delay_ms: u64,
+    ) -> Result<(), BrowserError> {
         for i in 1..=steps {
             let script = format!(
                 "window.scrollTo(0, document.body.scrollHeight * {} / {});",
@@ -262,13 +272,15 @@ impl Browser {
     }
 
     pub fn get_current_url(&self, tab: &Arc<Tab>) -> Result<String, BrowserError> {
-        let url = tab
-            .get_url()
-            .to_string();
+        let url = tab.get_url().to_string();
         Ok(url)
     }
 
-    pub fn execute_script(&self, tab: &Arc<Tab>, script: &str) -> Result<serde_json::Value, BrowserError> {
+    pub fn execute_script(
+        &self,
+        tab: &Arc<Tab>,
+        script: &str,
+    ) -> Result<serde_json::Value, BrowserError> {
         let result = tab
             .evaluate(script, false)
             .map_err(|e| BrowserError::BrowserError(anyhow::anyhow!(e.to_string())))?;

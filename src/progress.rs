@@ -21,7 +21,7 @@ impl CrawlProgress {
             None
         };
 
-        Self { 
+        Self {
             bar,
             finished: Cell::new(false),
         }

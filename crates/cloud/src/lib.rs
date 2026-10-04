@@ -134,7 +134,10 @@ impl CloudAuditor {
         let summary = Self::calculate_summary(&findings);
 
         let mut compliance = HashMap::new();
-        compliance.insert("CIS AWS Foundations".to_string(), Self::aws_cis_compliance(&findings));
+        compliance.insert(
+            "CIS AWS Foundations".to_string(),
+            Self::aws_cis_compliance(&findings),
+        );
         compliance.insert("AWS Well-Architected".to_string(), 65.0);
         compliance.insert("SOC2".to_string(), 70.0);
 
@@ -163,7 +166,10 @@ impl CloudAuditor {
         let summary = Self::calculate_summary(&findings);
 
         let mut compliance = HashMap::new();
-        compliance.insert("CIS Azure Foundations".to_string(), Self::azure_cis_compliance(&findings));
+        compliance.insert(
+            "CIS Azure Foundations".to_string(),
+            Self::azure_cis_compliance(&findings),
+        );
         compliance.insert("ISO 27001".to_string(), 72.0);
 
         CloudScanResult {
@@ -212,7 +218,8 @@ impl CloudAuditor {
                 severity: CloudSeverity::Critical,
                 category: CloudCheck::IAM,
                 resource: "AWS Root Account".to_string(),
-                description: "Root account credentials are being used for daily operations.".to_string(),
+                description: "Root account credentials are being used for daily operations."
+                    .to_string(),
                 details: vec![
                     "Check CloudTrail for root account usage".to_string(),
                     "Enable MFA on root account".to_string(),
@@ -294,313 +301,284 @@ impl CloudAuditor {
     }
 
     fn check_aws_security_groups() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AWS-SG-001".to_string(),
-                title: "Overly Permissive Security Groups".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::Network,
-                resource: "Security Groups".to_string(),
-                description: "Security groups with rules allowing access from 0.0.0.0/0.".to_string(),
-                details: vec![
-                    "Check for inbound rules from 0.0.0.0/0".to_string(),
-                    "Restrict SSH (22), RDP (3389) to known IPs only".to_string(),
-                    "Use VPC Flow Logs to monitor traffic".to_string(),
-                ],
-                remediation: "Restrict security group rules to minimum required CIDR ranges.".to_string(),
-                cis_benchmark: Some("CIS 5.1".to_string()),
-                aws_well_architected: Some("SEC05-BP01".to_string()),
-            },
-        ]
+        vec![CloudFinding {
+            id: "AWS-SG-001".to_string(),
+            title: "Overly Permissive Security Groups".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::Network,
+            resource: "Security Groups".to_string(),
+            description: "Security groups with rules allowing access from 0.0.0.0/0.".to_string(),
+            details: vec![
+                "Check for inbound rules from 0.0.0.0/0".to_string(),
+                "Restrict SSH (22), RDP (3389) to known IPs only".to_string(),
+                "Use VPC Flow Logs to monitor traffic".to_string(),
+            ],
+            remediation: "Restrict security group rules to minimum required CIDR ranges."
+                .to_string(),
+            cis_benchmark: Some("CIS 5.1".to_string()),
+            aws_well_architected: Some("SEC05-BP01".to_string()),
+        }]
     }
 
     fn check_aws_cloudtrail() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AWS-CT-001".to_string(),
-                title: "CloudTrail Not Enabled in All Regions".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::Logging,
-                resource: "CloudTrail".to_string(),
-                description: "AWS CloudTrail is not enabled in all regions.".to_string(),
-                details: vec![
-                    "Enable CloudTrail in all AWS regions".to_string(),
-                    "Enable log file validation".to_string(),
-                    "Integrate with CloudWatch Logs".to_string(),
-                ],
-                remediation: "Enable CloudTrail globally with log validation.".to_string(),
-                cis_benchmark: Some("CIS 3.1".to_string()),
-                aws_well_architected: Some("SEC04-BP01".to_string()),
-            },
-        ]
+        vec![CloudFinding {
+            id: "AWS-CT-001".to_string(),
+            title: "CloudTrail Not Enabled in All Regions".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::Logging,
+            resource: "CloudTrail".to_string(),
+            description: "AWS CloudTrail is not enabled in all regions.".to_string(),
+            details: vec![
+                "Enable CloudTrail in all AWS regions".to_string(),
+                "Enable log file validation".to_string(),
+                "Integrate with CloudWatch Logs".to_string(),
+            ],
+            remediation: "Enable CloudTrail globally with log validation.".to_string(),
+            cis_benchmark: Some("CIS 3.1".to_string()),
+            aws_well_architected: Some("SEC04-BP01".to_string()),
+        }]
     }
 
     fn check_aws_kms() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AWS-KMS-001".to_string(),
-                title: "KMS Key Rotation Not Enabled".to_string(),
-                severity: CloudSeverity::Medium,
-                category: CloudCheck::Encryption,
-                resource: "KMS Keys".to_string(),
-                description: "Customer-managed KMS keys do not have automatic rotation.".to_string(),
-                details: vec![
-                    "Enable automatic key rotation for customer-managed keys".to_string(),
-                    "Rotation period: 365 days".to_string(),
-                ],
-                remediation: "Enable automatic rotation for all customer-managed KMS keys.".to_string(),
-                cis_benchmark: None,
-                aws_well_architected: Some("SEC04-BP01".to_string()),
-            },
-        ]
+        vec![CloudFinding {
+            id: "AWS-KMS-001".to_string(),
+            title: "KMS Key Rotation Not Enabled".to_string(),
+            severity: CloudSeverity::Medium,
+            category: CloudCheck::Encryption,
+            resource: "KMS Keys".to_string(),
+            description: "Customer-managed KMS keys do not have automatic rotation.".to_string(),
+            details: vec![
+                "Enable automatic key rotation for customer-managed keys".to_string(),
+                "Rotation period: 365 days".to_string(),
+            ],
+            remediation: "Enable automatic rotation for all customer-managed KMS keys.".to_string(),
+            cis_benchmark: None,
+            aws_well_architected: Some("SEC04-BP01".to_string()),
+        }]
     }
 
     fn check_aws_rds() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AWS-RDS-001".to_string(),
-                title: "RDS Publicly Accessible".to_string(),
-                severity: CloudSeverity::Critical,
-                category: CloudCheck::Database,
-                resource: "RDS Instances".to_string(),
-                description: "RDS instances are publicly accessible.".to_string(),
-                details: vec![
-                    "Set publiclyAccessible to false".to_string(),
-                    "Place RDS in private subnets".to_string(),
-                    "Use encryption at rest and in transit".to_string(),
-                ],
-                remediation: "Disable public accessibility and move to private subnets.".to_string(),
-                cis_benchmark: Some("CIS 2.3.1".to_string()),
-                aws_well_architected: Some("SEC05-BP01".to_string()),
-            },
-        ]
+        vec![CloudFinding {
+            id: "AWS-RDS-001".to_string(),
+            title: "RDS Publicly Accessible".to_string(),
+            severity: CloudSeverity::Critical,
+            category: CloudCheck::Database,
+            resource: "RDS Instances".to_string(),
+            description: "RDS instances are publicly accessible.".to_string(),
+            details: vec![
+                "Set publiclyAccessible to false".to_string(),
+                "Place RDS in private subnets".to_string(),
+                "Use encryption at rest and in transit".to_string(),
+            ],
+            remediation: "Disable public accessibility and move to private subnets.".to_string(),
+            cis_benchmark: Some("CIS 2.3.1".to_string()),
+            aws_well_architected: Some("SEC05-BP01".to_string()),
+        }]
     }
 
     fn check_aws_ec2() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AWS-EC2-001".to_string(),
-                title: "IMDSv1 Enabled".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::Compute,
-                resource: "EC2 Instances".to_string(),
-                description: "EC2 instances allow IMDSv1 which can be exploited via SSRF.".to_string(),
-                details: vec![
-                    "Set HttpTokens to required (IMDSv2)".to_string(),
-                    "Set HttpPutResponseHopLimit to 1".to_string(),
-                    "Migrate applications to use IMDSv2".to_string(),
-                ],
-                remediation: "Enforce IMDSv2 on all EC2 instances.".to_string(),
-                cis_benchmark: Some("CIS 5.6".to_string()),
-                aws_well_architected: Some("SEC05-BP01".to_string()),
-            },
-        ]
+        vec![CloudFinding {
+            id: "AWS-EC2-001".to_string(),
+            title: "IMDSv1 Enabled".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::Compute,
+            resource: "EC2 Instances".to_string(),
+            description: "EC2 instances allow IMDSv1 which can be exploited via SSRF.".to_string(),
+            details: vec![
+                "Set HttpTokens to required (IMDSv2)".to_string(),
+                "Set HttpPutResponseHopLimit to 1".to_string(),
+                "Migrate applications to use IMDSv2".to_string(),
+            ],
+            remediation: "Enforce IMDSv2 on all EC2 instances.".to_string(),
+            cis_benchmark: Some("CIS 5.6".to_string()),
+            aws_well_architected: Some("SEC05-BP01".to_string()),
+        }]
     }
 
     fn check_aws_lambda() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AWS-LAMBDA-001".to_string(),
-                title: "Lambda Over-Permissioned Execution Role".to_string(),
-                severity: CloudSeverity::Medium,
-                category: CloudCheck::IAM,
-                resource: "Lambda Functions".to_string(),
-                description: "Lambda functions have overly permissive execution roles.".to_string(),
-                details: vec![
-                    "Check Lambda execution role permissions".to_string(),
-                    "Apply least privilege to each function".to_string(),
-                    "Use AWS X-Ray for tracing".to_string(),
-                ],
-                remediation: "Restrict Lambda execution roles to minimum required.".to_string(),
-                cis_benchmark: None,
-                aws_well_architected: Some("SEC02-BP01".to_string()),
-            },
-        ]
+        vec![CloudFinding {
+            id: "AWS-LAMBDA-001".to_string(),
+            title: "Lambda Over-Permissioned Execution Role".to_string(),
+            severity: CloudSeverity::Medium,
+            category: CloudCheck::IAM,
+            resource: "Lambda Functions".to_string(),
+            description: "Lambda functions have overly permissive execution roles.".to_string(),
+            details: vec![
+                "Check Lambda execution role permissions".to_string(),
+                "Apply least privilege to each function".to_string(),
+                "Use AWS X-Ray for tracing".to_string(),
+            ],
+            remediation: "Restrict Lambda execution roles to minimum required.".to_string(),
+            cis_benchmark: None,
+            aws_well_architected: Some("SEC02-BP01".to_string()),
+        }]
     }
 
     fn check_azure_ad() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AZURE-AD-001".to_string(),
-                title: "Legacy Authentication Enabled".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::IAM,
-                resource: "Azure AD".to_string(),
-                description: "Legacy authentication protocols are not blocked.".to_string(),
-                details: vec![
-                    "Disable legacy authentication in Conditional Access".to_string(),
-                    "Block: IMAP, POP3, SMTP AUTH, MAPI, etc.".to_string(),
-                ],
-                remediation: "Create Conditional Access policy to block legacy auth.".to_string(),
-                cis_benchmark: Some("CIS Azure 1.1.1".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "AZURE-AD-001".to_string(),
+            title: "Legacy Authentication Enabled".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::IAM,
+            resource: "Azure AD".to_string(),
+            description: "Legacy authentication protocols are not blocked.".to_string(),
+            details: vec![
+                "Disable legacy authentication in Conditional Access".to_string(),
+                "Block: IMAP, POP3, SMTP AUTH, MAPI, etc.".to_string(),
+            ],
+            remediation: "Create Conditional Access policy to block legacy auth.".to_string(),
+            cis_benchmark: Some("CIS Azure 1.1.1".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_azure_storage() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AZURE-ST-001".to_string(),
-                title: "Storage Account Public Access".to_string(),
-                severity: CloudSeverity::Critical,
-                category: CloudCheck::Storage,
-                resource: "Storage Accounts".to_string(),
-                description: "Storage accounts allow public blob access.".to_string(),
-                details: vec![
-                    "Set allowBlobPublicAccess to false".to_string(),
-                    "Restrict network access to specific VNets/IPs".to_string(),
-                ],
-                remediation: "Disable public access and restrict network access.".to_string(),
-                cis_benchmark: Some("CIS Azure 3.7".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "AZURE-ST-001".to_string(),
+            title: "Storage Account Public Access".to_string(),
+            severity: CloudSeverity::Critical,
+            category: CloudCheck::Storage,
+            resource: "Storage Accounts".to_string(),
+            description: "Storage accounts allow public blob access.".to_string(),
+            details: vec![
+                "Set allowBlobPublicAccess to false".to_string(),
+                "Restrict network access to specific VNets/IPs".to_string(),
+            ],
+            remediation: "Disable public access and restrict network access.".to_string(),
+            cis_benchmark: Some("CIS Azure 3.7".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_azure_network() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AZURE-NET-001".to_string(),
-                title: "NSG Rules Too Permissive".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::Network,
-                resource: "Network Security Groups".to_string(),
-                description: "NSG rules allow traffic from '*' or 'Internet' source.".to_string(),
-                details: vec![
-                    "Restrict inbound rules to specific IP ranges".to_string(),
-                    "Deny all inbound by default".to_string(),
-                ],
-                remediation: "Apply least privilege to NSG rules.".to_string(),
-                cis_benchmark: Some("CIS Azure 6.1".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "AZURE-NET-001".to_string(),
+            title: "NSG Rules Too Permissive".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::Network,
+            resource: "Network Security Groups".to_string(),
+            description: "NSG rules allow traffic from '*' or 'Internet' source.".to_string(),
+            details: vec![
+                "Restrict inbound rules to specific IP ranges".to_string(),
+                "Deny all inbound by default".to_string(),
+            ],
+            remediation: "Apply least privilege to NSG rules.".to_string(),
+            cis_benchmark: Some("CIS Azure 6.1".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_azure_logging() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AZURE-LOG-001".to_string(),
-                title: "Diagnostic Logging Disabled".to_string(),
-                severity: CloudSeverity::Medium,
-                category: CloudCheck::Logging,
-                resource: "Azure Resources".to_string(),
-                description: "Diagnostic logs are not enabled on critical resources.".to_string(),
-                details: vec![
-                    "Enable Activity Log".to_string(),
-                    "Enable resource-specific diagnostic logs".to_string(),
-                    "Send logs to Log Analytics".to_string(),
-                ],
-                remediation: "Enable diagnostic logging on all critical resources.".to_string(),
-                cis_benchmark: Some("CIS Azure 5.1.1".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "AZURE-LOG-001".to_string(),
+            title: "Diagnostic Logging Disabled".to_string(),
+            severity: CloudSeverity::Medium,
+            category: CloudCheck::Logging,
+            resource: "Azure Resources".to_string(),
+            description: "Diagnostic logs are not enabled on critical resources.".to_string(),
+            details: vec![
+                "Enable Activity Log".to_string(),
+                "Enable resource-specific diagnostic logs".to_string(),
+                "Send logs to Log Analytics".to_string(),
+            ],
+            remediation: "Enable diagnostic logging on all critical resources.".to_string(),
+            cis_benchmark: Some("CIS Azure 5.1.1".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_azure_keyvault() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "AZURE-KV-001".to_string(),
-                title: "Key Vault Soft Delete Disabled".to_string(),
-                severity: CloudSeverity::Medium,
-                category: CloudCheck::Encryption,
-                resource: "Key Vaults".to_string(),
-                description: "Key Vault soft delete is not enabled.".to_string(),
-                details: vec![
-                    "Enable soft delete (retention: 90 days)".to_string(),
-                    "Enable purge protection".to_string(),
-                ],
-                remediation: "Enable soft delete and purge protection on all Key Vaults.".to_string(),
-                cis_benchmark: Some("CIS Azure 7.4".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "AZURE-KV-001".to_string(),
+            title: "Key Vault Soft Delete Disabled".to_string(),
+            severity: CloudSeverity::Medium,
+            category: CloudCheck::Encryption,
+            resource: "Key Vaults".to_string(),
+            description: "Key Vault soft delete is not enabled.".to_string(),
+            details: vec![
+                "Enable soft delete (retention: 90 days)".to_string(),
+                "Enable purge protection".to_string(),
+            ],
+            remediation: "Enable soft delete and purge protection on all Key Vaults.".to_string(),
+            cis_benchmark: Some("CIS Azure 7.4".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_gcp_iam() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "GCP-IAM-001".to_string(),
-                title: "Service Account Key Usage".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::IAM,
-                resource: "Service Accounts".to_string(),
-                description: "Service account keys detected - prefer workload identity.".to_string(),
-                details: vec![
-                    "Use Workload Identity Federation".to_string(),
-                    "Rotate service account keys regularly".to_string(),
-                    "Apply least privilege to service accounts".to_string(),
-                ],
-                remediation: "Migrate to Workload Identity and delete static keys.".to_string(),
-                cis_benchmark: Some("CIS GCP 1.4".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "GCP-IAM-001".to_string(),
+            title: "Service Account Key Usage".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::IAM,
+            resource: "Service Accounts".to_string(),
+            description: "Service account keys detected - prefer workload identity.".to_string(),
+            details: vec![
+                "Use Workload Identity Federation".to_string(),
+                "Rotate service account keys regularly".to_string(),
+                "Apply least privilege to service accounts".to_string(),
+            ],
+            remediation: "Migrate to Workload Identity and delete static keys.".to_string(),
+            cis_benchmark: Some("CIS GCP 1.4".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_gcp_storage() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "GCP-ST-001".to_string(),
-                title: "Public GCS Buckets".to_string(),
-                severity: CloudSeverity::Critical,
-                category: CloudCheck::Storage,
-                resource: "Cloud Storage".to_string(),
-                description: "Cloud Storage buckets are publicly accessible.".to_string(),
-                details: vec![
-                    "Check bucket IAM policies".to_string(),
-                    "Remove allUsers and allAuthenticatedUsers".to_string(),
-                    "Use uniform bucket-level access".to_string(),
-                ],
-                remediation: "Remove public access and enable uniform bucket-level access.".to_string(),
-                cis_benchmark: Some("CIS GCP 5.1".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "GCP-ST-001".to_string(),
+            title: "Public GCS Buckets".to_string(),
+            severity: CloudSeverity::Critical,
+            category: CloudCheck::Storage,
+            resource: "Cloud Storage".to_string(),
+            description: "Cloud Storage buckets are publicly accessible.".to_string(),
+            details: vec![
+                "Check bucket IAM policies".to_string(),
+                "Remove allUsers and allAuthenticatedUsers".to_string(),
+                "Use uniform bucket-level access".to_string(),
+            ],
+            remediation: "Remove public access and enable uniform bucket-level access.".to_string(),
+            cis_benchmark: Some("CIS GCP 5.1".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_gcp_compute() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "GCP-COMPUTE-001".to_string(),
-                title: "Default Service Account on VMs".to_string(),
-                severity: CloudSeverity::Medium,
-                category: CloudCheck::Compute,
-                resource: "Compute Engine".to_string(),
-                description: "VMs using the default compute service account.".to_string(),
-                details: vec![
-                    "Create dedicated service accounts for VMs".to_string(),
-                    "Apply least privilege".to_string(),
-                    "Disable automatic access token generation if not needed".to_string(),
-                ],
-                remediation: "Use dedicated service accounts with minimal permissions.".to_string(),
-                cis_benchmark: Some("CIS GCP 1.5".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "GCP-COMPUTE-001".to_string(),
+            title: "Default Service Account on VMs".to_string(),
+            severity: CloudSeverity::Medium,
+            category: CloudCheck::Compute,
+            resource: "Compute Engine".to_string(),
+            description: "VMs using the default compute service account.".to_string(),
+            details: vec![
+                "Create dedicated service accounts for VMs".to_string(),
+                "Apply least privilege".to_string(),
+                "Disable automatic access token generation if not needed".to_string(),
+            ],
+            remediation: "Use dedicated service accounts with minimal permissions.".to_string(),
+            cis_benchmark: Some("CIS GCP 1.5".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn check_gcp_logging() -> Vec<CloudFinding> {
-        vec![
-            CloudFinding {
-                id: "GCP-LOG-001".to_string(),
-                title: "Cloud Audit Logging Disabled".to_string(),
-                severity: CloudSeverity::High,
-                category: CloudCheck::Logging,
-                resource: "Cloud Logging".to_string(),
-                description: "Audit logging may not be enabled for all services.".to_string(),
-                details: vec![
-                    "Enable Admin Activity logs (cannot be disabled)".to_string(),
-                    "Enable Data Access logs for sensitive services".to_string(),
-                    "Export logs to BigQuery or Cloud Storage".to_string(),
-                ],
-                remediation: "Enable comprehensive audit logging across all services.".to_string(),
-                cis_benchmark: Some("CIS GCP 2.1".to_string()),
-                aws_well_architected: None,
-            },
-        ]
+        vec![CloudFinding {
+            id: "GCP-LOG-001".to_string(),
+            title: "Cloud Audit Logging Disabled".to_string(),
+            severity: CloudSeverity::High,
+            category: CloudCheck::Logging,
+            resource: "Cloud Logging".to_string(),
+            description: "Audit logging may not be enabled for all services.".to_string(),
+            details: vec![
+                "Enable Admin Activity logs (cannot be disabled)".to_string(),
+                "Enable Data Access logs for sensitive services".to_string(),
+                "Export logs to BigQuery or Cloud Storage".to_string(),
+            ],
+            remediation: "Enable comprehensive audit logging across all services.".to_string(),
+            cis_benchmark: Some("CIS GCP 2.1".to_string()),
+            aws_well_architected: None,
+        }]
     }
 
     fn calculate_summary(findings: &[CloudFinding]) -> CloudSummary {
@@ -642,14 +620,26 @@ impl CloudAuditor {
     }
 
     fn aws_cis_compliance(findings: &[CloudFinding]) -> f64 {
-        let critical_count = findings.iter().filter(|f| f.severity == CloudSeverity::Critical).count();
-        let high_count = findings.iter().filter(|f| f.severity == CloudSeverity::High).count();
+        let critical_count = findings
+            .iter()
+            .filter(|f| f.severity == CloudSeverity::Critical)
+            .count();
+        let high_count = findings
+            .iter()
+            .filter(|f| f.severity == CloudSeverity::High)
+            .count();
         (100.0 - critical_count as f64 * 20.0 - high_count as f64 * 10.0).clamp(0.0, 100.0)
     }
 
     fn azure_cis_compliance(findings: &[CloudFinding]) -> f64 {
-        let critical_count = findings.iter().filter(|f| f.severity == CloudSeverity::Critical).count();
-        let high_count = findings.iter().filter(|f| f.severity == CloudSeverity::High).count();
+        let critical_count = findings
+            .iter()
+            .filter(|f| f.severity == CloudSeverity::Critical)
+            .count();
+        let high_count = findings
+            .iter()
+            .filter(|f| f.severity == CloudSeverity::High)
+            .count();
         (100.0 - critical_count as f64 * 25.0 - high_count as f64 * 10.0).clamp(0.0, 100.0)
     }
 }
@@ -664,7 +654,13 @@ mod tests {
             provider: CloudProvider::AWS,
             account_id: None,
             regions: vec!["us-east-1".to_string()],
-            checks: vec![CloudCheck::IAM, CloudCheck::Storage, CloudCheck::Network, CloudCheck::Logging, CloudCheck::Encryption],
+            checks: vec![
+                CloudCheck::IAM,
+                CloudCheck::Storage,
+                CloudCheck::Network,
+                CloudCheck::Logging,
+                CloudCheck::Encryption,
+            ],
         };
 
         let result = CloudAuditor::scan_aws(&config);

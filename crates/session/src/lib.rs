@@ -100,8 +100,7 @@ impl SessionManager {
         let data = self.session_data.read().await;
         if let Some(session) = data.as_ref() {
             let json = serde_json::to_string_pretty(session)?;
-            std::fs::write(path, json)
-                .map_err(|e| SessionError::StorageError(e.to_string()))?;
+            std::fs::write(path, json).map_err(|e| SessionError::StorageError(e.to_string()))?;
             info!("Session saved to {}", path);
             Ok(())
         } else {
@@ -110,10 +109,10 @@ impl SessionManager {
     }
 
     pub async fn load_session(&self, path: &str) -> Result<(), SessionError> {
-        let json = std::fs::read_to_string(path)
-            .map_err(|e| SessionError::StorageError(e.to_string()))?;
+        let json =
+            std::fs::read_to_string(path).map_err(|e| SessionError::StorageError(e.to_string()))?;
         let session: SessionData = serde_json::from_str(&json)?;
-        
+
         let mut data = self.session_data.write().await;
         *data = Some(session);
         info!("Session loaded from {}", path);
@@ -183,8 +182,11 @@ mod tests {
     async fn test_session_creation() {
         let manager = SessionManager::new();
         assert!(!manager.is_active().await);
-        
-        manager.create_session("test-123".to_string()).await.unwrap();
+
+        manager
+            .create_session("test-123".to_string())
+            .await
+            .unwrap();
         assert!(manager.is_active().await);
         assert_eq!(manager.get_session_id().await, Some("test-123".to_string()));
     }
@@ -192,11 +194,14 @@ mod tests {
     #[tokio::test]
     async fn test_cookie_management() {
         let manager = SessionManager::new();
-        manager.create_session("test-456".to_string()).await.unwrap();
-        
+        manager
+            .create_session("test-456".to_string())
+            .await
+            .unwrap();
+
         let cookie = create_cookie("session", "abc123", Some("example.com"));
         manager.add_cookie(cookie).await.unwrap();
-        
+
         let cookies = manager.get_cookies().await.unwrap();
         assert_eq!(cookies.len(), 1);
         assert_eq!(cookies[0].name, "session");
@@ -205,11 +210,14 @@ mod tests {
     #[tokio::test]
     async fn test_session_expiry() {
         let manager = SessionManager::new();
-        manager.create_session("test-789".to_string()).await.unwrap();
-        
+        manager
+            .create_session("test-789".to_string())
+            .await
+            .unwrap();
+
         let past_time = chrono::Utc::now().timestamp() - 3600;
         manager.set_expiry(past_time).await.unwrap();
-        
+
         assert!(manager.is_expired().await);
     }
 }

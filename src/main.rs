@@ -9,30 +9,30 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use browser::{Browser, NavigationOptions, ScrollBehavior};
-use db::Db;
 use crawler::{CrawlConfig, Crawler};
+use db::Db;
 use exporter::{Exporter, RecordingData};
-use notifier::{Notifier, NotificationConfig};
+use notifier::{NotificationConfig, Notifier};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
-use scanner::{ScanConfig, VulnerabilityScanner, ScanReport};
+use scanner::{ScanConfig, ScanReport, VulnerabilityScanner};
 use session::SessionManager;
 
-use auth_engine::{AuthEngine, AuthType as EngineAuthType, ApiKeyLocation, OAuth2GrantType};
+use auth_engine::{ApiKeyLocation, AuthEngine, AuthType as EngineAuthType, OAuth2GrantType};
 use auth_profiles::{AuthProfile, AuthProfileManager};
+use blue_team::{BlueTeam, IncidentCategory, IncidentSeverity};
+use bounty::{BountyMeta, BountyProgram, ChainScope, ProgramScope, TriageReport};
+use cloud::{CloudAuditor, CloudProvider, CloudScanConfig};
 use credentials::CredentialVault;
-use network::{NetworkScanner, ScanConfig as NetworkScanConfig};
-use passwords::{PasswordCracker, CrackConfig, HashType};
-use os_pentest::{OsPentest, OsScanConfig, TargetOs};
-use mobile::{MobileAnalyzer, MobileScanConfig, MobileTarget};
-use cloud::{CloudAuditor, CloudScanConfig, CloudProvider};
-use web3::{Web3Auditor, ContractScanConfig, WalletSecurityConfig, Blockchain};
-use bounty::{BountyProgram, BountyMeta, ChainScope, ProgramScope, TriageReport};
-use gray_team::GrayTeam;
-use blue_team::{BlueTeam, IncidentSeverity, IncidentCategory};
-use white_team::WhiteTeam;
 use cross_team::CrossTeam;
+use gray_team::GrayTeam;
 use http_proxy::{HttpProxy, ProxyConfig};
+use mobile::{MobileAnalyzer, MobileScanConfig, MobileTarget};
+use network::{NetworkScanner, ScanConfig as NetworkScanConfig};
+use os_pentest::{OsPentest, OsScanConfig, TargetOs};
 use packet_capture::PacketCapture;
+use passwords::{CrackConfig, HashType, PasswordCracker};
+use web3::{Blockchain, ContractScanConfig, WalletSecurityConfig, Web3Auditor};
+use white_team::WhiteTeam;
 
 mod cli;
 use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};
@@ -161,7 +161,7 @@ async fn start_recording(
 
     let mut status = state.status.lock().await;
     eprintln!("Got status lock, is_running: {}", status.is_running);
-    
+
     if status.is_running {
         eprintln!("ERROR: Recording already in progress");
         return Err("Recording already in progress".to_string());
@@ -236,11 +236,7 @@ async fn run_vulnerability_scan(
     let operator = state.operator_id.lock().await.clone();
     let db_guard = state.database.lock().await;
     if let Some(database) = db_guard.as_ref() {
-        match findings::ingest::ingest_report(
-            database.conn(),
-            &report,
-            operator.as_deref(),
-        ) {
+        match findings::ingest::ingest_report(database.conn(), &report, operator.as_deref()) {
             Ok(outcome) => {
                 info!(
                     "Ingested {} findings from scan {} ({} checks, {} skipped)",
@@ -261,7 +257,10 @@ async fn run_vulnerability_scan(
     let mut scan_results = state.scan_results.lock().await;
     *scan_results = Some(report.clone());
 
-    info!("Vulnerability scan completed. Risk score: {:.1}", report.summary.risk_score);
+    info!(
+        "Vulnerability scan completed. Risk score: {:.1}",
+        report.summary.risk_score
+    );
 
     Ok(report)
 }
@@ -334,9 +333,7 @@ async fn save_export(
 // ==================== AUTH PROFILE COMMANDS ====================
 
 #[tauri::command]
-async fn list_auth_profiles(
-    state: State<'_, AppState>,
-) -> Result<Vec<AuthProfile>, String> {
+async fn list_auth_profiles(state: State<'_, AppState>) -> Result<Vec<AuthProfile>, String> {
     let manager = state.auth_manager.lock().await;
     manager.list_profiles().map_err(|e| e.to_string())
 }
@@ -356,15 +353,19 @@ async fn create_auth_profile(
     state: State<'_, AppState>,
 ) -> Result<AuthProfile, String> {
     let manager = state.auth_manager.lock().await;
-    manager.create_profile(&profile).map_err(|e| e.to_string())?;
+    manager
+        .create_profile(&profile)
+        .map_err(|e| e.to_string())?;
 
-    manager.add_audit_entry(
-        "operator",
-        "auth_profile_created",
-        Some(&profile.target_url),
-        Some(&format!("Created auth profile: {}", profile.name)),
-        None,
-    ).ok();
+    manager
+        .add_audit_entry(
+            "operator",
+            "auth_profile_created",
+            Some(&profile.target_url),
+            Some(&format!("Created auth profile: {}", profile.name)),
+            None,
+        )
+        .ok();
 
     Ok(profile)
 }
@@ -375,34 +376,37 @@ async fn update_auth_profile(
     state: State<'_, AppState>,
 ) -> Result<AuthProfile, String> {
     let manager = state.auth_manager.lock().await;
-    manager.update_profile(&profile).map_err(|e| e.to_string())?;
+    manager
+        .update_profile(&profile)
+        .map_err(|e| e.to_string())?;
 
-    manager.add_audit_entry(
-        "operator",
-        "auth_profile_updated",
-        Some(&profile.target_url),
-        Some(&format!("Updated auth profile: {}", profile.name)),
-        None,
-    ).ok();
+    manager
+        .add_audit_entry(
+            "operator",
+            "auth_profile_updated",
+            Some(&profile.target_url),
+            Some(&format!("Updated auth profile: {}", profile.name)),
+            None,
+        )
+        .ok();
 
     Ok(profile)
 }
 
 #[tauri::command]
-async fn delete_auth_profile(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn delete_auth_profile(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let manager = state.auth_manager.lock().await;
     manager.delete_profile(&id).map_err(|e| e.to_string())?;
 
-    manager.add_audit_entry(
-        "operator",
-        "auth_profile_deleted",
-        None,
-        Some(&format!("Deleted auth profile: {}", id)),
-        None,
-    ).ok();
+    manager
+        .add_audit_entry(
+            "operator",
+            "auth_profile_deleted",
+            None,
+            Some(&format!("Deleted auth profile: {}", id)),
+            None,
+        )
+        .ok();
 
     Ok(())
 }
@@ -413,7 +417,8 @@ async fn test_auth_profile(
     state: State<'_, AppState>,
 ) -> Result<auth_profiles::AuthTestResult, String> {
     let manager = state.auth_manager.lock().await;
-    let profile = manager.get_profile(&id)
+    let profile = manager
+        .get_profile(&id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Profile not found".to_string())?;
 
@@ -456,20 +461,13 @@ async fn test_auth_profile(
 }
 
 #[tauri::command]
-async fn generate_totp(
-    secret: String,
-) -> Result<auth_profiles::TotpResult, String> {
-    auth_profiles::TotpGenerator::generate_code(&secret)
-        .map_err(|e| e.to_string())
+async fn generate_totp(secret: String) -> Result<auth_profiles::TotpResult, String> {
+    auth_profiles::TotpGenerator::generate_code(&secret).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn validate_totp(
-    secret: String,
-    code: String,
-) -> Result<bool, String> {
-    auth_profiles::TotpGenerator::validate_code(&secret, &code)
-        .map_err(|e| e.to_string())
+async fn validate_totp(secret: String, code: String) -> Result<bool, String> {
+    auth_profiles::TotpGenerator::validate_code(&secret, &code).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -488,29 +486,21 @@ async fn get_totp_provisioning_uri(
 }
 
 #[tauri::command]
-async fn unlock_vault(
-    master_password: String,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+async fn unlock_vault(master_password: String, state: State<'_, AppState>) -> Result<bool, String> {
     let mut vault = state.credential_vault.lock().await;
-    vault.unlock(&master_password)
-        .map_err(|e| e.to_string())?;
+    vault.unlock(&master_password).map_err(|e| e.to_string())?;
     Ok(true)
 }
 
 #[tauri::command]
-async fn lock_vault(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn lock_vault(state: State<'_, AppState>) -> Result<(), String> {
     let mut vault = state.credential_vault.lock().await;
     vault.lock();
     Ok(())
 }
 
 #[tauri::command]
-async fn is_vault_locked(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+async fn is_vault_locked(state: State<'_, AppState>) -> Result<bool, String> {
     let vault = state.credential_vault.lock().await;
     Ok(vault.is_locked())
 }
@@ -687,10 +677,7 @@ async fn policy_library(
 
 /// Record a user's acknowledgment of a policy at its current version.
 #[tauri::command]
-async fn acknowledge_policy(
-    policy_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn acknowledge_policy(policy_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let operator = state.operator_id.lock().await.clone();
     let user_id = operator.ok_or("No operator identity available")?;
 
@@ -716,7 +703,9 @@ async fn vendor_register(state: State<'_, AppState>) -> Result<serde_json::Value
 
 /// §5.5 training and awareness report.
 #[tauri::command]
-async fn training_report(state: State<'_, AppState>) -> Result<findings::training::TrainingReport, String> {
+async fn training_report(
+    state: State<'_, AppState>,
+) -> Result<findings::training::TrainingReport, String> {
     let db_guard = state.database.lock().await;
     let db = db_guard.as_ref().ok_or("Database unavailable")?;
     findings::training_report(db.conn()).map_err(|e| e.to_string())
@@ -743,9 +732,7 @@ async fn metrics_report(
 
 /// Compliance assessment (§5.1) over stored findings.
 #[tauri::command]
-async fn compliance_assessment(
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, String> {
+async fn compliance_assessment(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let db_guard = state.database.lock().await;
     let db = db_guard.as_ref().ok_or("Database unavailable")?;
     let assessments = findings::assess_all(db.conn()).map_err(|e| e.to_string())?;
@@ -814,7 +801,9 @@ async fn list_chained_audit_entries(
 
 /// Recompute the audit chain and report the first invalid entry.
 #[tauri::command]
-async fn verify_audit_integrity(state: State<'_, AppState>) -> Result<db::audit::IntegrityReport, String> {
+async fn verify_audit_integrity(
+    state: State<'_, AppState>,
+) -> Result<db::audit::IntegrityReport, String> {
     let database = state.database.lock().await;
     let db = database.as_ref().ok_or("Database unavailable")?;
     db::audit::verify_integrity(db.conn()).map_err(|e| e.to_string())
@@ -830,15 +819,23 @@ async fn network_port_scan(
 ) -> Result<network::ScanResult, String> {
     let mut config = NetworkScanConfig::default();
     config.target = target;
-    if let Some(p) = ports { config.ports = p; }
-    if let Some(t) = timeout_ms { config.timeout_ms = t; }
+    if let Some(p) = ports {
+        config.ports = p;
+    }
+    if let Some(t) = timeout_ms {
+        config.timeout_ms = t;
+    }
 
-    NetworkScanner::scan_ports(config).await.map_err(|e| e.to_string())
+    NetworkScanner::scan_ports(config)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn network_dns_lookup(domain: String) -> Result<network::DnsResult, String> {
-    NetworkScanner::dns_lookup(&domain).await.map_err(|e| e.to_string())
+    NetworkScanner::dns_lookup(&domain)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -846,7 +843,9 @@ async fn network_subdomain_enum(
     domain: String,
     wordlist: Option<Vec<String>>,
 ) -> Result<network::SubdomainResult, String> {
-    NetworkScanner::enumerate_subdomains(&domain, wordlist).await.map_err(|e| e.to_string())
+    NetworkScanner::enumerate_subdomains(&domain, wordlist)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -855,7 +854,9 @@ async fn network_ssl_check(
     port: Option<u16>,
 ) -> Result<network::SslInfo, String> {
     let port = port.unwrap_or(443);
-    NetworkScanner::check_ssl(&hostname, port).await.map_err(|e| e.to_string())
+    NetworkScanner::check_ssl(&hostname, port)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ==================== PASSWORD ATTACK COMMANDS ====================
@@ -897,8 +898,8 @@ async fn password_generate_mask(
     min_length: usize,
     max_length: usize,
 ) -> Result<Vec<String>, String> {
-    use passwords::MaskConfig;
     use passwords::MaskCharset;
+    use passwords::MaskConfig;
 
     let charset = match charset.as_str() {
         "lowercase" => MaskCharset::Lowercase,
@@ -933,9 +934,7 @@ async fn password_get_default_wordlist() -> Result<Vec<String>, String> {
 // ==================== OS PENTEST COMMANDS ====================
 
 #[tauri::command]
-async fn os_pentest_scan(
-    target_os: String,
-) -> Result<os_pentest::OsScanResult, String> {
+async fn os_pentest_scan(target_os: String) -> Result<os_pentest::OsScanResult, String> {
     let target = match target_os.as_str() {
         "linux" => TargetOs::Linux,
         "windows" => TargetOs::Windows,
@@ -960,9 +959,7 @@ async fn os_pentest_scan(
 // ==================== MOBILE ANALYSIS COMMANDS ====================
 
 #[tauri::command]
-async fn mobile_analyze(
-    target: String,
-) -> Result<mobile::MobileScanResult, String> {
+async fn mobile_analyze(target: String) -> Result<mobile::MobileScanResult, String> {
     let target_type = match target.as_str() {
         "android" => MobileTarget::Android,
         "ios" => MobileTarget::IOS,
@@ -996,9 +993,7 @@ async fn mobile_analyze(
 // ==================== CLOUD SECURITY COMMANDS ====================
 
 #[tauri::command]
-async fn cloud_scan(
-    provider: String,
-) -> Result<cloud::CloudScanResult, String> {
+async fn cloud_scan(provider: String) -> Result<cloud::CloudScanResult, String> {
     let provider = match provider.as_str() {
         "aws" => CloudProvider::AWS,
         "azure" => CloudProvider::Azure,
@@ -1100,9 +1095,7 @@ async fn bounty_triage(slug: String, max_fetch: Option<usize>) -> Result<TriageR
 }
 
 #[tauri::command]
-async fn web3_scan_contract(
-    chain: String,
-) -> Result<web3::ContractScanResult, String> {
+async fn web3_scan_contract(chain: String) -> Result<web3::ContractScanResult, String> {
     let chain = match chain.as_str() {
         "ethereum" => Blockchain::Ethereum,
         "polygon" => Blockchain::Polygon,
@@ -1252,7 +1245,12 @@ async fn blueteam_create_incident(
         "apt" => IncidentCategory::APT,
         _ => IncidentCategory::Other,
     };
-    Ok(BlueTeam::create_incident(&title, &description, severity, category))
+    Ok(BlueTeam::create_incident(
+        &title,
+        &description,
+        severity,
+        category,
+    ))
 }
 
 #[tauri::command]
@@ -1281,7 +1279,11 @@ async fn blueteam_create_hunt(
     description: String,
     mitre_technique: String,
 ) -> Result<blue_team::HuntHypothesis, String> {
-    Ok(BlueTeam::create_hunt_hypothesis(&title, &description, &mitre_technique))
+    Ok(BlueTeam::create_hunt_hypothesis(
+        &title,
+        &description,
+        &mitre_technique,
+    ))
 }
 
 #[tauri::command]
@@ -1297,7 +1299,8 @@ async fn whiteteam_get_grc_dashboard() -> Result<white_team::GrcDashboard, Strin
 }
 
 #[tauri::command]
-async fn whiteteam_get_compliance_frameworks() -> Result<Vec<white_team::ComplianceFramework>, String> {
+async fn whiteteam_get_compliance_frameworks(
+) -> Result<Vec<white_team::ComplianceFramework>, String> {
     Ok(WhiteTeam::get_compliance_frameworks())
 }
 
@@ -1351,10 +1354,7 @@ async fn cross_get_integrations() -> Result<Vec<cross_team::Integration>, String
 // ==================== HTTP PROXY COMMANDS ====================
 
 #[tauri::command]
-async fn proxy_start(
-    port: Option<u16>,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn proxy_start(port: Option<u16>, state: State<'_, AppState>) -> Result<String, String> {
     let mut proxy_lock = state.http_proxy.lock().await;
     if proxy_lock.is_some() {
         return Err("Proxy already running".to_string());
@@ -1373,9 +1373,7 @@ async fn proxy_start(
 }
 
 #[tauri::command]
-async fn proxy_stop(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn proxy_stop(state: State<'_, AppState>) -> Result<String, String> {
     let mut proxy_lock = state.http_proxy.lock().await;
     if let Some(proxy) = proxy_lock.take() {
         proxy.stop().await;
@@ -1399,9 +1397,7 @@ async fn proxy_get_sessions(
 }
 
 #[tauri::command]
-async fn proxy_get_config(
-    state: State<'_, AppState>,
-) -> Result<ProxyConfig, String> {
+async fn proxy_get_config(state: State<'_, AppState>) -> Result<ProxyConfig, String> {
     let proxy_lock = state.http_proxy.lock().await;
     if let Some(proxy) = proxy_lock.as_ref() {
         Ok(proxy.get_config().await)
@@ -1411,10 +1407,7 @@ async fn proxy_get_config(
 }
 
 #[tauri::command]
-async fn proxy_set_config(
-    config: ProxyConfig,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn proxy_set_config(config: ProxyConfig, state: State<'_, AppState>) -> Result<(), String> {
     let proxy_lock = state.http_proxy.lock().await;
     if let Some(proxy) = proxy_lock.as_ref() {
         proxy.set_config(config).await;
@@ -1425,9 +1418,7 @@ async fn proxy_set_config(
 }
 
 #[tauri::command]
-async fn proxy_clear_sessions(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn proxy_clear_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let proxy_lock = state.http_proxy.lock().await;
     if let Some(proxy) = proxy_lock.as_ref() {
         proxy.clear_sessions().await;
@@ -1456,7 +1447,8 @@ async fn packet_start_capture(
         return Err("Capture already running".to_string());
     }
     let (capture, _rx) = PacketCapture::new();
-    capture.start_capture(&interface, promiscuous.unwrap_or(false), filter.as_deref())
+    capture
+        .start_capture(&interface, promiscuous.unwrap_or(false), filter.as_deref())
         .await
         .map_err(|e| e.to_string())?;
     *capture_lock = Some(capture);
@@ -1465,9 +1457,7 @@ async fn packet_start_capture(
 }
 
 #[tauri::command]
-async fn packet_stop_capture(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+async fn packet_stop_capture(state: State<'_, AppState>) -> Result<String, String> {
     let mut capture_lock = state.packet_capture.lock().await;
     if let Some(capture) = capture_lock.as_ref() {
         capture.stop_capture().await;
@@ -1513,9 +1503,7 @@ async fn packet_get_stats(
 }
 
 #[tauri::command]
-async fn packet_clear_packets(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn packet_clear_packets(state: State<'_, AppState>) -> Result<(), String> {
     let capture_lock = state.packet_capture.lock().await;
     if let Some(capture) = capture_lock.as_ref() {
         capture.clear_packets().await;
@@ -1534,7 +1522,11 @@ async fn auth_authenticate(
     state: State<'_, AppState>,
 ) -> Result<auth_engine::AuthSession, String> {
     let auth = parse_auth_type(&auth_type, &config)?;
-    let session = state.auth_engine.authenticate(&auth).await.map_err(|e| e.to_string())?;
+    let session = state
+        .auth_engine
+        .authenticate(&auth)
+        .await
+        .map_err(|e| e.to_string())?;
     state.auth_engine.save_session(session.clone()).await;
     Ok(session)
 }
@@ -1545,10 +1537,16 @@ async fn auth_test_session(
     url: String,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    let session = state.auth_engine.get_session(&session_id).await
+    let session = state
+        .auth_engine
+        .get_session(&session_id)
+        .await
         .ok_or_else(|| "Session not found".to_string())?;
 
-    let response = state.auth_engine.make_authenticated_request(&session, "GET", &url, None).await
+    let response = state
+        .auth_engine
+        .make_authenticated_request(&session, "GET", &url, None)
+        .await
         .map_err(|e| e.to_string())?;
 
     let status = response.status().as_u16();
@@ -1566,10 +1564,17 @@ async fn auth_refresh_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<auth_engine::AuthSession, String> {
-    let mut session = state.auth_engine.get_session(&session_id).await
+    let mut session = state
+        .auth_engine
+        .get_session(&session_id)
+        .await
         .ok_or_else(|| "Session not found".to_string())?;
 
-    state.auth_engine.refresh_session(&mut session).await.map_err(|e| e.to_string())?;
+    state
+        .auth_engine
+        .refresh_session(&mut session)
+        .await
+        .map_err(|e| e.to_string())?;
     state.auth_engine.save_session(session.clone()).await;
     Ok(session)
 }
@@ -1594,7 +1599,11 @@ fn parse_auth_type(auth_type: &str, config: &serde_json::Value) -> Result<Engine
                 Some("cookie") => ApiKeyLocation::Cookie,
                 _ => ApiKeyLocation::Header,
             };
-            Ok(EngineAuthType::ApiKey { key, header, location })
+            Ok(EngineAuthType::ApiKey {
+                key,
+                header,
+                location,
+            })
         }
         "cookie" => {
             let mut cookies = std::collections::HashMap::new();
@@ -1609,8 +1618,14 @@ fn parse_auth_type(auth_type: &str, config: &serde_json::Value) -> Result<Engine
         }
         "form" => {
             let login_url = config["login_url"].as_str().unwrap_or("").to_string();
-            let username_field = config["username_field"].as_str().unwrap_or("username").to_string();
-            let password_field = config["password_field"].as_str().unwrap_or("password").to_string();
+            let username_field = config["username_field"]
+                .as_str()
+                .unwrap_or("username")
+                .to_string();
+            let password_field = config["password_field"]
+                .as_str()
+                .unwrap_or("password")
+                .to_string();
             let username = config["username"].as_str().unwrap_or("").to_string();
             let password = config["password"].as_str().unwrap_or("").to_string();
             let csrf_field = config["csrf_field"].as_str().map(|s| s.to_string());
@@ -1667,7 +1682,7 @@ async fn run_recording(
 ) -> Result<()> {
     eprintln!("=== RUN RECORDING STARTED ===");
     eprintln!("Settings: {:?}", settings);
-    
+
     // Initialize components
     eprintln!("Creating browser...");
     let browser = if settings.headless {
@@ -1745,12 +1760,12 @@ async fn run_recording(
         fps: settings.fps.unwrap_or(30),
         quality: 80,
         audio_enabled: settings.enable_audio.unwrap_or(false),
-            mode: recording_mode,
-            screen_width: settings.screen_width.or(Some(1920)),
-            screen_height: settings.screen_height.or(Some(1080)),
-            screen_region: settings.screen_region,
-        };
-        let recorder = Recorder::new(recording_config);
+        mode: recording_mode,
+        screen_width: settings.screen_width.or(Some(1920)),
+        screen_height: settings.screen_height.or(Some(1080)),
+        screen_region: settings.screen_region,
+    };
+    let recorder = Recorder::new(recording_config);
 
     let notifier = Notifier::new(NotificationConfig::default());
     let exporter = Exporter::new();
@@ -1759,15 +1774,21 @@ async fn run_recording(
     let session_id = status.lock().await.session_id.clone();
 
     // Create session
-    session_manager.lock().await.create_session(session_id.clone()).await?;
+    session_manager
+        .lock()
+        .await
+        .create_session(session_id.clone())
+        .await?;
 
     // Start recording
-    recorder.start_recording(session_id.clone(), Some(settings.url.clone())).await?;
+    recorder
+        .start_recording(session_id.clone(), Some(settings.url.clone()))
+        .await?;
     notifier.notify_recording_started(&session_id)?;
 
     // Get browser tab
     let tab = browser.get_tab()?;
-    
+
     // Set browser tab for recording
     recorder.set_browser_tab(tab.clone()).await;
 
@@ -1784,7 +1805,7 @@ async fn run_recording(
     if settings.requires_auth {
         if let Some(auth_url) = &settings.auth_url {
             info!("Navigating to login page: {}", auth_url);
-            
+
             match browser.navigate(&tab, auth_url, &nav_options) {
                 Ok(_) => {
                     info!("Login page loaded, attempting authentication...");
@@ -1804,22 +1825,41 @@ async fn run_recording(
                         match browser.execute_script(&tab, script) {
                             Ok(_) => {
                                 info!("Custom login script executed");
-                                notifier.notify_info("Authentication", "Custom login script executed")?;
+                                notifier.notify_info(
+                                    "Authentication",
+                                    "Custom login script executed",
+                                )?;
                                 sleep(Duration::from_millis(3000)).await; // Wait for redirect
                             }
                             Err(e) => {
                                 warn!("Login script failed: {}", e);
-                                notifier.notify_error("Authentication", &format!("Login script failed: {}", e))?;
+                                notifier.notify_error(
+                                    "Authentication",
+                                    &format!("Login script failed: {}", e),
+                                )?;
                             }
                         }
-                    } else if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+                    } else if let (
+                        Some(username),
+                        Some(password),
+                        Some(username_sel),
+                        Some(password_sel),
+                        Some(submit_sel),
+                    ) = (
                         &settings.username,
                         &settings.password,
                         &settings.username_selector,
                         &settings.password_selector,
                         &settings.submit_selector,
                     ) {
-                        match perform_login(&tab, username, password, username_sel, password_sel, submit_sel) {
+                        match perform_login(
+                            &tab,
+                            username,
+                            password,
+                            username_sel,
+                            password_sel,
+                            submit_sel,
+                        ) {
                             Ok(_) => {
                                 info!("Login successful!");
                                 notifier.notify_info("Authentication", "Login successful")?;
@@ -1827,7 +1867,10 @@ async fn run_recording(
                             }
                             Err(e) => {
                                 warn!("Login failed: {}", e);
-                                notifier.notify_error("Authentication", &format!("Login failed: {}", e))?;
+                                notifier.notify_error(
+                                    "Authentication",
+                                    &format!("Login failed: {}", e),
+                                )?;
                             }
                         }
                     }
@@ -1886,7 +1929,8 @@ async fn run_recording(
 
                 // Extract links
                 if let Ok(content) = browser.get_page_content(&tab) {
-                    if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url) {
+                    if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url)
+                    {
                         info!("Found {} links on page", links.len());
                         crawler.lock().await.add_discovered_links(links);
 
@@ -1922,8 +1966,8 @@ async fn run_recording(
     }
 
     // Export data
-    let export_path = std::path::PathBuf::from(&settings.output_dir)
-        .join(format!("{}_data.json", session_id));
+    let export_path =
+        std::path::PathBuf::from(&settings.output_dir).join(format!("{}_data.json", session_id));
     exporter.export_to_json(&recording_data, &export_path)?;
 
     info!("Recording saved to: {:?}", video_path);
@@ -1941,8 +1985,14 @@ async fn run_recording(
                 let scan_json = serde_json::to_string_pretty(&report)
                     .map_err(|e| anyhow::anyhow!("Failed to serialize scan: {}", e))?;
                 std::fs::write(&scan_path, scan_json)?;
-                info!("Vulnerability scan completed. Report saved to: {:?}", scan_path);
-                notifier.notify_info("Scan Complete", &format!("Risk score: {:.1}/10", report.summary.risk_score))?;
+                info!(
+                    "Vulnerability scan completed. Report saved to: {:?}",
+                    scan_path
+                );
+                notifier.notify_info(
+                    "Scan Complete",
+                    &format!("Risk score: {:.1}/10", report.summary.risk_score),
+                )?;
             }
             Err(e) => {
                 warn!("Vulnerability scan failed: {}", e);
@@ -1972,21 +2022,25 @@ fn perform_login(
     // Check if we're on localhost - if so, check for pre-filled fields
     let current_url = tab.get_url();
     let is_localhost = current_url.contains("localhost") || current_url.contains("127.0.0.1");
-    
+
     if is_localhost {
         info!("Detected localhost domain, checking for pre-filled form fields...");
-        
+
         // Check if username field already has content
-        let username_selectors: Vec<&str> = username_selector.split(',').map(|s| s.trim()).collect();
+        let username_selectors: Vec<&str> =
+            username_selector.split(',').map(|s| s.trim()).collect();
         let mut username_prefilled = false;
-        
+
         for selector in &username_selectors {
             if let Ok(_element) = tab.find_element(selector) {
                 // Try to get the value attribute to check if it's filled
-                if let Ok(js_result) = tab.evaluate(&format!(
-                    "document.querySelector('{}')?.value || ''", 
-                    selector.replace("'", "\\'")
-                ), false) {
+                if let Ok(js_result) = tab.evaluate(
+                    &format!(
+                        "document.querySelector('{}')?.value || ''",
+                        selector.replace("'", "\\'")
+                    ),
+                    false,
+                ) {
                     if let Some(value) = js_result.value {
                         if let Some(s) = value.as_str() {
                             if !s.trim().is_empty() {
@@ -1999,17 +2053,21 @@ fn perform_login(
                 }
             }
         }
-        
+
         // Check if password field already has content
-        let password_selectors: Vec<&str> = password_selector.split(',').map(|s| s.trim()).collect();
+        let password_selectors: Vec<&str> =
+            password_selector.split(',').map(|s| s.trim()).collect();
         let mut password_prefilled = false;
-        
+
         for selector in &password_selectors {
             if let Ok(_element) = tab.find_element(selector) {
-                if let Ok(js_result) = tab.evaluate(&format!(
-                    "document.querySelector('{}')?.value || ''", 
-                    selector.replace("'", "\\'")
-                ), false) {
+                if let Ok(js_result) = tab.evaluate(
+                    &format!(
+                        "document.querySelector('{}')?.value || ''",
+                        selector.replace("'", "\\'")
+                    ),
+                    false,
+                ) {
                     if let Some(value) = js_result.value {
                         if let Some(s) = value.as_str() {
                             if !s.trim().is_empty() {
@@ -2022,16 +2080,17 @@ fn perform_login(
                 }
             }
         }
-        
+
         if username_prefilled && password_prefilled {
             info!("Both username and password fields are pre-filled on localhost, skipping form filling...");
             // Skip to submit button
             std::thread::sleep(std::time::Duration::from_millis(500));
-            
+
             info!("Clicking submit button...");
-            let submit_selectors: Vec<&str> = submit_selector.split(',').map(|s| s.trim()).collect();
+            let submit_selectors: Vec<&str> =
+                submit_selector.split(',').map(|s| s.trim()).collect();
             let mut submit_clicked = false;
-            
+
             for selector in submit_selectors {
                 if let Ok(element) = tab.find_element(selector) {
                     if element.click().is_ok() {
@@ -2041,11 +2100,11 @@ fn perform_login(
                     }
                 }
             }
-            
+
             if !submit_clicked {
                 return Err(anyhow::anyhow!("Could not find submit button"));
             }
-            
+
             info!("Login form submitted with pre-filled data");
             return Ok(());
         } else {
@@ -2057,7 +2116,7 @@ fn perform_login(
     // Try multiple selectors for username
     let username_selectors: Vec<&str> = username_selector.split(',').map(|s| s.trim()).collect();
     let mut username_filled = false;
-    
+
     for selector in username_selectors {
         if let Ok(element) = tab.find_element(selector) {
             if element.type_into(username).is_ok() {
@@ -2067,18 +2126,18 @@ fn perform_login(
             }
         }
     }
-    
+
     if !username_filled {
         return Err(anyhow::anyhow!("Could not find username field"));
     }
-    
+
     std::thread::sleep(std::time::Duration::from_millis(500));
-    
+
     info!("Filling password field...");
     // Try multiple selectors for password
     let password_selectors: Vec<&str> = password_selector.split(',').map(|s| s.trim()).collect();
     let mut password_filled = false;
-    
+
     for selector in password_selectors {
         if let Ok(element) = tab.find_element(selector) {
             if element.type_into(password).is_ok() {
@@ -2088,18 +2147,18 @@ fn perform_login(
             }
         }
     }
-    
+
     if !password_filled {
         return Err(anyhow::anyhow!("Could not find password field"));
     }
-    
+
     std::thread::sleep(std::time::Duration::from_millis(500));
-    
+
     info!("Clicking submit button...");
     // Try multiple selectors for submit button
     let submit_selectors: Vec<&str> = submit_selector.split(',').map(|s| s.trim()).collect();
     let mut submit_clicked = false;
-    
+
     for selector in submit_selectors {
         if let Ok(element) = tab.find_element(selector) {
             if element.click().is_ok() {
@@ -2109,11 +2168,11 @@ fn perform_login(
             }
         }
     }
-    
+
     if !submit_clicked {
         return Err(anyhow::anyhow!("Could not find submit button"));
     }
-    
+
     info!("Login form submitted");
     Ok(())
 }
@@ -2122,7 +2181,11 @@ fn setup_tracing(verbose: bool, quiet: bool) -> Result<()> {
     setup_tracing_with_file(verbose, quiet, None)
 }
 
-fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::path::PathBuf>) -> Result<()> {
+fn setup_tracing_with_file(
+    verbose: bool,
+    quiet: bool,
+    log_file: Option<std::path::PathBuf>,
+) -> Result<()> {
     let log_level = if verbose {
         tracing::Level::DEBUG
     } else if quiet {
@@ -2130,20 +2193,20 @@ fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::pat
     } else {
         tracing::Level::INFO
     };
-    
+
     if let Some(log_path) = log_file {
         // Log to file for daemon mode
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&log_path)?;
-        
+
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
             .with_writer(std::sync::Mutex::new(file))
             .with_ansi(false)
             .init();
-        
+
         info!("Logging to file: {:?}", log_path);
     } else {
         // Log to stdout
@@ -2151,7 +2214,7 @@ fn setup_tracing_with_file(verbose: bool, quiet: bool, log_file: Option<std::pat
             .with_env_filter(EnvFilter::from_default_env().add_directive(log_level.into()))
             .init();
     }
-    
+
     Ok(())
 }
 
@@ -2193,7 +2256,7 @@ fn dispatch_command(command: Option<Commands>, verbose: bool, quiet: bool) -> Re
 
 fn main() {
     let cli = Cli::parse_args();
-    
+
     if let Err(e) = setup_tracing(cli.verbose, cli.quiet) {
         eprintln!("Failed to initialize logging: {}", e);
         std::process::exit(1);
@@ -2263,44 +2326,42 @@ fn run_gui_mode() {
         operator_id: Arc::new(Mutex::new(operator_id)),
     };
 
-    use tauri::{CustomMenuItem, SystemTray, SystemTrayMenu, SystemTrayEvent, Manager};
-    
+    use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu};
+
     // Create system tray menu
     let show = CustomMenuItem::new("show".to_string(), "Show Window");
     let hide = CustomMenuItem::new("hide".to_string(), "Hide Window");
     let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    
+
     let tray_menu = SystemTrayMenu::new()
         .add_item(show)
         .add_item(hide)
         .add_native_item(tauri::SystemTrayMenuItem::Separator)
         .add_item(quit);
-    
+
     let system_tray = SystemTray::new().with_menu(tray_menu);
 
     tauri::Builder::default()
         .manage(app_state)
         .system_tray(system_tray)
         .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::MenuItemClick { id, .. } => {
-                match id.as_str() {
-                    "show" => {
-                        if let Some(window) = app.get_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
+                "show" => {
+                    if let Some(window) = app.get_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
                     }
-                    "hide" => {
-                        if let Some(window) = app.get_window("main") {
-                            let _ = window.hide();
-                        }
-                    }
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    _ => {}
                 }
-            }
+                "hide" => {
+                    if let Some(window) = app.get_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+                "quit" => {
+                    std::process::exit(0);
+                }
+                _ => {}
+            },
             _ => {}
         })
         .on_window_event(|event| match event.event() {
@@ -2439,34 +2500,34 @@ fn run_gui_mode() {
 // CLI Mode Implementation
 fn run_cli_mode(args: CrawlArgs, verbose: bool, quiet: bool) -> Result<()> {
     let settings = RecordingSettings::from_crawl_args(args);
-    
+
     // Initialize daemon mode if requested
     let daemon_manager = if settings.daemon {
         // Set up file logging before daemonizing
         if let Some(ref log_file) = settings.log_file {
             setup_tracing_with_file(verbose, quiet, Some(log_file.clone()))?;
         }
-        
+
         info!("Initializing daemon mode");
-        
+
         // Daemonize the process
         #[cfg(unix)]
         if let Err(e) = daemon::daemonize() {
             error!("Failed to daemonize: {}", e);
             return Err(e);
         }
-        
+
         let manager = DaemonManager::new(settings.pid_file.clone());
         manager.initialize()?;
         Some(manager)
     } else {
         None
     };
-    
+
     info!("Starting CLI crawl of: {}", settings.url);
-    
+
     let runtime = tokio::runtime::Runtime::new()?;
-    
+
     let result = runtime.block_on(async {
         info!("Configuration:");
         info!("  URL: {}", settings.url);
@@ -2475,7 +2536,7 @@ fn run_cli_mode(args: CrawlArgs, verbose: bool, quiet: bool) -> Result<()> {
         info!("  Recording mode: {:?}", settings.recording_mode);
         info!("  Headless: {}", settings.headless);
         info!("  Daemon: {}", settings.daemon);
-        
+
         match run_recording_cli(settings, daemon_manager.as_ref()).await {
             Ok(session_id) => {
                 info!("✓ Recording completed successfully!");
@@ -2488,7 +2549,7 @@ fn run_cli_mode(args: CrawlArgs, verbose: bool, quiet: bool) -> Result<()> {
             }
         }
     });
-    
+
     // Daemon manager will cleanup on drop
     result
 }
@@ -2515,17 +2576,20 @@ fn build_recording_config(settings: &RecordingSettings) -> RecordingConfig {
     }
 }
 
-async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&DaemonManager>) -> Result<String> {
+async fn run_recording_cli(
+    settings: RecordingSettings,
+    daemon_manager: Option<&DaemonManager>,
+) -> Result<String> {
     // Create session ID
     let session_id = format!("session_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
-    
+
     info!("Initializing browser...");
     let browser = if settings.headless {
         Browser::new_headless()?
     } else {
         Browser::new()?
     };
-    
+
     info!("Setting up crawler...");
     let crawl_config = CrawlConfig::new(&settings.url)?;
     let crawl_config = if let Some(ref proxy) = settings.proxy {
@@ -2580,10 +2644,10 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     info!("Configuring recorder...");
     let recording_config = build_recording_config(&settings);
     let recorder = Recorder::new(recording_config);
-    
+
     let tab = browser.get_tab()?;
     recorder.set_browser_tab(tab.clone()).await;
-    
+
     let nav_options = NavigationOptions {
         timeout_ms: 30000,
         wait_for_idle: true,
@@ -2594,8 +2658,10 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
     };
 
     info!("Starting recording...");
-    recorder.start_recording(session_id.clone(), Some(settings.url.clone())).await?;
-    
+    recorder
+        .start_recording(session_id.clone(), Some(settings.url.clone()))
+        .await?;
+
     // Handle authentication if required
     if settings.requires_auth {
         if let Some(auth_url) = &settings.auth_url {
@@ -2618,14 +2684,27 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
                             }
                             Err(e) => warn!("Login script failed: {}", e),
                         }
-                    } else if let (Some(username), Some(password), Some(username_sel), Some(password_sel), Some(submit_sel)) = (
+                    } else if let (
+                        Some(username),
+                        Some(password),
+                        Some(username_sel),
+                        Some(password_sel),
+                        Some(submit_sel),
+                    ) = (
                         &settings.username,
                         &settings.password,
                         &settings.username_selector,
                         &settings.password_selector,
                         &settings.submit_selector,
                     ) {
-                        match perform_login(&tab, username, password, username_sel, password_sel, submit_sel) {
+                        match perform_login(
+                            &tab,
+                            username,
+                            password,
+                            username_sel,
+                            password_sel,
+                            submit_sel,
+                        ) {
                             Ok(_) => {
                                 info!("Login successful!");
                                 sleep(Duration::from_millis(3000)).await;
@@ -2641,11 +2720,11 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
 
     info!("Beginning crawl...");
     let mut pages_visited = 0;
-    
+
     // Initialize progress bar (disabled in daemon mode)
     let show_progress = settings.progress && !settings.daemon;
     let progress = CrawlProgress::new(settings.max_pages as u64, show_progress);
-    
+
     while pages_visited < settings.max_pages {
         // Check for shutdown signal in daemon mode
         if let Some(manager) = daemon_manager {
@@ -2654,25 +2733,32 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
                 break;
             }
         }
-        
+
         if let Some(url) = crawler.lock().await.get_next_url() {
             progress.set_message(format!("Crawling: {}", url));
-            info!("[{}/{}] Crawling: {}", pages_visited + 1, settings.max_pages, url);
-            
+            info!(
+                "[{}/{}] Crawling: {}",
+                pages_visited + 1,
+                settings.max_pages,
+                url
+            );
+
             match browser.navigate(&tab, &url, &nav_options) {
                 Ok(_) => {
                     // Get page content and discover links
                     if let Ok(content) = browser.get_page_content(&tab) {
-                        if let Ok(links) = crawler.lock().await.extract_links_from_html(&content, &url) {
+                        if let Ok(links) =
+                            crawler.lock().await.extract_links_from_html(&content, &url)
+                        {
                             info!("  Found {} links", links.len());
                             crawler.lock().await.add_discovered_links(links);
                         }
                     }
-                    
+
                     crawler.lock().await.mark_visited(&url);
                     pages_visited += 1;
                     progress.inc();
-                    
+
                     // Delay between pages
                     tokio::time::sleep(tokio::time::Duration::from_millis(settings.delay_ms)).await;
                 }
@@ -2686,17 +2772,17 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
             break;
         }
     }
-    
+
     prefetch_active.store(false, std::sync::atomic::Ordering::SeqCst);
     for handle in worker_handles {
         let _ = handle.await;
     }
 
     progress.finish();
-    
+
     info!("Stopping recording...");
     let video_path = recorder.stop_recording().await?;
-    
+
     info!("Recording saved to: {:?}", video_path);
     info!("Total pages visited: {}", pages_visited);
 
@@ -2711,7 +2797,10 @@ async fn run_recording_cli(settings: RecordingSettings, daemon_manager: Option<&
                     .join(format!("{}_scan.json", session_id));
                 let scan_json = serde_json::to_string_pretty(&report)?;
                 std::fs::write(&scan_path, scan_json)?;
-                info!("Vulnerability scan completed. Report saved to: {:?}", scan_path);
+                info!(
+                    "Vulnerability scan completed. Report saved to: {:?}",
+                    scan_path
+                );
                 println!("\n🛡️ Vulnerability Scan Results:");
                 println!("─────────────────────────────────────────────────────");
                 println!("  Risk Score: {:.1}/10", report.summary.risk_score);
@@ -2737,8 +2826,8 @@ fn resume_session(session_id: &str) -> Result<()> {
     info!("Resuming session: {}", session_id);
 
     // Look for session data file
-    let session_file = std::path::PathBuf::from("./recordings")
-        .join(format!("{}_data.json", session_id));
+    let session_file =
+        std::path::PathBuf::from("./recordings").join(format!("{}_data.json", session_id));
 
     if !session_file.exists() {
         warn!("Session data file not found: {:?}", session_file);
@@ -2753,7 +2842,10 @@ fn resume_session(session_id: &str) -> Result<()> {
     println!("─────────────────────────────────────────────────────");
     println!("  Pages recorded: {}", recording_data.len());
     if let Some(first) = recording_data.first() {
-        println!("  Start time: {}", first.timestamp.format("%Y-%m-%d %H:%M:%S"));
+        println!(
+            "  Start time: {}",
+            first.timestamp.format("%Y-%m-%d %H:%M:%S")
+        );
         println!("  Base URL: {}", first.url);
     }
     if let Some(last) = recording_data.last() {
@@ -2786,15 +2878,15 @@ fn format_session_entry(entry: &std::fs::DirEntry) -> Option<String> {
     if !metadata.is_dir() {
         return None;
     }
-    
+
     let name = entry.path().file_name()?.to_string_lossy().to_string();
-    
+
     let timestamp = metadata
         .modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .and_then(|d| chrono::DateTime::<chrono::Utc>::from_timestamp(d.as_secs() as i64, 0));
-    
+
     match timestamp {
         Some(dt) => Some(format!("  {} - {}", name, dt.format("%Y-%m-%d %H:%M:%S"))),
         None => Some(format!("  {}", name)),
@@ -2803,7 +2895,7 @@ fn format_session_entry(entry: &std::fs::DirEntry) -> Option<String> {
 
 fn list_sessions(output: &std::path::Path) {
     info!("Listing sessions in: {:?}", output);
-    
+
     let entries = match std::fs::read_dir(output) {
         Ok(e) => e,
         Err(_) => {
@@ -2811,10 +2903,10 @@ fn list_sessions(output: &std::path::Path) {
             return;
         }
     };
-    
+
     println!("\n📁 Recording Sessions:");
     println!("─────────────────────────────────────────────────────");
-    
+
     let mut count = 0;
     for entry in entries.flatten() {
         if let Some(line) = format_session_entry(&entry) {
@@ -2822,7 +2914,7 @@ fn list_sessions(output: &std::path::Path) {
             count += 1;
         }
     }
-    
+
     println!("─────────────────────────────────────────────────────");
     println!("Total sessions: {}\n", count);
 }
@@ -2859,8 +2951,8 @@ async fn run_scan_cli(
         let path = output.join("scans").join(format!("{}.json", id));
         let data = std::fs::read_to_string(&path)
             .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", path.display(), e))?;
-        let report: ScanReport = serde_json::from_str(&data)
-            .map_err(|e| anyhow::anyhow!("Invalid scan file: {}", e))?;
+        let report: ScanReport =
+            serde_json::from_str(&data).map_err(|e| anyhow::anyhow!("Invalid scan file: {}", e))?;
         let (content, ext) = if format.eq_ignore_ascii_case("csv") {
             (report.to_csv(), "csv")
         } else {
@@ -2872,9 +2964,8 @@ async fn run_scan_cli(
         return Ok(());
     }
 
-    let url = url.ok_or_else(|| anyhow::anyhow!(
-        "Provide --url to scan, or use --list / --export-id"
-    ))?;
+    let url =
+        url.ok_or_else(|| anyhow::anyhow!("Provide --url to scan, or use --list / --export-id"))?;
 
     let mut config = ScanConfig::new(&url)?;
     config.max_depth = max_depth;
@@ -2882,7 +2973,10 @@ async fn run_scan_cli(
     config.output_dir = Some(output.to_path_buf());
 
     let mut scanner = VulnerabilityScanner::new(config)?;
-    println!("Scanning {} (depth={}, max_pages={})...", url, max_depth, max_pages);
+    println!(
+        "Scanning {} (depth={}, max_pages={})...",
+        url, max_depth, max_pages
+    );
     let report = scanner.run_full_scan().await?;
     let _ = scanner.save_report(&report);
 
@@ -2899,7 +2993,9 @@ async fn run_scan_cli(
     println!("  Medium:        {}", report.summary.medium_count);
     println!("  Low:           {}", report.summary.low_count);
     println!("─────────────────────────────────────────────────────");
-    let saved = output.join("scans").join(format!("{}.json", report.scan_id));
+    let saved = output
+        .join("scans")
+        .join(format!("{}.json", report.scan_id));
     println!("Report saved to: {}\n", saved.display());
 
     Ok(())

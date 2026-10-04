@@ -187,14 +187,19 @@ pub fn starter_policies() -> Vec<Policy> {
 }
 
 /// Build the library report.
-pub fn build_library(
-    now: DateTime<Utc>,
-    policies: Vec<Policy>,
-    target: usize,
-) -> PolicyLibrary {
-    let drafts = policies.iter().filter(|p| p.status == PolicyStatus::Draft).count();
-    let active = policies.iter().filter(|p| p.status == PolicyStatus::Active).count();
-    let retired = policies.iter().filter(|p| p.status == PolicyStatus::Retired).count();
+pub fn build_library(now: DateTime<Utc>, policies: Vec<Policy>, target: usize) -> PolicyLibrary {
+    let drafts = policies
+        .iter()
+        .filter(|p| p.status == PolicyStatus::Draft)
+        .count();
+    let active = policies
+        .iter()
+        .filter(|p| p.status == PolicyStatus::Active)
+        .count();
+    let retired = policies
+        .iter()
+        .filter(|p| p.status == PolicyStatus::Retired)
+        .count();
 
     let mut overdue: Vec<String> = policies
         .iter()
@@ -241,7 +246,9 @@ mod tests {
     use super::*;
 
     fn now() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-01-31T00:00:00Z").unwrap().into()
+        DateTime::parse_from_rfc3339("2026-01-31T00:00:00Z")
+            .unwrap()
+            .into()
     }
 
     #[test]
@@ -319,7 +326,11 @@ mod tests {
         codes.sort();
         let before = codes.len();
         codes.dedup();
-        assert_eq!(codes.len(), before, "duplicate policy codes would break lookups");
+        assert_eq!(
+            codes.len(),
+            before,
+            "duplicate policy codes would break lookups"
+        );
     }
 
     #[test]

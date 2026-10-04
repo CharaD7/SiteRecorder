@@ -158,10 +158,7 @@ impl Gate {
             ));
         }
         if !self.policy.granted.contains(&capability) {
-            return Decision::Deny(format!(
-                "capability not granted: {}",
-                capability.as_str()
-            ));
+            return Decision::Deny(format!("capability not granted: {}", capability.as_str()));
         }
         Decision::Allow
     }

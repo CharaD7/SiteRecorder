@@ -102,7 +102,9 @@ fn setup_platform_signal_handlers(should_stop: Arc<AtomicBool>) -> Result<()> {
 #[cfg(unix)]
 pub fn daemonize() -> Result<()> {
     info!("Daemonizing process");
-    unsafe { double_fork_and_detach()?; }
+    unsafe {
+        double_fork_and_detach()?;
+    }
     Ok(())
 }
 
@@ -148,8 +150,8 @@ unsafe fn redirect_stdio_to_devnull() -> Result<()> {
         }
     }
 
-    let dev_null = CString::new("/dev/null")
-        .expect("daemonize: CString::new(\"/dev/null\") should not fail");
+    let dev_null =
+        CString::new("/dev/null").expect("daemonize: CString::new(\"/dev/null\") should not fail");
 
     // Open /dev/null for stdin
     let stdin_fd = libc::open(dev_null.as_ptr(), libc::O_RDONLY);

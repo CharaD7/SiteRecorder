@@ -261,7 +261,9 @@ pub fn build_register(now: chrono::DateTime<chrono::Utc>, inputs: &[RiskInput]) 
     let mut residual = 0.0;
     for e in &entries {
         *by_level.entry(e.level.to_string()).or_insert(0) += 1;
-        *by_treatment.entry(e.treatment.as_str().to_string()).or_insert(0) += 1;
+        *by_treatment
+            .entry(e.treatment.as_str().to_string())
+            .or_insert(0) += 1;
         residual += e.score;
     }
 
@@ -292,7 +294,10 @@ pub fn set_treatment(register: &mut RiskRegister, risk_id: &str, treatment: Trea
             .by_treatment
             .entry(treatment.as_str().to_string())
             .or_insert(0) += 1;
-        *register.by_treatment.entry("undecided".to_string()).or_insert(0) -= 1;
+        *register
+            .by_treatment
+            .entry("undecided".to_string())
+            .or_insert(0) -= 1;
         if register.by_treatment["undecided"] <= 0 {
             register.by_treatment.remove("undecided");
         }
@@ -323,8 +328,7 @@ pub fn unavailable_models() -> Vec<UnavailableModel> {
         },
         UnavailableModel {
             name: "Residual risk after treatment".to_string(),
-            reason: "Requires recorded treatment effectiveness, which is not measured."
-                .to_string(),
+            reason: "Requires recorded treatment effectiveness, which is not measured.".to_string(),
         },
     ]
 }
@@ -356,7 +360,10 @@ mod tests {
     #[test]
     fn closed_findings_produce_no_risk() {
         let r = build_register(now(), &[input("CRITICAL", Some("critical"), false)]);
-        assert!(r.entries.is_empty(), "remediated findings are not open risk");
+        assert!(
+            r.entries.is_empty(),
+            "remediated findings are not open risk"
+        );
     }
 
     #[test]
@@ -364,9 +371,9 @@ mod tests {
         let r = build_register(
             now(),
             &[
-                input("LOW", Some("low"), true),      // 2 * 2 = 4
+                input("LOW", Some("low"), true),           // 2 * 2 = 4
                 input("CRITICAL", Some("critical"), true), // 5 * 5 = 25
-                input("MEDIUM", Some("medium"), true),   // 3 * 3 = 9
+                input("MEDIUM", Some("medium"), true),     // 3 * 3 = 9
             ],
         );
         let scores: Vec<f64> = r.entries.iter().map(|e| e.score).collect();
@@ -407,7 +414,13 @@ mod tests {
 
     #[test]
     fn every_open_finding_gets_an_entry() {
-        let r = build_register(now(), &[input("HIGH", Some("high"), true), input("LOW", Some("low"), true)]);
+        let r = build_register(
+            now(),
+            &[
+                input("HIGH", Some("high"), true),
+                input("LOW", Some("low"), true),
+            ],
+        );
         assert_eq!(r.entries.len(), 2);
         assert_eq!(r.by_level.values().sum::<i64>(), 2);
     }
@@ -416,7 +429,10 @@ mod tests {
     fn residual_score_is_the_sum_before_treatment() {
         let r = build_register(
             now(),
-            &[input("HIGH", Some("high"), true), input("MEDIUM", Some("medium"), true)],
+            &[
+                input("HIGH", Some("high"), true),
+                input("MEDIUM", Some("medium"), true),
+            ],
         );
         // HIGH=4 x high-criticality=4 = 16; MEDIUM=3 x medium=3 = 9.
         assert_eq!(r.residual_score, 16.0 + 9.0);
@@ -438,7 +454,11 @@ mod tests {
     fn treating_an_unknown_risk_is_a_no_op() {
         let mut r = build_register(now(), &[input("HIGH", Some("high"), true)]);
         let before = r.entries.len();
-        assert!(!set_treatment(&mut r, "risk_does_not_exist", Treatment::Accept));
+        assert!(!set_treatment(
+            &mut r,
+            "risk_does_not_exist",
+            Treatment::Accept
+        ));
         assert_eq!(r.entries.len(), before);
     }
 
@@ -449,7 +469,10 @@ mod tests {
         assert!(names.iter().any(|n| n.contains("FAIR")));
         assert!(names.iter().any(|n| n.contains("Monte Carlo")));
         assert!(names.iter().any(|n| n.contains("Loss exceedance")));
-        assert!(models.iter().all(|m| m.reason.len() > 20), "reasons must be substantive");
+        assert!(
+            models.iter().all(|m| m.reason.len() > 20),
+            "reasons must be substantive"
+        );
     }
 
     #[test]
@@ -467,6 +490,8 @@ mod tests {
     }
 
     fn now() -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::parse_from_rfc3339("2026-01-31T00:00:00Z").unwrap().into()
+        chrono::DateTime::parse_from_rfc3339("2026-01-31T00:00:00Z")
+            .unwrap()
+            .into()
     }
 }

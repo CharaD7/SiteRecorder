@@ -228,7 +228,12 @@ impl VulnerabilityScanner {
             .build()
             .map_err(|e| ScanError::ScanError(e.to_string()))?;
 
-        Ok(Self { config, client, targets: Vec::new(), progress_callback: None })
+        Ok(Self {
+            config,
+            client,
+            targets: Vec::new(),
+            progress_callback: None,
+        })
     }
 
     pub fn set_progress_callback<F>(&mut self, callback: F)
@@ -257,8 +262,7 @@ impl VulnerabilityScanner {
         };
         let base_domain = base.domain().map(|d| d.to_string());
 
-        let mut visited: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut discovered: Vec<String> = vec![root.clone()];
         visited.insert(root.clone());
 
@@ -359,12 +363,36 @@ impl VulnerabilityScanner {
 
         // Run each check with progress reporting
         let checks: &[&str] = &[
-            "Security Headers", "XSS", "SQL Injection", "Directory Traversal", "Open Redirect",
-            "CSRF", "Clickjacking", "Mixed Content", "Information Disclosure", "SSL/TLS",
-            "Cookie Security", "Server Info Leakage", "Form Security", "File Inclusion",
-            "Outdated Software", "CORS", "CSP", "SRI", "Exposed Files", "Directory Listing",
-            "HTTP Smuggling", "Cache Poisoning", "SSTI", "NoSQL Injection", "CRLF Injection",
-            "WebDAV", "GraphQL", "XXE", "Host Header Injection", "Time-based Injection",
+            "Security Headers",
+            "XSS",
+            "SQL Injection",
+            "Directory Traversal",
+            "Open Redirect",
+            "CSRF",
+            "Clickjacking",
+            "Mixed Content",
+            "Information Disclosure",
+            "SSL/TLS",
+            "Cookie Security",
+            "Server Info Leakage",
+            "Form Security",
+            "File Inclusion",
+            "Outdated Software",
+            "CORS",
+            "CSP",
+            "SRI",
+            "Exposed Files",
+            "Directory Listing",
+            "HTTP Smuggling",
+            "Cache Poisoning",
+            "SSTI",
+            "NoSQL Injection",
+            "CRLF Injection",
+            "WebDAV",
+            "GraphQL",
+            "XXE",
+            "Host Header Injection",
+            "Time-based Injection",
         ];
 
         // Report progress for each page/check combination
@@ -466,8 +494,7 @@ impl VulnerabilityScanner {
         let path = dir.join(format!("{}.json", report.scan_id));
         let json = serde_json::to_string_pretty(report)
             .map_err(|e| ScanError::ScanError(e.to_string()))?;
-        std::fs::write(&path, json)
-            .map_err(|e| ScanError::ScanError(format!("write: {}", e)))?;
+        std::fs::write(&path, json).map_err(|e| ScanError::ScanError(format!("write: {}", e)))?;
         info!("Scan report saved to {:?}", path);
         Ok(())
     }
@@ -558,7 +585,10 @@ impl VulnerabilityScanner {
         summary
     }
 
-    async fn fetch_page(&self, url: &str) -> Result<(String, reqwest::header::HeaderMap), ScanError> {
+    async fn fetch_page(
+        &self,
+        url: &str,
+    ) -> Result<(String, reqwest::header::HeaderMap), ScanError> {
         let response = self.client.get(url).send().await?;
         let headers = response.headers().clone();
         let body = response.text().await?;
@@ -673,7 +703,10 @@ impl VulnerabilityScanner {
                 // Check for Content-Security-Policy
                 if let Some(csp) = headers.get("content-security-policy") {
                     let val = csp.to_str().unwrap_or("");
-                    if val.contains("script-src") && !val.contains("'unsafe-inline'") && !val.contains("'unsafe-eval'") {
+                    if val.contains("script-src")
+                        && !val.contains("'unsafe-inline'")
+                        && !val.contains("'unsafe-eval'")
+                    {
                         findings.push(VulnerabilityFinding {
                             title: "Strong Content-Security-Policy".to_string(),
                             severity: Severity::Info,
@@ -713,7 +746,13 @@ impl VulnerabilityScanner {
                 if let Some(hsts) = headers.get("strict-transport-security") {
                     let val = hsts.to_str().unwrap_or("");
                     if val.contains("max-age=") {
-                        let max_age_str = val.split("max-age=").nth(1).unwrap_or("0").split(';').next().unwrap_or("0");
+                        let max_age_str = val
+                            .split("max-age=")
+                            .nth(1)
+                            .unwrap_or("0")
+                            .split(';')
+                            .next()
+                            .unwrap_or("0");
                         if let Ok(max_age) = max_age_str.trim().parse::<u64>() {
                             if max_age >= 31536000 {
                                 findings.push(VulnerabilityFinding {
@@ -761,7 +800,9 @@ impl VulnerabilityScanner {
                             title: "X-Content-Type-Options Present".to_string(),
                             severity: Severity::Info,
                             status: ScanStatus::NotVulnerable,
-                            description: "The X-Content-Type-Options header prevents MIME-type sniffing.".to_string(),
+                            description:
+                                "The X-Content-Type-Options header prevents MIME-type sniffing."
+                                    .to_string(),
                             details: vec![format!("Value: {}", val)],
                             remediation: "No action needed.".to_string(),
                             cwe_id: Some("CWE-693".to_string()),
@@ -791,7 +832,8 @@ impl VulnerabilityScanner {
                             status: ScanStatus::NotVulnerable,
                             description: "The X-XSS-Protection header is configured.".to_string(),
                             details: vec![format!("Value: {}", val)],
-                            remediation: "No action needed. Consider using CSP instead.".to_string(),
+                            remediation: "No action needed. Consider using CSP instead."
+                                .to_string(),
                             cwe_id: Some("CWE-79".to_string()),
                             references: vec![],
                         });
@@ -812,12 +854,16 @@ impl VulnerabilityScanner {
                 // Check for Referrer-Policy
                 if let Some(rp) = headers.get("referrer-policy") {
                     let val = rp.to_str().unwrap_or("");
-                    if val == "no-referrer" || val == "strict-origin-when-cross-origin" || val == "same-origin" {
+                    if val == "no-referrer"
+                        || val == "strict-origin-when-cross-origin"
+                        || val == "same-origin"
+                    {
                         findings.push(VulnerabilityFinding {
                             title: "Referrer-Policy Configured".to_string(),
                             severity: Severity::Info,
                             status: ScanStatus::NotVulnerable,
-                            description: "The Referrer-Policy header is properly configured.".to_string(),
+                            description: "The Referrer-Policy header is properly configured."
+                                .to_string(),
                             details: vec![format!("Value: {}", val)],
                             remediation: "No action needed.".to_string(),
                             cwe_id: Some("CWE-200".to_string()),
@@ -828,9 +874,13 @@ impl VulnerabilityScanner {
                             title: "Weak Referrer-Policy".to_string(),
                             severity: Severity::Low,
                             status: ScanStatus::Warning,
-                            description: "The Referrer-Policy is set but could be more restrictive.".to_string(),
+                            description:
+                                "The Referrer-Policy is set but could be more restrictive."
+                                    .to_string(),
                             details: vec![format!("Value: {}", val)],
-                            remediation: "Consider using 'strict-origin-when-cross-origin' or 'no-referrer'.".to_string(),
+                            remediation:
+                                "Consider using 'strict-origin-when-cross-origin' or 'no-referrer'."
+                                    .to_string(),
                             cwe_id: Some("CWE-200".to_string()),
                             references: vec![],
                         });
@@ -856,7 +906,10 @@ impl VulnerabilityScanner {
                         severity: Severity::Info,
                         status: ScanStatus::NotVulnerable,
                         description: "The Permissions-Policy header is configured.".to_string(),
-                        details: vec![format!("Value: {}", val.chars().take(200).collect::<String>())],
+                        details: vec![format!(
+                            "Value: {}",
+                            val.chars().take(200).collect::<String>()
+                        )],
                         remediation: "No action needed.".to_string(),
                         cwe_id: None,
                         references: vec![],
@@ -1128,7 +1181,13 @@ impl VulnerabilityScanner {
             "pg_exec",
         ];
 
-        let payloads = ["'", "' OR '1'='1", "' OR 1=1--", "\" OR 1=1--", "1' AND '1'='1"];
+        let payloads = [
+            "'",
+            "' OR '1'='1",
+            "' OR 1=1--",
+            "\" OR 1=1--",
+            "1' AND '1'='1",
+        ];
 
         let mut confirmed = 0u32;
         let mut confirmed_samples: Vec<String> = Vec::new();
@@ -1313,7 +1372,10 @@ impl VulnerabilityScanner {
                 let html_lower = html.to_lowercase();
 
                 // Check for directory listing
-                if html_lower.contains("index of /") || html_lower.contains("directory listing") || html_lower.contains("parent directory") {
+                if html_lower.contains("index of /")
+                    || html_lower.contains("directory listing")
+                    || html_lower.contains("parent directory")
+                {
                     findings.push(VulnerabilityFinding {
                         title: "Directory Listing Enabled".to_string(),
                         severity: Severity::Medium,
@@ -1328,14 +1390,15 @@ impl VulnerabilityScanner {
 
                 // Check for backup files exposed
                 let backup_extensions = vec![
-                    ".bak", ".backup", ".old", ".orig", ".save", ".swp",
-                    ".sql", ".dump", ".tar.gz", ".zip",
+                    ".bak", ".backup", ".old", ".orig", ".save", ".swp", ".sql", ".dump",
+                    ".tar.gz", ".zip",
                 ];
 
                 let document = Html::parse_document(&html);
                 let a_selector = Selector::parse("a[href]").ok();
                 if let Some(sel) = a_selector {
-                    let links: Vec<String> = document.select(&sel)
+                    let links: Vec<String> = document
+                        .select(&sel)
                         .filter_map(|e| e.value().attr("href").map(|h| h.to_string()))
                         .collect();
 
@@ -1381,8 +1444,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Directory Traversal Detection".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -1397,9 +1468,21 @@ impl VulnerabilityScanner {
         let mut findings = Vec::new();
 
         let redirect_params = vec![
-            "url", "redirect", "redirect_url", "redirect_uri", "return",
-            "return_to", "next", "goto", "continue", "dest", "destination",
-            "redir", "redirect_uri", "return_url", "checkout_url",
+            "url",
+            "redirect",
+            "redirect_url",
+            "redirect_uri",
+            "return",
+            "return_to",
+            "next",
+            "goto",
+            "continue",
+            "dest",
+            "destination",
+            "redir",
+            "redirect_uri",
+            "return_url",
+            "checkout_url",
         ];
 
         // Active open-redirect probe: for each redirect-like parameter, send an
@@ -1414,7 +1497,10 @@ impl VulnerabilityScanner {
             if let Ok(parsed) = Url::parse(url) {
                 let params = Self::url_params(&parsed);
                 for (param, _) in &params {
-                    if !redirect_params.iter().any(|p| param.to_lowercase().contains(p)) {
+                    if !redirect_params
+                        .iter()
+                        .any(|p| param.to_lowercase().contains(p))
+                    {
                         continue;
                     }
                     let mut test = parsed.clone();
@@ -1459,7 +1545,8 @@ impl VulnerabilityScanner {
 
         // Check current URL for redirect parameters
         if let Ok(parsed_url) = Url::parse(&self.config.url) {
-            let params: Vec<(String, String)> = parsed_url.query_pairs()
+            let params: Vec<(String, String)> = parsed_url
+                .query_pairs()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect();
 
@@ -1467,7 +1554,10 @@ impl VulnerabilityScanner {
                 let key_lower = key.to_lowercase();
                 if redirect_params.iter().any(|p| key_lower.contains(p)) {
                     // Check if the parameter contains an external URL
-                    if value.starts_with("http://") || value.starts_with("https://") || value.starts_with("//") {
+                    if value.starts_with("http://")
+                        || value.starts_with("https://")
+                        || value.starts_with("//")
+                    {
                         findings.push(VulnerabilityFinding {
                             title: "Potential Open Redirect via URL Parameter".to_string(),
                             severity: Severity::High,
@@ -1492,16 +1582,22 @@ impl VulnerabilityScanner {
                 let html_lower = html.to_lowercase();
 
                 // Check for meta refresh redirect
-                if html_lower.contains("meta http-equiv=\"refresh\"") || html_lower.contains("meta http-equiv='refresh'") {
+                if html_lower.contains("meta http-equiv=\"refresh\"")
+                    || html_lower.contains("meta http-equiv='refresh'")
+                {
                     let document = Html::parse_document(&html);
-                    let meta_selector = Selector::parse("meta[http-equiv='refresh'], meta[http-equiv=\"refresh\"]").ok();
+                    let meta_selector =
+                        Selector::parse("meta[http-equiv='refresh'], meta[http-equiv=\"refresh\"]")
+                            .ok();
                     if let Some(sel) = meta_selector {
                         let metas: Vec<_> = document.select(&sel).collect();
                         for meta in &metas {
                             if let Some(content) = meta.value().attr("content") {
                                 if content.to_lowercase().contains("url=") {
                                     let redirect_url = content.split("url=").nth(1).unwrap_or("");
-                                    if redirect_url.starts_with("http://") || redirect_url.starts_with("https://") {
+                                    if redirect_url.starts_with("http://")
+                                        || redirect_url.starts_with("https://")
+                                    {
                                         findings.push(VulnerabilityFinding {
                                             title: "Meta Refresh External Redirect".to_string(),
                                             severity: Severity::Medium,
@@ -1597,7 +1693,13 @@ impl VulnerabilityScanner {
             } else {
                 ScanStatus::NotVulnerable
             },
-            severity: if has_vuln { Severity::High } else if has_warning { Severity::Medium } else { Severity::Info },
+            severity: if has_vuln {
+                Severity::High
+            } else if has_warning {
+                Severity::Medium
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -1630,11 +1732,17 @@ impl VulnerabilityScanner {
                         if method == "POST" || method == "PUT" || method == "DELETE" {
                             let has_csrf_token = if let Some(isel) = &input_selector {
                                 form.select(isel).any(|input| {
-                                    let name = input.value().attr("name").unwrap_or("").to_lowercase();
-                                    let input_type = input.value().attr("type").unwrap_or("").to_lowercase();
-                                    name.contains("csrf") || name.contains("token") || name.contains("_token")
-                                        || name.contains("nonce") || name.contains("xsrf")
-                                        || (input_type == "hidden" && (name.contains("csrf") || name.contains("token")))
+                                    let name =
+                                        input.value().attr("name").unwrap_or("").to_lowercase();
+                                    let input_type =
+                                        input.value().attr("type").unwrap_or("").to_lowercase();
+                                    name.contains("csrf")
+                                        || name.contains("token")
+                                        || name.contains("_token")
+                                        || name.contains("nonce")
+                                        || name.contains("xsrf")
+                                        || (input_type == "hidden"
+                                            && (name.contains("csrf") || name.contains("token")))
                                 })
                             } else {
                                 false
@@ -1642,7 +1750,8 @@ impl VulnerabilityScanner {
 
                             // Also check for CSRF meta tags
                             let has_csrf_meta = {
-                                let meta_selector = Selector::parse("meta[name*='csrf'], meta[name*='token']").ok();
+                                let meta_selector =
+                                    Selector::parse("meta[name*='csrf'], meta[name*='token']").ok();
                                 if let Some(msel) = meta_selector {
                                     document.select(&msel).count() > 0
                                 } else {
@@ -1652,8 +1761,10 @@ impl VulnerabilityScanner {
 
                             // Check for custom headers (X-CSRF-Token, X-XSRF-TOKEN)
                             // Note: We can't check response headers for this from HTML, but we check patterns in JS
-                            let has_csrf_header = html.contains("X-CSRF-Token") || html.contains("X-XSRF-TOKEN")
-                                || html.contains("x-csrf-token") || html.contains("x-xsrf-token");
+                            let has_csrf_header = html.contains("X-CSRF-Token")
+                                || html.contains("X-XSRF-TOKEN")
+                                || html.contains("x-csrf-token")
+                                || html.contains("x-xsrf-token");
 
                             if !has_csrf_token && !has_csrf_meta && !has_csrf_header {
                                 findings.push(VulnerabilityFinding {
@@ -1675,12 +1786,16 @@ impl VulnerabilityScanner {
                                     title: format!("Form #{} Has CSRF Protection", i + 1),
                                     severity: Severity::Info,
                                     status: ScanStatus::NotVulnerable,
-                                    description: format!("Form ({}) has CSRF protection implemented.", method),
+                                    description: format!(
+                                        "Form ({}) has CSRF protection implemented.",
+                                        method
+                                    ),
                                     details: vec![
                                         format!("Form action: {}", action),
                                         "CSRF token or protection mechanism detected".to_string(),
                                     ],
-                                    remediation: "No action needed. CSRF protection is in place.".to_string(),
+                                    remediation: "No action needed. CSRF protection is in place."
+                                        .to_string(),
                                     cwe_id: Some("CWE-352".to_string()),
                                     references: vec![],
                                 });
@@ -1693,9 +1808,13 @@ impl VulnerabilityScanner {
                             title: "No Forms Detected".to_string(),
                             severity: Severity::Info,
                             status: ScanStatus::NotVulnerable,
-                            description: "No forms were found on the page, so CSRF risk is minimal.".to_string(),
+                            description:
+                                "No forms were found on the page, so CSRF risk is minimal."
+                                    .to_string(),
                             details: vec![],
-                            remediation: "Ensure any AJAX-based state changes use anti-CSRF tokens.".to_string(),
+                            remediation:
+                                "Ensure any AJAX-based state changes use anti-CSRF tokens."
+                                    .to_string(),
                             cwe_id: Some("CWE-352".to_string()),
                             references: vec![],
                         });
@@ -1720,8 +1839,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "CSRF Vulnerability Detection".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -1740,7 +1867,8 @@ impl VulnerabilityScanner {
                 // headers is already a HeaderMap
 
                 let has_xfo = headers.contains_key("x-frame-options");
-                let has_csp_frame = headers.get("content-security-policy")
+                let has_csp_frame = headers
+                    .get("content-security-policy")
                     .and_then(|v| v.to_str().ok())
                     .map(|v| v.contains("frame-ancestors"))
                     .unwrap_or(false);
@@ -1749,7 +1877,8 @@ impl VulnerabilityScanner {
                     let mut details = Vec::new();
                     if has_xfo {
                         if let Some(val) = headers.get("x-frame-options") {
-                            details.push(format!("X-Frame-Options: {}", val.to_str().unwrap_or("")));
+                            details
+                                .push(format!("X-Frame-Options: {}", val.to_str().unwrap_or("")));
                         }
                     }
                     if has_csp_frame {
@@ -1806,8 +1935,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Clickjacking Detection".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::Medium } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::Medium
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -1923,8 +2060,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Mixed Content Detection".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::Medium } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::Medium
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -1995,7 +2140,10 @@ impl VulnerabilityScanner {
                 }
 
                 // Check for .env file exposure
-                if html_lower.contains(".env") || html_lower.contains("db_password") || html_lower.contains("database_url") {
+                if html_lower.contains(".env")
+                    || html_lower.contains("db_password")
+                    || html_lower.contains("database_url")
+                {
                     findings.push(VulnerabilityFinding {
                         title: "Environment Variable Exposure".to_string(),
                         severity: Severity::Critical,
@@ -2033,7 +2181,9 @@ impl VulnerabilityScanner {
                         title: "No Obvious Information Disclosure Detected".to_string(),
                         severity: Severity::Info,
                         status: ScanStatus::NotVulnerable,
-                        description: "No obvious sensitive information was found in the page source.".to_string(),
+                        description:
+                            "No obvious sensitive information was found in the page source."
+                                .to_string(),
                         details: vec![],
                         remediation: "Continue regular security audits.".to_string(),
                         cwe_id: None,
@@ -2059,8 +2209,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Information Disclosure".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -2163,8 +2321,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "SSL/TLS Configuration".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::Critical } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::Critical
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -2209,11 +2375,20 @@ impl VulnerabilityScanner {
                             title: "Cookie Missing Secure Flag".to_string(),
                             severity: Severity::Medium,
                             status: ScanStatus::Vulnerable,
-                            description: "A cookie is set without the Secure flag on an HTTPS site.".to_string(),
-                            details: vec![format!("Cookie: {}", cookie.chars().take(200).collect::<String>())],
-                            remediation: "Add the 'Secure' flag to all cookies set over HTTPS.".to_string(),
+                            description:
+                                "A cookie is set without the Secure flag on an HTTPS site."
+                                    .to_string(),
+                            details: vec![format!(
+                                "Cookie: {}",
+                                cookie.chars().take(200).collect::<String>()
+                            )],
+                            remediation: "Add the 'Secure' flag to all cookies set over HTTPS."
+                                .to_string(),
                             cwe_id: Some("CWE-614".to_string()),
-                            references: vec!["https://owasp.org/www-community/controls/SecureCookieAttribute".to_string()],
+                            references: vec![
+                                "https://owasp.org/www-community/controls/SecureCookieAttribute"
+                                    .to_string(),
+                            ],
                         });
                     }
 
@@ -2249,8 +2424,15 @@ impl VulnerabilityScanner {
 
                     // Check for sensitive cookie names
                     let sensitive_names = vec![
-                        "session", "token", "auth", "jwt", "access_token",
-                        "refresh_token", "api_key", "secret", "password",
+                        "session",
+                        "token",
+                        "auth",
+                        "jwt",
+                        "access_token",
+                        "refresh_token",
+                        "api_key",
+                        "secret",
+                        "password",
                     ];
 
                     let cookie_name = cookie.split('=').next().unwrap_or("").trim().to_lowercase();
@@ -2292,8 +2474,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Cookie Security Analysis".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -2362,9 +2552,15 @@ impl VulnerabilityScanner {
                                 title: format!("Technology Header '{}' Detected", header_name),
                                 severity: Severity::Low,
                                 status: ScanStatus::Warning,
-                                description: format!("The '{}' header reveals technology information.", header_name),
+                                description: format!(
+                                    "The '{}' header reveals technology information.",
+                                    header_name
+                                ),
                                 details: vec![format!("{}: {}", header_name, val_str)],
-                                remediation: format!("Remove the '{}' header in production.", header_name),
+                                remediation: format!(
+                                    "Remove the '{}' header in production.",
+                                    header_name
+                                ),
                                 cwe_id: Some("CWE-200".to_string()),
                                 references: vec![],
                             });
@@ -2377,7 +2573,8 @@ impl VulnerabilityScanner {
                         title: "No Server Information Leakage Detected".to_string(),
                         severity: Severity::Info,
                         status: ScanStatus::NotVulnerable,
-                        description: "No sensitive server information headers were found.".to_string(),
+                        description: "No sensitive server information headers were found."
+                            .to_string(),
                         details: vec![],
                         remediation: "No action needed.".to_string(),
                         cwe_id: None,
@@ -2403,8 +2600,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Server Information Leakage".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::Medium } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::Medium
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -2449,12 +2654,16 @@ impl VulnerabilityScanner {
                         if let Some(isel) = &input_selector {
                             let inputs: Vec<_> = form.select(isel).collect();
                             for input in &inputs {
-                                let input_type = input.value().attr("type").unwrap_or("text").to_lowercase();
+                                let input_type =
+                                    input.value().attr("type").unwrap_or("text").to_lowercase();
                                 let name = input.value().attr("name").unwrap_or("").to_lowercase();
                                 let autocomplete = input.value().attr("autocomplete").unwrap_or("");
 
-                                if (input_type == "password" || name.contains("password") || name.contains("credit")
-                                    || name.contains("ssn") || name.contains("secret"))
+                                if (input_type == "password"
+                                    || name.contains("password")
+                                    || name.contains("credit")
+                                    || name.contains("ssn")
+                                    || name.contains("secret"))
                                     && autocomplete != "off"
                                 {
                                     findings.push(VulnerabilityFinding {
@@ -2483,8 +2692,11 @@ impl VulnerabilityScanner {
                                 let name = input.value().attr("name").unwrap_or("").to_lowercase();
                                 let value = input.value().attr("value").unwrap_or("");
 
-                                if name.contains("token") || name.contains("secret") || name.contains("key")
-                                    || name.contains("password") || name.contains("auth")
+                                if name.contains("token")
+                                    || name.contains("secret")
+                                    || name.contains("key")
+                                    || name.contains("password")
+                                    || name.contains("auth")
                                 {
                                     findings.push(VulnerabilityFinding {
                                         title: "Sensitive Data in Hidden Form Field".to_string(),
@@ -2507,9 +2719,13 @@ impl VulnerabilityScanner {
                         if method == "GET" {
                             let sensitive_in_get = if let Some(isel) = &input_selector {
                                 form.select(isel).any(|input| {
-                                    let input_type = input.value().attr("type").unwrap_or("text").to_lowercase();
-                                    let name = input.value().attr("name").unwrap_or("").to_lowercase();
-                                    input_type == "password" || name.contains("password") || name.contains("secret")
+                                    let input_type =
+                                        input.value().attr("type").unwrap_or("text").to_lowercase();
+                                    let name =
+                                        input.value().attr("name").unwrap_or("").to_lowercase();
+                                    input_type == "password"
+                                        || name.contains("password")
+                                        || name.contains("secret")
                                 })
                             } else {
                                 false
@@ -2562,8 +2778,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Form Security Analysis".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -2648,11 +2872,21 @@ impl VulnerabilityScanner {
 
                 // Check for file inclusion patterns in URLs/links
                 let lfi_patterns = vec![
-                    "../", "..%2f", "..\\", "..%5c",
-                    "/etc/passwd", "/etc/shadow", "/proc/self",
-                    "C:\\Windows", "C%3A%5CWindows",
-                    "php://filter", "php://input", "expect://",
-                    "data://", "zip://", "phar://",
+                    "../",
+                    "..%2f",
+                    "..\\",
+                    "..%5c",
+                    "/etc/passwd",
+                    "/etc/shadow",
+                    "/proc/self",
+                    "C:\\Windows",
+                    "C%3A%5CWindows",
+                    "php://filter",
+                    "php://input",
+                    "expect://",
+                    "data://",
+                    "zip://",
+                    "phar://",
                 ];
 
                 let mut lfi_found = Vec::new();
@@ -2665,7 +2899,10 @@ impl VulnerabilityScanner {
                             let href_lower = href.to_lowercase();
                             for pattern in &lfi_patterns {
                                 if href_lower.contains(&pattern.to_lowercase()) {
-                                    lfi_found.push(format!("Link href: {} (pattern: {})", href, pattern));
+                                    lfi_found.push(format!(
+                                        "Link href: {} (pattern: {})",
+                                        href, pattern
+                                    ));
                                 }
                             }
                         }
@@ -2695,8 +2932,13 @@ impl VulnerabilityScanner {
 
                 // Check for include/require in visible content (possible code disclosure)
                 let code_patterns = vec![
-                    "include(", "require(", "include_once(", "require_once(",
-                    "import(", "from(", "loadfile(",
+                    "include(",
+                    "require(",
+                    "include_once(",
+                    "require_once(",
+                    "import(",
+                    "from(",
+                    "loadfile(",
                 ];
 
                 for pattern in &code_patterns {
@@ -2719,7 +2961,8 @@ impl VulnerabilityScanner {
                         title: "No File Inclusion Detected".to_string(),
                         severity: Severity::Info,
                         status: ScanStatus::NotVulnerable,
-                        description: "No obvious file inclusion vulnerabilities were found.".to_string(),
+                        description: "No obvious file inclusion vulnerabilities were found."
+                            .to_string(),
                         details: vec![],
                         remediation: "No action needed.".to_string(),
                         cwe_id: None,
@@ -2745,8 +2988,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "File Inclusion Detection".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::Critical } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::Critical
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -2766,28 +3017,29 @@ impl VulnerabilityScanner {
 
                 // Check for outdated WordPress
                 if html_lower.contains("wp-content") || html_lower.contains("wp-includes") {
-                let version_patterns = vec![
-                    "wp-content/themes/",
-                    "wp-includes/js/jquery/jquery.min.js?ver=",
-                    "content=\"WordPress ",
-                ];
+                    let version_patterns = vec![
+                        "wp-content/themes/",
+                        "wp-includes/js/jquery/jquery.min.js?ver=",
+                        "content=\"WordPress ",
+                    ];
 
-                let mut wp_version = None;
-                for pattern in &version_patterns {
-                    if let Some(start_idx) = html.find(pattern) {
-                        let chunk = &html[start_idx..(start_idx + 200).min(html.len())];
-                        if let Some(ver_start) = chunk.find("ver=") {
-                            let ver_end = chunk[ver_start + 4..].find('&').unwrap_or(20);
-                            wp_version = Some(chunk[ver_start + 4..ver_start + 4 + ver_end].to_string());
-                        } else if let Some(ver_start) = chunk.find("WordPress ") {
-                            let ver_chunk = &chunk[ver_start + 10..];
-                            let ver_end = ver_chunk.find('"').unwrap_or(10);
-                            if ver_end > 0 {
-                                wp_version = Some(ver_chunk[..ver_end].to_string());
+                    let mut wp_version = None;
+                    for pattern in &version_patterns {
+                        if let Some(start_idx) = html.find(pattern) {
+                            let chunk = &html[start_idx..(start_idx + 200).min(html.len())];
+                            if let Some(ver_start) = chunk.find("ver=") {
+                                let ver_end = chunk[ver_start + 4..].find('&').unwrap_or(20);
+                                wp_version =
+                                    Some(chunk[ver_start + 4..ver_start + 4 + ver_end].to_string());
+                            } else if let Some(ver_start) = chunk.find("WordPress ") {
+                                let ver_chunk = &chunk[ver_start + 10..];
+                                let ver_end = ver_chunk.find('"').unwrap_or(10);
+                                if ver_end > 0 {
+                                    wp_version = Some(ver_chunk[..ver_end].to_string());
+                                }
                             }
                         }
                     }
-                }
 
                     findings.push(VulnerabilityFinding {
                         title: "WordPress CMS Detected".to_string(),
@@ -2834,9 +3086,15 @@ impl VulnerabilityScanner {
                                 title: "Outdated Bootstrap Version".to_string(),
                                 severity: Severity::Low,
                                 status: ScanStatus::Warning,
-                                description: "The site uses an outdated Bootstrap version.".to_string(),
-                                details: vec![format!("Found in: {}", &html_lower[bs_start..(bs_start + 100).min(html_lower.len())])],
-                                remediation: "Update Bootstrap to version 5.x for the latest security fixes.".to_string(),
+                                description: "The site uses an outdated Bootstrap version."
+                                    .to_string(),
+                                details: vec![format!(
+                                    "Found in: {}",
+                                    &html_lower[bs_start..(bs_start + 100).min(html_lower.len())]
+                                )],
+                                remediation:
+                                    "Update Bootstrap to version 5.x for the latest security fixes."
+                                        .to_string(),
                                 cwe_id: Some("CWE-1104".to_string()),
                                 references: vec![],
                             });
@@ -2866,15 +3124,21 @@ impl VulnerabilityScanner {
                 // Check for outdated React
                 if html_lower.contains("react") {
                     if let Some(react_start) = html_lower.find("react") {
-                        let chunk = &html_lower[react_start..(react_start + 200).min(html_lower.len())];
+                        let chunk =
+                            &html_lower[react_start..(react_start + 200).min(html_lower.len())];
                         if chunk.contains("15.") || chunk.contains("14.") || chunk.contains("16.") {
                             findings.push(VulnerabilityFinding {
                                 title: "Potentially Outdated React Version".to_string(),
                                 severity: Severity::Low,
                                 status: ScanStatus::Warning,
                                 description: "The site may use an older React version.".to_string(),
-                                details: vec![format!("Found: {}", &html_lower[react_start..(react_start + 100).min(html_lower.len())])],
-                                remediation: "Update React to the latest stable version.".to_string(),
+                                details: vec![format!(
+                                    "Found: {}",
+                                    &html_lower
+                                        [react_start..(react_start + 100).min(html_lower.len())]
+                                )],
+                                remediation: "Update React to the latest stable version."
+                                    .to_string(),
                                 cwe_id: Some("CWE-1104".to_string()),
                                 references: vec![],
                             });
@@ -2921,7 +3185,8 @@ impl VulnerabilityScanner {
                         title: "No Outdated Software Detected".to_string(),
                         severity: Severity::Info,
                         status: ScanStatus::NotVulnerable,
-                        description: "No obviously outdated software versions were detected.".to_string(),
+                        description: "No obviously outdated software versions were detected."
+                            .to_string(),
                         details: vec![],
                         remediation: "Continue keeping all software up-to-date.".to_string(),
                         cwe_id: None,
@@ -2947,8 +3212,16 @@ impl VulnerabilityScanner {
 
         ScanResult {
             check_name: "Outdated Software Detection".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3026,8 +3299,16 @@ impl VulnerabilityScanner {
         let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
         ScanResult {
             check_name: "CORS Misconfiguration".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3044,7 +3325,11 @@ impl VulnerabilityScanner {
 
         for url in &targets {
             if let Ok(resp) = self.client.get(url).send().await {
-                match resp.headers().get("content-security-policy").and_then(|v| v.to_str().ok()) {
+                match resp
+                    .headers()
+                    .get("content-security-policy")
+                    .and_then(|v| v.to_str().ok())
+                {
                     Some(csp) => {
                         let csp_l = csp.to_lowercase();
                         if csp_l.contains("unsafe-inline")
@@ -3095,8 +3380,16 @@ impl VulnerabilityScanner {
         let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
         ScanResult {
             check_name: "Content-Security-Policy".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3159,8 +3452,16 @@ impl VulnerabilityScanner {
         let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
         ScanResult {
             check_name: "Subresource Integrity".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3227,8 +3528,16 @@ impl VulnerabilityScanner {
         let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
         ScanResult {
             check_name: "Exposed Sensitive Files".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3242,7 +3551,15 @@ impl VulnerabilityScanner {
         let start = std::time::Instant::now();
         let mut findings = Vec::new();
         let targets = vec![self.config.url.clone()];
-        let dirs = ["/images/", "/css/", "/js/", "/uploads/", "/assets/", "/backup/", "/files/"];
+        let dirs = [
+            "/images/",
+            "/css/",
+            "/js/",
+            "/uploads/",
+            "/assets/",
+            "/backup/",
+            "/files/",
+        ];
 
         for url in &targets {
             if let Ok(base) = Url::parse(url) {
@@ -3251,7 +3568,9 @@ impl VulnerabilityScanner {
                         if let Ok(resp) = self.client.get(test.to_string()).send().await {
                             if resp.status() == reqwest::StatusCode::OK {
                                 if let Ok(body) = resp.text().await {
-                                    if body.contains("Index of ") || body.contains("<title>Index of") {
+                                    if body.contains("Index of ")
+                                        || body.contains("<title>Index of")
+                                    {
                                         findings.push(VulnerabilityFinding {
                                             title: "Directory Listing Enabled".to_string(),
                                             severity: Severity::Medium,
@@ -3276,7 +3595,8 @@ impl VulnerabilityScanner {
                 title: "No Directory Listing Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "No enabled directory listings were found on probed paths.".to_string(),
+                description: "No enabled directory listings were found on probed paths."
+                    .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -3287,8 +3607,16 @@ impl VulnerabilityScanner {
         let has_vuln = findings.iter().any(|f| f.status == ScanStatus::Vulnerable);
         ScanResult {
             check_name: "Directory Listing".to_string(),
-            status: if has_vuln { ScanStatus::Vulnerable } else { ScanStatus::NotVulnerable },
-            severity: if has_vuln { Severity::High } else { Severity::Info },
+            status: if has_vuln {
+                ScanStatus::Vulnerable
+            } else {
+                ScanStatus::NotVulnerable
+            },
+            severity: if has_vuln {
+                Severity::High
+            } else {
+                Severity::Info
+            },
             findings,
             scan_duration_ms: start.elapsed().as_millis() as u64,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3397,7 +3725,10 @@ impl VulnerabilityScanner {
             .send_custom(
                 reqwest::Method::POST,
                 &url,
-                vec![("Transfer-Encoding", "chunked"), ("Transfer-Encoding", "xchunked")],
+                vec![
+                    ("Transfer-Encoding", "chunked"),
+                    ("Transfer-Encoding", "xchunked"),
+                ],
                 Some("0\r\n\r\n".to_string()),
             )
             .await
@@ -3421,7 +3752,9 @@ impl VulnerabilityScanner {
                 title: "No CL/TE Smuggling Precondition Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "Ambiguous Content-Length/Transfer-Encoding requests were rejected as expected.".to_string(),
+                description:
+                    "Ambiguous Content-Length/Transfer-Encoding requests were rejected as expected."
+                        .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -3548,7 +3881,8 @@ impl VulnerabilityScanner {
                 title: "No SSTI Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "Template expressions were not evaluated in reflected responses.".to_string(),
+                description: "Template expressions were not evaluated in reflected responses."
+                    .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -3627,7 +3961,9 @@ impl VulnerabilityScanner {
                 title: "No NoSQL Injection Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "NoSQL operator/auth-bypass behavior was not observed on probed endpoints.".to_string(),
+                description:
+                    "NoSQL operator/auth-bypass behavior was not observed on probed endpoints."
+                        .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -3687,7 +4023,9 @@ impl VulnerabilityScanner {
                 title: "No CRLF Injection Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "CRLF sequences in parameters were not reflected into response headers.".to_string(),
+                description:
+                    "CRLF sequences in parameters were not reflected into response headers."
+                        .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -3862,7 +4200,8 @@ impl VulnerabilityScanner {
                 title: "No Exposed GraphQL Endpoint Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "No GraphQL introspection/batching surface was found on probed paths.".to_string(),
+                description: "No GraphQL introspection/batching surface was found on probed paths."
+                    .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -3924,7 +4263,10 @@ impl VulnerabilityScanner {
                         references: vec!["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/xxe".to_string()],
                     });
                     break 'outer;
-                } else if bl.contains("entity") || bl.contains("dtd") || bl.contains("xml parsing error") {
+                } else if bl.contains("entity")
+                    || bl.contains("dtd")
+                    || bl.contains("xml parsing error")
+                {
                     findings.push(VulnerabilityFinding {
                         title: "XML Parsing Attack Surface (XXE possible)".to_string(),
                         severity: Severity::Medium,
@@ -3945,7 +4287,8 @@ impl VulnerabilityScanner {
                 title: "No XXE Surface Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "XML external entity parsing was not observed on probed endpoints.".to_string(),
+                description: "XML external entity parsing was not observed on probed endpoints."
+                    .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -4078,7 +4421,8 @@ impl VulnerabilityScanner {
                 title: "No Time-based Blind Injection Detected".to_string(),
                 severity: Severity::Info,
                 status: ScanStatus::NotVulnerable,
-                description: "No significant response delays were induced by time-delay payloads.".to_string(),
+                description: "No significant response delays were induced by time-delay payloads."
+                    .to_string(),
                 details: vec![],
                 remediation: "No action needed.".to_string(),
                 cwe_id: None,
@@ -4294,12 +4638,28 @@ impl ApiScanner {
 
     async fn discover_endpoints(&self) -> Vec<String> {
         let common_endpoints = vec![
-            "/api", "/api/v1", "/api/v2", "/api/v3",
-            "/api/users", "/api/auth", "/api/login", "/api/register",
-            "/api/admin", "/api/config", "/api/health", "/api/status",
-            "/api/docs", "/api/swagger", "/api/graphql",
-            "/rest", "/rest/v1", "/v1", "/v2",
-            "/graphql", "/graphiql", "/playground",
+            "/api",
+            "/api/v1",
+            "/api/v2",
+            "/api/v3",
+            "/api/users",
+            "/api/auth",
+            "/api/login",
+            "/api/register",
+            "/api/admin",
+            "/api/config",
+            "/api/health",
+            "/api/status",
+            "/api/docs",
+            "/api/swagger",
+            "/api/graphql",
+            "/rest",
+            "/rest/v1",
+            "/v1",
+            "/v2",
+            "/graphql",
+            "/graphiql",
+            "/playground",
         ];
 
         let mut discovered = Vec::new();
@@ -4314,9 +4674,17 @@ impl ApiScanner {
         discovered
     }
 
-    async fn make_request(&self, method: &str, endpoint: &str, body: Option<&str>) -> std::result::Result<(u16, std::collections::HashMap<String, String>, String, u64), String> {
+    async fn make_request(
+        &self,
+        method: &str,
+        endpoint: &str,
+        body: Option<&str>,
+    ) -> std::result::Result<(u16, std::collections::HashMap<String, String>, String, u64), String>
+    {
         let url = format!("{}{}", self.config.base_url, endpoint);
-        let mut req = self.client.request(method.parse().map_err(|e| format!("{}", e))?, &url);
+        let mut req = self
+            .client
+            .request(method.parse().map_err(|e| format!("{}", e))?, &url);
 
         match &self.config.auth_type {
             ApiAuthType::Bearer => {
@@ -4346,7 +4714,11 @@ impl ApiScanner {
         let resp = req.send().await.map_err(|e| e.to_string())?;
         let elapsed = start.elapsed().as_millis() as u64;
         let status = resp.status().as_u16();
-        let headers = resp.headers().iter().map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string())).collect();
+        let headers = resp
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
         let body = resp.text().await.map_err(|e| e.to_string())?;
 
         Ok((status, headers, body, elapsed))
@@ -4358,7 +4730,9 @@ impl ApiScanner {
 
         for id in &test_ids {
             let test_endpoint = endpoint.replace("{id}", id).replace(":id", id);
-            if let Ok((status, _, body, elapsed)) = self.make_request(method, &test_endpoint, None).await {
+            if let Ok((status, _, body, elapsed)) =
+                self.make_request(method, &test_endpoint, None).await
+            {
                 if status == 200 && !body.is_empty() && body != "null" {
                     results.push(ApiScanResult {
                         endpoint: test_endpoint.clone(),
@@ -4388,12 +4762,16 @@ impl ApiScanner {
 
     async fn test_bfla(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
         let mut results = Vec::new();
-        if method == "GET" { return results; }
+        if method == "GET" {
+            return results;
+        }
 
         let admin_endpoints = vec!["/api/admin", "/api/users/all", "/api/config", "/api/roles"];
         for admin_ep in &admin_endpoints {
             if endpoint.contains(admin_ep) {
-                if let Ok((status, _, _, elapsed)) = self.make_request(method, endpoint, Some("{}")).await {
+                if let Ok((status, _, _, elapsed)) =
+                    self.make_request(method, endpoint, Some("{}")).await
+                {
                     if status < 400 {
                         results.push(ApiScanResult {
                             endpoint: endpoint.to_string(),
@@ -4424,7 +4802,9 @@ impl ApiScanner {
 
     async fn test_mass_assignment(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
         let mut results = Vec::new();
-        if method != "POST" && method != "PUT" && method != "PATCH" { return results; }
+        if method != "POST" && method != "PUT" && method != "PATCH" {
+            return results;
+        }
 
         let payloads = vec![
             r#"{"role":"admin","isAdmin":true}"#,
@@ -4433,8 +4813,13 @@ impl ApiScanner {
         ];
 
         for payload in &payloads {
-            if let Ok((status, _, body, elapsed)) = self.make_request(method, endpoint, Some(payload)).await {
-                if status < 400 && !body.to_lowercase().contains("error") && !body.to_lowercase().contains("invalid") {
+            if let Ok((status, _, body, elapsed)) =
+                self.make_request(method, endpoint, Some(payload)).await
+            {
+                if status < 400
+                    && !body.to_lowercase().contains("error")
+                    && !body.to_lowercase().contains("invalid")
+                {
                     results.push(ApiScanResult {
                         endpoint: endpoint.to_string(),
                         method: method.to_string(),
@@ -4472,8 +4857,13 @@ impl ApiScanner {
         if method == "POST" || method == "PUT" || method == "PATCH" {
             for (name, payload, cwe) in &injection_payloads {
                 let body = format!(r#"{{"input": "{}"}}"#, payload);
-                if let Ok((status, _, resp_body, elapsed)) = self.make_request(method, endpoint, Some(&body)).await {
-                    if resp_body.to_lowercase().contains("error") || resp_body.to_lowercase().contains("syntax") || resp_body.to_lowercase().contains("mysql") {
+                if let Ok((status, _, resp_body, elapsed)) =
+                    self.make_request(method, endpoint, Some(&body)).await
+                {
+                    if resp_body.to_lowercase().contains("error")
+                        || resp_body.to_lowercase().contains("syntax")
+                        || resp_body.to_lowercase().contains("mysql")
+                    {
                         results.push(ApiScanResult {
                             endpoint: endpoint.to_string(),
                             method: method.to_string(),
@@ -4485,8 +4875,12 @@ impl ApiScanner {
                                 severity: Severity::Critical,
                                 status: ScanStatus::Vulnerable,
                                 description: format!("API endpoint appears vulnerable to {}", name),
-                                details: vec![format!("Payload '{}' triggered error response", payload)],
-                                remediation: "Use parameterized queries and input validation".to_string(),
+                                details: vec![format!(
+                                    "Payload '{}' triggered error response",
+                                    payload
+                                )],
+                                remediation: "Use parameterized queries and input validation"
+                                    .to_string(),
                                 cwe_id: Some(cwe.to_string()),
                                 references: vec![],
                             }],
@@ -4502,10 +4896,18 @@ impl ApiScanner {
 
     async fn test_auth_bypass(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
         let mut results = Vec::new();
-        if endpoint.contains("/admin") || endpoint.contains("/private") || endpoint.contains("/secure") {
+        if endpoint.contains("/admin")
+            || endpoint.contains("/private")
+            || endpoint.contains("/secure")
+        {
             let orig_auth = self.config.auth_type.clone();
             let url = format!("{}{}", self.config.base_url, endpoint);
-            if let Ok(resp) = self.client.request(method.parse().unwrap_or(reqwest::Method::GET), &url).send().await {
+            if let Ok(resp) = self
+                .client
+                .request(method.parse().unwrap_or(reqwest::Method::GET), &url)
+                .send()
+                .await
+            {
                 if resp.status().as_u16() < 400 {
                     results.push(ApiScanResult {
                         endpoint: endpoint.to_string(),
@@ -4514,12 +4916,19 @@ impl ApiScanner {
                         status: ScanStatus::Vulnerable,
                         severity: Severity::Critical,
                         findings: vec![VulnerabilityFinding {
-                            title: format!("Protected endpoint {} accessible without auth", endpoint),
+                            title: format!(
+                                "Protected endpoint {} accessible without auth",
+                                endpoint
+                            ),
                             severity: Severity::Critical,
                             status: ScanStatus::Vulnerable,
-                            description: "Authentication can be bypassed by omitting credentials".to_string(),
-                            details: vec!["Endpoint returned success without authentication".to_string()],
-                            remediation: "Require authentication on all protected endpoints".to_string(),
+                            description: "Authentication can be bypassed by omitting credentials"
+                                .to_string(),
+                            details: vec![
+                                "Endpoint returned success without authentication".to_string()
+                            ],
+                            remediation: "Require authentication on all protected endpoints"
+                                .to_string(),
                             cwe_id: Some("CWE-306".to_string()),
                             references: vec![],
                         }],
@@ -4538,8 +4947,13 @@ impl ApiScanner {
         if endpoint.contains("/login") || endpoint.contains("/auth") || endpoint.contains("/api") {
             let mut success_count = 0;
             for _ in 0..15 {
-                if let Ok((status, _, _, _)) = self.make_request(method, endpoint, Some(r#"{"test":"rate"}"#)).await {
-                    if status < 500 { success_count += 1; }
+                if let Ok((status, _, _, _)) = self
+                    .make_request(method, endpoint, Some(r#"{"test":"rate"}"#))
+                    .await
+                {
+                    if status < 500 {
+                        success_count += 1;
+                    }
                 }
             }
             if success_count >= 14 {
@@ -4570,13 +4984,18 @@ impl ApiScanner {
     async fn test_cors(&self, endpoint: &str, _method: &str) -> Vec<ApiScanResult> {
         let mut results = Vec::new();
         let url = format!("{}{}", self.config.base_url, endpoint);
-        if let Ok(resp) = self.client.request(reqwest::Method::OPTIONS, &url)
+        if let Ok(resp) = self
+            .client
+            .request(reqwest::Method::OPTIONS, &url)
             .header("Origin", "https://evil.example.com")
             .header("Access-Control-Request-Method", "GET")
-            .send().await
+            .send()
+            .await
         {
             if let Some(aca_origin) = resp.headers().get("access-control-allow-origin") {
-                if aca_origin.to_str().unwrap_or("") == "*" || aca_origin.to_str().unwrap_or("") == "https://evil.example.com" {
+                if aca_origin.to_str().unwrap_or("") == "*"
+                    || aca_origin.to_str().unwrap_or("") == "https://evil.example.com"
+                {
                     results.push(ApiScanResult {
                         endpoint: endpoint.to_string(),
                         method: "OPTIONS".to_string(),
@@ -4588,7 +5007,10 @@ impl ApiScanner {
                             severity: Severity::Medium,
                             status: ScanStatus::Vulnerable,
                             description: "API allows requests from untrusted origins".to_string(),
-                            details: vec![format!("Access-Control-Allow-Origin: {}", aca_origin.to_str().unwrap_or(""))],
+                            details: vec![format!(
+                                "Access-Control-Allow-Origin: {}",
+                                aca_origin.to_str().unwrap_or("")
+                            )],
                             remediation: "Restrict CORS to trusted origins only".to_string(),
                             cwe_id: Some("CWE-942".to_string()),
                             references: vec![],
@@ -4626,7 +5048,10 @@ impl ApiScanner {
                                 title: format!("{}", desc),
                                 severity: Severity::High,
                                 status: ScanStatus::Vulnerable,
-                                description: format!("API response contains sensitive data pattern: '{}'", pattern),
+                                description: format!(
+                                    "API response contains sensitive data pattern: '{}'",
+                                    pattern
+                                ),
                                 details: vec![format!("Found '{}' in response body", pattern)],
                                 remediation: "Remove sensitive data from API responses".to_string(),
                                 cwe_id: Some("CWE-200".to_string()),
@@ -4651,8 +5076,14 @@ impl ApiScanner {
                 r#"{"input": "${7*7}}"}"#,
             ];
             for payload in &payloads {
-                if let Ok((status, _, resp_body, elapsed)) = self.make_request(method, endpoint, Some(payload)).await {
-                    if status < 400 && (resp_body.contains("<script>") || resp_body.contains("etc/passwd") || resp_body.contains("49")) {
+                if let Ok((status, _, resp_body, elapsed)) =
+                    self.make_request(method, endpoint, Some(payload)).await
+                {
+                    if status < 400
+                        && (resp_body.contains("<script>")
+                            || resp_body.contains("etc/passwd")
+                            || resp_body.contains("49"))
+                    {
                         results.push(ApiScanResult {
                             endpoint: endpoint.to_string(),
                             method: method.to_string(),
@@ -4663,9 +5094,15 @@ impl ApiScanner {
                                 title: format!("Input validation bypass at {}", endpoint),
                                 severity: Severity::High,
                                 status: ScanStatus::Vulnerable,
-                                description: "API does not properly validate or sanitize input".to_string(),
-                                details: vec![format!("Payload '{}' reflected in response", payload)],
-                                remediation: "Implement strict input validation and output encoding".to_string(),
+                                description: "API does not properly validate or sanitize input"
+                                    .to_string(),
+                                details: vec![format!(
+                                    "Payload '{}' reflected in response",
+                                    payload
+                                )],
+                                remediation:
+                                    "Implement strict input validation and output encoding"
+                                        .to_string(),
                                 cwe_id: Some("CWE-20".to_string()),
                                 references: vec![],
                             }],
@@ -4682,9 +5119,14 @@ impl ApiScanner {
 
     async fn test_verb_tampering(&self, endpoint: &str, method: &str) -> Vec<ApiScanResult> {
         let mut results = Vec::new();
-        let alt_methods = if method == "GET" { vec!["POST", "PUT", "DELETE"] } else { vec!["GET"] };
+        let alt_methods = if method == "GET" {
+            vec!["POST", "PUT", "DELETE"]
+        } else {
+            vec!["GET"]
+        };
         for alt_method in &alt_methods {
-            if let Ok((status, _, _, elapsed)) = self.make_request(alt_method, endpoint, None).await {
+            if let Ok((status, _, _, elapsed)) = self.make_request(alt_method, endpoint, None).await
+            {
                 if status < 400 && status != 405 {
                     results.push(ApiScanResult {
                         endpoint: endpoint.to_string(),
@@ -4693,12 +5135,19 @@ impl ApiScanner {
                         status: ScanStatus::Vulnerable,
                         severity: Severity::Medium,
                         findings: vec![VulnerabilityFinding {
-                            title: format!("{} allowed on {} (expected only {})", alt_method, endpoint, method),
+                            title: format!(
+                                "{} allowed on {} (expected only {})",
+                                alt_method, endpoint, method
+                            ),
                             severity: Severity::Medium,
                             status: ScanStatus::Vulnerable,
                             description: "Endpoint accepts unintended HTTP methods".to_string(),
-                            details: vec![format!("Method {} returned status {}", alt_method, status)],
-                            remediation: "Restrict endpoints to only their intended HTTP methods".to_string(),
+                            details: vec![format!(
+                                "Method {} returned status {}",
+                                alt_method, status
+                            )],
+                            remediation: "Restrict endpoints to only their intended HTTP methods"
+                                .to_string(),
                             cwe_id: Some("CWE-749".to_string()),
                             references: vec![],
                         }],
@@ -4713,11 +5162,17 @@ impl ApiScanner {
 
     async fn test_graphql_introspection(&self) -> Vec<ApiScanResult> {
         let mut results = Vec::new();
-        if self.config.base_url.contains("graphql") || self.config.endpoints.iter().any(|e| e.contains("graphql")) {
-            let introspection_query = r#"{"query": "{ __schema { types { name fields { name } } } }"}"#;
+        if self.config.base_url.contains("graphql")
+            || self.config.endpoints.iter().any(|e| e.contains("graphql"))
+        {
+            let introspection_query =
+                r#"{"query": "{ __schema { types { name fields { name } } } }"}"#;
             for endpoint in &self.config.endpoints {
                 if endpoint.contains("graphql") {
-                    if let Ok((status, _, body, elapsed)) = self.make_request("POST", endpoint, Some(introspection_query)).await {
+                    if let Ok((status, _, body, elapsed)) = self
+                        .make_request("POST", endpoint, Some(introspection_query))
+                        .await
+                    {
                         if status == 200 && body.contains("__schema") {
                             results.push(ApiScanResult {
                                 endpoint: endpoint.to_string(),
@@ -4764,7 +5219,8 @@ impl ApiScanner {
                             status: ScanStatus::Vulnerable,
                             description: "JWT token uses the insecure 'none' algorithm".to_string(),
                             details: vec!["Token header indicates algorithm: none".to_string()],
-                            remediation: "Reject tokens with 'none' algorithm on the server side".to_string(),
+                            remediation: "Reject tokens with 'none' algorithm on the server side"
+                                .to_string(),
                             cwe_id: Some("CWE-327".to_string()),
                             references: vec![],
                         }],
@@ -4784,8 +5240,15 @@ impl ApiScanner {
 
         for endpoint in &self.config.endpoints {
             for param in &redirect_params {
-                let test_url = format!("{}?{}={}", endpoint, param, urlencoding::encode(malicious_url));
-                if let Ok((status, headers, _, elapsed)) = self.make_request("GET", &test_url, None).await {
+                let test_url = format!(
+                    "{}?{}={}",
+                    endpoint,
+                    param,
+                    urlencoding::encode(malicious_url)
+                );
+                if let Ok((status, headers, _, elapsed)) =
+                    self.make_request("GET", &test_url, None).await
+                {
                     if status == 302 || status == 301 {
                         if let Some(location) = headers.get("location") {
                             if location.contains("evil.example.com") {
@@ -4799,9 +5262,14 @@ impl ApiScanner {
                                         title: format!("Open redirect via '{}' parameter", param),
                                         severity: Severity::Medium,
                                         status: ScanStatus::Vulnerable,
-                                        description: "API redirects to attacker-controlled URLs".to_string(),
-                                        details: vec![format!("Parameter '{}' redirects to arbitrary URLs", param)],
-                                        remediation: "Validate redirect URLs against an allowlist".to_string(),
+                                        description: "API redirects to attacker-controlled URLs"
+                                            .to_string(),
+                                        details: vec![format!(
+                                            "Parameter '{}' redirects to arbitrary URLs",
+                                            param
+                                        )],
+                                        remediation: "Validate redirect URLs against an allowlist"
+                                            .to_string(),
                                         cwe_id: Some("CWE-601".to_string()),
                                         references: vec![],
                                     }],
@@ -4848,7 +5316,12 @@ impl ApiScanner {
         }
 
         let total = summary.total_tests.max(1) as f64;
-        summary.risk_score = ((summary.critical_count as f64 * 10.0 + summary.high_count as f64 * 7.0 + summary.medium_count as f64 * 4.0) / total * 10.0).min(10.0);
+        summary.risk_score = ((summary.critical_count as f64 * 10.0
+            + summary.high_count as f64 * 7.0
+            + summary.medium_count as f64 * 4.0)
+            / total
+            * 10.0)
+            .min(10.0);
         summary
     }
 }

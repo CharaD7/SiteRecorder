@@ -426,23 +426,32 @@ impl PasswordCracker {
                 let n = (*n as usize).min(input.len());
                 input[n..].to_string()
             }
-            Transformation::ToggleCase => {
-                input.chars().map(|c| {
-                    if c.is_ascii_lowercase() { c.to_ascii_uppercase() }
-                    else if c.is_ascii_uppercase() { c.to_ascii_lowercase() }
-                    else { c }
-                }).collect()
-            }
-            Transformation::ShiftNumbers => {
-                input.chars().map(|c| {
+            Transformation::ToggleCase => input
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_lowercase() {
+                        c.to_ascii_uppercase()
+                    } else if c.is_ascii_uppercase() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        c
+                    }
+                })
+                .collect(),
+            Transformation::ShiftNumbers => input
+                .chars()
+                .map(|c| {
                     if c.is_ascii_digit() {
                         let d = c.to_digit(10).unwrap();
                         char::from_digit((d + 1) % 10, 10).unwrap()
-                    } else { c }
-                }).collect()
-            }
-            Transformation::LeetSpeak => {
-                input.chars().map(|c| match c {
+                    } else {
+                        c
+                    }
+                })
+                .collect(),
+            Transformation::LeetSpeak => input
+                .chars()
+                .map(|c| match c {
                     'a' | 'A' => '4',
                     'e' | 'E' => '3',
                     'i' | 'I' => '1',
@@ -450,8 +459,8 @@ impl PasswordCracker {
                     's' | 'S' => '5',
                     't' | 'T' => '7',
                     _ => c,
-                }).collect()
-            }
+                })
+                .collect(),
         }
     }
 
@@ -469,8 +478,12 @@ impl PasswordCracker {
             MaskCharset::Uppercase => "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             MaskCharset::Digits => "0123456789",
             MaskCharset::Alpha => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-            MaskCharset::Alphanumeric => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-            MaskCharset::All => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()",
+            MaskCharset::Alphanumeric => {
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+            }
+            MaskCharset::All => {
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()"
+            }
             MaskCharset::Custom(s) => s,
         };
 
@@ -478,9 +491,13 @@ impl PasswordCracker {
         let chars: Vec<char> = charset.chars().collect();
 
         for len in config.min_length..=config.max_length {
-            if len > 6 { break; }
+            if len > 6 {
+                break;
+            }
             let total = chars.len().pow(len as u32);
-            if total > 100_000 { break; }
+            if total > 100_000 {
+                break;
+            }
 
             let mut indices = vec![0usize; len];
             loop {
@@ -498,7 +515,9 @@ impl PasswordCracker {
                         break;
                     }
                 }
-                if carry > 0 { break; }
+                if carry > 0 {
+                    break;
+                }
             }
         }
 
@@ -507,20 +526,96 @@ impl PasswordCracker {
 
     pub fn get_default_wordlist() -> Vec<String> {
         vec![
-            "password", "123456", "12345678", "qwerty", "abc123", "monkey", "master",
-            "dragon", "111111", "baseball", "iloveyou", "trustno1", "sunshine",
-            "princess", "football", "charlie", "shadow", "michael", "password1",
-            "password123", "admin", "admin123", "root", "toor", "letmein", "welcome",
-            "monkey123", "dragon123", "login", "starwars", "solo", "access", "flower",
-            "flower123", "passw0rd", "hello", "charlie1", "donald", "qwerty123",
-            "password1!", "1234", "12345", "123456789", "1234567890", "123123",
-            "696969", "batman", "access14", "hello123", "pussy", "6969", "killer",
-            "pepper", "buster", "summer", "buster", "george", "harley", "andrea",
-            "joshua", "daniel", "hunter", "jordan", "thomas", "robert", "hockey",
-            "ranger", "starwars", "klaster", "george", "computer", "michelle",
-            "jessica", "pepper", "amanda", "summer", "ashley", "nicole", "biteme",
-            "access", "dallas", "austin", "thunder", "taylor", "matrix", "minecraft",
-        ].iter().map(|s| s.to_string()).collect()
+            "password",
+            "123456",
+            "12345678",
+            "qwerty",
+            "abc123",
+            "monkey",
+            "master",
+            "dragon",
+            "111111",
+            "baseball",
+            "iloveyou",
+            "trustno1",
+            "sunshine",
+            "princess",
+            "football",
+            "charlie",
+            "shadow",
+            "michael",
+            "password1",
+            "password123",
+            "admin",
+            "admin123",
+            "root",
+            "toor",
+            "letmein",
+            "welcome",
+            "monkey123",
+            "dragon123",
+            "login",
+            "starwars",
+            "solo",
+            "access",
+            "flower",
+            "flower123",
+            "passw0rd",
+            "hello",
+            "charlie1",
+            "donald",
+            "qwerty123",
+            "password1!",
+            "1234",
+            "12345",
+            "123456789",
+            "1234567890",
+            "123123",
+            "696969",
+            "batman",
+            "access14",
+            "hello123",
+            "pussy",
+            "6969",
+            "killer",
+            "pepper",
+            "buster",
+            "summer",
+            "buster",
+            "george",
+            "harley",
+            "andrea",
+            "joshua",
+            "daniel",
+            "hunter",
+            "jordan",
+            "thomas",
+            "robert",
+            "hockey",
+            "ranger",
+            "starwars",
+            "klaster",
+            "george",
+            "computer",
+            "michelle",
+            "jessica",
+            "pepper",
+            "amanda",
+            "summer",
+            "ashley",
+            "nicole",
+            "biteme",
+            "access",
+            "dallas",
+            "austin",
+            "thunder",
+            "taylor",
+            "matrix",
+            "minecraft",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
     }
 
     pub fn get_wordlist_info() -> Vec<WordlistInfo> {
@@ -608,9 +703,10 @@ mod tests {
 
     #[test]
     fn test_apply_rules() {
-        let rules = vec![
-            CrackRule { name: "capitalize".to_string(), transformation: Transformation::Capitalize },
-        ];
+        let rules = vec![CrackRule {
+            name: "capitalize".to_string(),
+            transformation: Transformation::Capitalize,
+        }];
         let variants = PasswordCracker::apply_rules("hello", &rules);
         assert!(variants.contains(&"Hello".to_string()));
     }

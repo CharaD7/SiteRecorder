@@ -191,7 +191,12 @@ impl PacketCapture {
             .collect()
     }
 
-    pub async fn start_capture(&self, interface_name: &str, promiscuous: bool, filter: Option<&str>) -> Result<()> {
+    pub async fn start_capture(
+        &self,
+        interface_name: &str,
+        promiscuous: bool,
+        filter: Option<&str>,
+    ) -> Result<()> {
         if *self.running.read().await {
             return Err(CaptureError::Pcap("Capture already running".to_string()));
         }
@@ -212,7 +217,9 @@ impl PacketCapture {
         *self.running.write().await = true;
         self.packets.write().await.clear();
 
-        let _ = self.tx.send(CaptureEvent::CaptureStarted(session.id.clone()));
+        let _ = self
+            .tx
+            .send(CaptureEvent::CaptureStarted(session.id.clone()));
 
         let running = self.running.clone();
         let packets = self.packets.clone();
@@ -222,7 +229,17 @@ impl PacketCapture {
         let iface_name = interface_name.to_string();
 
         tokio::spawn(async move {
-            match Self::capture_loop(&iface_name, promiscuous, running, packets, filters, stats, tx).await {
+            match Self::capture_loop(
+                &iface_name,
+                promiscuous,
+                running,
+                packets,
+                filters,
+                stats,
+                tx,
+            )
+            .await
+            {
                 Ok(_) => {}
                 Err(e) => {
                     tracing::error!("Capture error: {}", e);
@@ -338,7 +355,11 @@ impl PacketCapture {
                 EtherTypes::Ipv4 => {
                     if let Some(ipv4) = Ipv4Packet::new(eth.payload()) {
                         info.network_layer = Some(Self::parse_ipv4(&ipv4));
-                        Self::parse_transport(ipv4.payload(), ipv4.get_next_level_protocol(), &mut info);
+                        Self::parse_transport(
+                            ipv4.payload(),
+                            ipv4.get_next_level_protocol(),
+                            &mut info,
+                        );
                     }
                 }
                 EtherTypes::Ipv6 => {
@@ -396,9 +417,16 @@ impl PacketCapture {
                         acknowledgment_number: Some(tcp.get_acknowledgement()),
                         flags: Some(Self::format_tcp_flags(&tcp)),
                         window_size: Some(tcp.get_window()),
-                        payload_size: payload.len().saturating_sub(tcp.get_data_offset() as usize * 4),
+                        payload_size: payload
+                            .len()
+                            .saturating_sub(tcp.get_data_offset() as usize * 4),
                     });
-                    Self::parse_application(tcp.payload(), tcp.get_destination(), tcp.get_source(), info);
+                    Self::parse_application(
+                        tcp.payload(),
+                        tcp.get_destination(),
+                        tcp.get_source(),
+                        info,
+                    );
                 }
             }
             IpNextHeaderProtocols::Udp => {
@@ -413,7 +441,12 @@ impl PacketCapture {
                         window_size: None,
                         payload_size: udp.get_length() as usize - 8,
                     });
-                    Self::parse_application(udp.payload(), udp.get_destination(), udp.get_source(), info);
+                    Self::parse_application(
+                        udp.payload(),
+                        udp.get_destination(),
+                        udp.get_source(),
+                        info,
+                    );
                 }
             }
             _ => {}
@@ -421,7 +454,11 @@ impl PacketCapture {
     }
 
     fn parse_application(payload: &[u8], dest_port: u16, source_port: u16, info: &mut PacketInfo) {
-        let port = if dest_port < 1024 { dest_port } else { source_port };
+        let port = if dest_port < 1024 {
+            dest_port
+        } else {
+            source_port
+        };
 
         match port {
             80 | 8080 | 8443 => {
@@ -456,33 +493,51 @@ impl PacketCapture {
 
     fn format_tcp_flags(tcp: &TcpPacket) -> String {
         let mut flags = Vec::new();
-        if tcp.get_flags() & 0x01 != 0 { flags.push("FIN"); }
-        if tcp.get_flags() & 0x02 != 0 { flags.push("SYN"); }
-        if tcp.get_flags() & 0x04 != 0 { flags.push("RST"); }
-        if tcp.get_flags() & 0x08 != 0 { flags.push("PSH"); }
-        if tcp.get_flags() & 0x10 != 0 { flags.push("ACK"); }
-        if tcp.get_flags() & 0x20 != 0 { flags.push("URG"); }
+        if tcp.get_flags() & 0x01 != 0 {
+            flags.push("FIN");
+        }
+        if tcp.get_flags() & 0x02 != 0 {
+            flags.push("SYN");
+        }
+        if tcp.get_flags() & 0x04 != 0 {
+            flags.push("RST");
+        }
+        if tcp.get_flags() & 0x08 != 0 {
+            flags.push("PSH");
+        }
+        if tcp.get_flags() & 0x10 != 0 {
+            flags.push("ACK");
+        }
+        if tcp.get_flags() & 0x20 != 0 {
+            flags.push("URG");
+        }
         flags.join(",")
     }
 
     fn matches_filters(packet: &PacketInfo, filters: &[CaptureFilter]) -> bool {
-        if filters.is_empty() { return true; }
-        filters.iter().filter(|f| f.enabled).all(|f| Self::matches_filter(packet, f))
+        if filters.is_empty() {
+            return true;
+        }
+        filters
+            .iter()
+            .filter(|f| f.enabled)
+            .all(|f| Self::matches_filter(packet, f))
     }
 
     fn matches_filter(packet: &PacketInfo, filter: &CaptureFilter) -> bool {
         match filter.filter_type {
-            FilterType::IpAddress => {
-                packet.network_layer.as_ref().map_or(false, |n| {
-                    n.source_ip == filter.value || n.dest_ip == filter.value
-                })
-            }
+            FilterType::IpAddress => packet.network_layer.as_ref().map_or(false, |n| {
+                n.source_ip == filter.value || n.dest_ip == filter.value
+            }),
             FilterType::Port => {
                 if let Ok(port) = filter.value.parse::<u16>() {
-                    packet.transport_layer.as_ref().map_or(false, |t| {
-                        t.source_port == port || t.dest_port == port
-                    })
-                } else { true }
+                    packet
+                        .transport_layer
+                        .as_ref()
+                        .map_or(false, |t| t.source_port == port || t.dest_port == port)
+                } else {
+                    true
+                }
             }
             FilterType::Protocol => {
                 packet.transport_layer.as_ref().map_or(false, |t| {
@@ -495,7 +550,9 @@ impl PacketCapture {
             FilterType::PacketSize => {
                 if let Ok(size) = filter.value.parse::<usize>() {
                     packet.length <= size
-                } else { true }
+                } else {
+                    true
+                }
             }
             FilterType::Custom => true,
         }

@@ -1,3 +1,4 @@
+use aes_gcm::aead::consts::U12;
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Key, Nonce,
@@ -7,7 +8,6 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use aes_gcm::aead::consts::U12;
 use thiserror::Error;
 use zeroize::Zeroize;
 
@@ -138,7 +138,8 @@ impl CredentialVault {
         // 2. Reuse the persisted salt; only mint a new one when creating the vault.
         let salt: [u8; 16] = match &loaded {
             Some(vault_data) => {
-                let bytes = BASE64.decode(&vault_data.salt)
+                let bytes = BASE64
+                    .decode(&vault_data.salt)
                     .map_err(|e| CredentialError::DecryptionError(e.to_string()))?;
                 if bytes.len() != 16 {
                     return Err(CredentialError::DecryptionError(
@@ -165,9 +166,11 @@ impl CredentialVault {
         //    This MUST happen for in-memory vaults too, otherwise any password unlocks them.
         let existing_verifier: Option<(Vec<u8>, Vec<u8>)> = match &loaded {
             Some(vault_data) => Some((
-                BASE64.decode(&vault_data.verification_nonce)
+                BASE64
+                    .decode(&vault_data.verification_nonce)
                     .map_err(|e| CredentialError::DecryptionError(e.to_string()))?,
-                BASE64.decode(&vault_data.verification)
+                BASE64
+                    .decode(&vault_data.verification)
                     .map_err(|e| CredentialError::DecryptionError(e.to_string()))?,
             )),
             None => self.verifier.as_ref().map(|blob| {
@@ -195,18 +198,18 @@ impl CredentialVault {
         // 4. Ensure we hold a verifier so subsequent unlocks (incl. in-memory) are checked.
         if self.verifier.is_none() {
             let key = self.master_key.expect("key just set");
-            self.verifier = Some(self.encrypt_value(
-                &String::from_utf8_lossy(VERIFIER_PLAINTEXT),
-                &key,
-            )?);
+            self.verifier =
+                Some(self.encrypt_value(&String::from_utf8_lossy(VERIFIER_PLAINTEXT), &key)?);
         }
 
         // 5. Decrypt entries.
         if let Some(vault_data) = &loaded {
             if !vault_data.entries_json.is_empty() {
-                let nonce_bytes = BASE64.decode(&vault_data.entries_nonce)
+                let nonce_bytes = BASE64
+                    .decode(&vault_data.entries_nonce)
                     .map_err(|e| CredentialError::DecryptionError(e.to_string()))?;
-                let ct_bytes = BASE64.decode(&vault_data.entries_json)
+                let ct_bytes = BASE64
+                    .decode(&vault_data.entries_json)
                     .map_err(|e| CredentialError::DecryptionError(e.to_string()))?;
 
                 let nonce = Self::nonce_from_slice(&nonce_bytes)?;
@@ -268,7 +271,9 @@ impl CredentialVault {
             return Err(CredentialError::VaultLocked);
         }
 
-        let entry = self.entries.get(id)
+        let entry = self
+            .entries
+            .get(id)
             .ok_or_else(|| CredentialError::NotFound(id.to_string()))?
             .clone();
 
@@ -287,7 +292,8 @@ impl CredentialVault {
             return Err(CredentialError::VaultLocked);
         }
 
-        self.entries.remove(id)
+        self.entries
+            .remove(id)
             .ok_or_else(|| CredentialError::NotFound(id.to_string()))?;
         self.save()?;
         Ok(())
@@ -326,7 +332,8 @@ impl CredentialVault {
         let mut nonce_bytes = [0u8; 12];
         rand::thread_rng().fill_bytes(&mut nonce_bytes);
         let nonce = Self::nonce_from_slice(&nonce_bytes)?;
-        let ct = cipher.encrypt(&nonce, entries_json.as_ref())
+        let ct = cipher
+            .encrypt(&nonce, entries_json.as_ref())
             .map_err(|e| CredentialError::EncryptionError(e.to_string()))?;
 
         let vault_file = VaultFile {
@@ -355,7 +362,8 @@ impl CredentialVault {
 
     fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32]> {
         let mut key = [0u8; 32];
-        Argon2::default().hash_password_into(password.as_bytes(), salt, &mut key)
+        Argon2::default()
+            .hash_password_into(password.as_bytes(), salt, &mut key)
             .map_err(|e| CredentialError::EncryptionError(e.to_string()))?;
         Ok(key)
     }
@@ -386,7 +394,8 @@ impl CredentialVault {
 
         let nonce = Self::nonce_from_slice(&nonce_bytes)?;
         let cipher = Aes256Gcm::new(&Self::key_from_bytes(key));
-        let ct = cipher.encrypt(&nonce, plaintext.as_bytes())
+        let ct = cipher
+            .encrypt(&nonce, plaintext.as_bytes())
             .map_err(|e| CredentialError::EncryptionError(e.to_string()))?;
 
         Ok(EncryptedBlob {
@@ -397,18 +406,20 @@ impl CredentialVault {
     }
 
     fn decrypt_value(&self, blob: &EncryptedBlob, key: &[u8; 32]) -> Result<String> {
-        let nonce_bytes = BASE64.decode(&blob.nonce)
+        let nonce_bytes = BASE64
+            .decode(&blob.nonce)
             .map_err(|e| CredentialError::DecryptionError(e.to_string()))?;
-        let ct_bytes = BASE64.decode(&blob.ciphertext)
+        let ct_bytes = BASE64
+            .decode(&blob.ciphertext)
             .map_err(|e| CredentialError::DecryptionError(e.to_string()))?;
 
         let nonce = Self::nonce_from_slice(&nonce_bytes)?;
         let cipher = Aes256Gcm::new(&Self::key_from_bytes(key));
-        let plaintext = cipher.decrypt(&nonce, ct_bytes.as_ref())
+        let plaintext = cipher
+            .decrypt(&nonce, ct_bytes.as_ref())
             .map_err(|e| CredentialError::DecryptionError(e.to_string()))?;
 
-        String::from_utf8(plaintext)
-            .map_err(|e| CredentialError::DecryptionError(e.to_string()))
+        String::from_utf8(plaintext).map_err(|e| CredentialError::DecryptionError(e.to_string()))
     }
 }
 
@@ -431,7 +442,14 @@ mod tests {
         let mut vault = CredentialVault::new();
         vault.unlock("test_password_123").unwrap();
 
-        vault.add_credential("test1", "Test Password", CredentialType::Password, "secret123").unwrap();
+        vault
+            .add_credential(
+                "test1",
+                "Test Password",
+                CredentialType::Password,
+                "secret123",
+            )
+            .unwrap();
 
         let (entry, value) = vault.get_credential("test1").unwrap();
         assert_eq!(entry.name, "Test Password");
@@ -442,7 +460,9 @@ mod tests {
     fn test_wrong_password() {
         let mut vault = CredentialVault::new();
         vault.unlock("correct_password").unwrap();
-        vault.add_credential("test1", "Test", CredentialType::Password, "secret").unwrap();
+        vault
+            .add_credential("test1", "Test", CredentialType::Password, "secret")
+            .unwrap();
         vault.lock();
 
         let result = vault.unlock("wrong_password");
@@ -459,7 +479,9 @@ mod tests {
         {
             let mut vault = CredentialVault::with_path(path.clone());
             vault.unlock("master_pass").unwrap();
-            vault.add_credential("cred1", "API Key", CredentialType::ApiToken, "sk-abc123").unwrap();
+            vault
+                .add_credential("cred1", "API Key", CredentialType::ApiToken, "sk-abc123")
+                .unwrap();
         }
 
         {
@@ -483,8 +505,12 @@ mod tests {
 
         let mut vault = CredentialVault::with_path(path.clone());
         vault.unlock("pw").unwrap();
-        vault.add_credential("a", "A", CredentialType::Password, "1").unwrap();
-        vault.add_credential("b", "B", CredentialType::Password, "2").unwrap();
+        vault
+            .add_credential("a", "A", CredentialType::Password, "1")
+            .unwrap();
+        vault
+            .add_credential("b", "B", CredentialType::Password, "2")
+            .unwrap();
         drop(vault);
 
         let mut reopened = CredentialVault::with_path(path);

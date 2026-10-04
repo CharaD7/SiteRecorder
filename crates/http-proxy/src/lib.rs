@@ -181,9 +181,7 @@ impl HttpProxy {
                         let config = config.clone();
                         let peer = peer_addr.to_string();
 
-                        async move {
-                            handle_request(req, sessions, rules, tx, config, peer).await
-                        }
+                        async move { handle_request(req, sessions, rules, tx, config, peer).await }
                     });
 
                     if let Err(e) = http1::Builder::new().serve_connection(io, service).await {
@@ -209,7 +207,12 @@ impl HttpProxy {
     }
 
     pub async fn get_session(&self, id: &str) -> Option<ProxySession> {
-        self.sessions.read().await.iter().find(|s| s.id == id).cloned()
+        self.sessions
+            .read()
+            .await
+            .iter()
+            .find(|s| s.id == id)
+            .cloned()
     }
 
     pub async fn clear_sessions(&self) {
@@ -291,11 +294,7 @@ async fn handle_request(
         method: method.to_string(),
         url: uri.to_string(),
         headers,
-        body: if body_size > 0 {
-            Some(body_str)
-        } else {
-            None
-        },
+        body: if body_size > 0 { Some(body_str) } else { None },
         body_size,
         source_ip: peer,
         intercepted: matches!(action, InterceptAction::Intercept | InterceptAction::Modify),
@@ -406,7 +405,9 @@ async fn forward_to_target(
 ) -> std::result::Result<(u16, HashMap<String, String>, Vec<u8>, u64), String> {
     let scheme = uri.scheme_str().unwrap_or("http");
     let host = uri.host().ok_or("No host in URI")?;
-    let port = uri.port_u16().unwrap_or(if scheme == "https" { 443 } else { 80 });
+    let port = uri
+        .port_u16()
+        .unwrap_or(if scheme == "https" { 443 } else { 80 });
     let path = uri.path_and_query().map(|p| p.as_str()).unwrap_or("/");
 
     let start = std::time::Instant::now();
@@ -417,7 +418,13 @@ async fn forward_to_target(
         .map_err(|e| e.to_string())?;
 
     let url = format!("{}://{}:{}{}", scheme, host, port, path);
-    let mut req_builder = client.request(method.as_str().parse().map_err(|_| "Invalid method".to_string())?, &url);
+    let mut req_builder = client.request(
+        method
+            .as_str()
+            .parse()
+            .map_err(|_| "Invalid method".to_string())?,
+        &url,
+    );
 
     for (k, v) in headers {
         if !["host", "connection"].contains(&k.as_str()) {
@@ -565,7 +572,10 @@ mod tests {
 
         let action = evaluate_action(
             &[rule(
-                InterceptCondition::HeaderContains("authorization".to_string(), "Bearer".to_string()),
+                InterceptCondition::HeaderContains(
+                    "authorization".to_string(),
+                    "Bearer".to_string(),
+                ),
                 InterceptAction::Intercept,
             )],
             &Method::GET,

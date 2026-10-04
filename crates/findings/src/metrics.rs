@@ -108,9 +108,7 @@ pub fn build(
     let mut remediated = 0i64;
 
     for f in findings {
-        *by_severity
-            .entry(f.severity.to_uppercase())
-            .or_insert(0) += 1;
+        *by_severity.entry(f.severity.to_uppercase()).or_insert(0) += 1;
         triaged += 1;
 
         if !f.counts_against_posture {
@@ -156,28 +154,28 @@ pub fn build(
     MetricsReport {
         generated_at: now.to_rfc3339(),
         vulnerability: VulnerabilityMetrics {
-        total: triaged,
-        open,
-        by_severity,
-        aging,
-        // Rate over triaged findings, i.e. those a human has looked at.
-        false_positive_rate: if triaged > 0 {
-            false_positive as f64 / triaged as f64
-        } else {
-            0.0
-        },
-        remediation_rate: if open + remediated > 0 {
-            remediated as f64 / (open + remediated) as f64
-        } else {
-            0.0
-        },
-        findings_per_asset: if assets_with_findings > 0 {
-            open as f64 / assets_with_findings as f64
-        } else {
-            0.0
-        },
-        assets_total,
-        assets_with_findings,
+            total: triaged,
+            open,
+            by_severity,
+            aging,
+            // Rate over triaged findings, i.e. those a human has looked at.
+            false_positive_rate: if triaged > 0 {
+                false_positive as f64 / triaged as f64
+            } else {
+                0.0
+            },
+            remediation_rate: if open + remediated > 0 {
+                remediated as f64 / (open + remediated) as f64
+            } else {
+                0.0
+            },
+            findings_per_asset: if assets_with_findings > 0 {
+                open as f64 / assets_with_findings as f64
+            } else {
+                0.0
+            },
+            assets_total,
+            assets_with_findings,
         },
         findings_by_category: by_category,
         discovery_trend: Vec::new(),
@@ -206,11 +204,13 @@ pub fn unavailable_metrics(incident_count: i64) -> Vec<UnavailableMetric> {
         },
         UnavailableMetric {
             name: "MTTC (mean time to contain)".to_string(),
-            reason: "Requires incident containment timestamps; nothing writes to incidents.".to_string(),
+            reason: "Requires incident containment timestamps; nothing writes to incidents."
+                .to_string(),
         },
         UnavailableMetric {
             name: "Patch compliance".to_string(),
-            reason: "Requires a software inventory per asset. No patch data source exists.".to_string(),
+            reason: "Requires a software inventory per asset. No patch data source exists."
+                .to_string(),
         },
         UnavailableMetric {
             name: "Risk trend / posture change".to_string(),
@@ -270,7 +270,9 @@ mod tests {
     }
 
     fn now() -> DateTime<Utc> {
-        DateTime::parse_from_rfc3339("2026-01-31T00:00:00Z").unwrap().into()
+        DateTime::parse_from_rfc3339("2026-01-31T00:00:00Z")
+            .unwrap()
+            .into()
     }
 
     fn days_ago(n: i64) -> String {
@@ -287,16 +289,19 @@ mod tests {
         ];
         let m = build(now(), &fs, vec![]);
         assert_eq!(m.vulnerability.total, 4);
-        assert_eq!(m.vulnerability.open, 2, "false positives and accepted are not open");
+        assert_eq!(
+            m.vulnerability.open, 2,
+            "false positives and accepted are not open"
+        );
     }
 
     #[test]
     fn aging_buckets_are_calendar_correct() {
         let fs = vec![
-            p("HIGH", "new", &days_ago(10), None),    // 0-30
-            p("HIGH", "new", &days_ago(45), None),    // 31-60
-            p("HIGH", "new", &days_ago(75), None),    // 61-90
-            p("HIGH", "new", &days_ago(200), None),   // 90+
+            p("HIGH", "new", &days_ago(10), None),  // 0-30
+            p("HIGH", "new", &days_ago(45), None),  // 31-60
+            p("HIGH", "new", &days_ago(75), None),  // 61-90
+            p("HIGH", "new", &days_ago(200), None), // 90+
         ];
         let m = build(now(), &fs, vec![]);
         assert_eq!(m.vulnerability.aging.d0_30, 1);
@@ -387,7 +392,10 @@ mod tests {
         assert!(names.iter().any(|n| n.contains("MTTR")));
         assert!(names.iter().any(|n| n.contains("MTTC")));
         assert!(names.iter().any(|n| n.contains("Patch compliance")));
-        assert!(u.iter().all(|m| !m.reason.is_empty()), "every refusal needs a reason");
+        assert!(
+            u.iter().all(|m| !m.reason.is_empty()),
+            "every refusal needs a reason"
+        );
     }
 
     #[test]
