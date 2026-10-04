@@ -207,11 +207,23 @@ window.__TAURI__ = { invoke: async (cmd, args) => {
                { id:'a2', timestamp:'2026-01-31T09:05:00Z', actor:'op-1', action:'finding_created', target:'f1', details:'SQL Injection (CRITICAL)', ip_address:null, prev_hash:'abc123', hash:'def456' } ];
     case 'verify_audit_integrity': return { valid:true, entries_checked:2, first_invalid_seq:null, reason:null };
     case 'bounty_status':
-      // Mirror the real backend: ChainScope is absent, so the UI must render
-      // the disabled reason and hide its controls. Returning available:true
-      // here would let the audit pass against a state the app can never reach.
-      return { available: false, binary: null,
-        reason: 'ChainScope is unavailable, so bounty triage is disabled. none of ["cs", "chain-scope"] responded to `--version` on PATH. No program or hotspot data is shown, because none was retrieved.' };
+      // ChainScope IS installed on this machine, at
+      // ~/Developments/Personal/Hacks/Immunefi/ChainScope/.venv/bin/cs.
+      // An earlier session asserted it was absent because `cs` was not on PATH
+      // and `cs --version` exits 2; both inferences were wrong.
+      return { available: true, binary: '/home/charad7/Developments/Personal/Hacks/Immunefi/ChainScope/.venv/bin/cs',
+        reason: 'ChainScope found.' };
+    case 'bounty_programs':
+      return [
+        { slug:'layerzero', project:'LayerZero', max_bounty:15000000, audits:0, poc:true },
+        { slug:'aera', project:'Aera', max_bounty:5000000, audits:2, poc:true }
+      ];
+    case 'bounty_meta':
+      return { project:'LayerZero', max_bounty:15000000, network:null, poc_required:true, audits:[] };
+    case 'bounty_triage':
+      return { slug:'layerzero', fetched:2, errors:1,
+        hotspots:[ { function:'withdraw()', file:'LayerZero.sol', line:412, score:8.5,
+                     reasons:['external call','state write'] } ] };
     case 'get_status': return { is_running:false, session_id:'', current_url:'', pages_visited:0, pages_discovered:0 };
     default: return null;
   }

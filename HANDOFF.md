@@ -113,6 +113,31 @@ The stub answers `bounty_status` with `available: false` to mirror the real
 machine. A test asserts the badge, the reason, hidden controls, that
 `bounty_status` was genuinely invoked, and that `#bountyResults` is empty.
 
+## Three bugs the "ChainScope is absent" belief produced
+
+Worth recording, because each one is a case of trusting a plausible inference
+over a direct check:
+
+1. **`cs --version` exits 2, not 0.** ChainScope's Typer app defines no
+   `--version`, so the probe reported a fully working tool as missing — even
+   given the correct path. Now probes `--help`, which exits 0.
+   `probe_does_not_rely_on_a_version_flag` pins this with a stub binary that
+   rejects `--version` and accepts `--help`.
+2. **`command -v cs` failing proved nothing.** The tool is installed in the
+   project's own `.venv/bin`, which is not on `PATH` until the venv is
+   activated. Discovery now also probes that checkout directly, and honours
+   `CHAINSCOPE_BIN` as an override.
+3. **The `meta` parser was fitted to a fixture I invented.** Against real output
+   it was wrong twice: ChainScope prints Python `True`/`False`, not `yes`/`no`
+   (so every program reported `poc_required: Some(false)`), and prints `None` for
+   unset fields (so `network` came back as the literal string `"None"`). The
+   tests now use output captured verbatim from the real tool — invented fixtures
+   are exactly how these survived.
+
+Net effect: had the tool genuinely been absent, all three would have been latent.
+None would have been visible from tests alone. Only running the real thing found
+them.
+
 ## Ground rule (load-bearing, not stylistic)
 
 **No fabricated findings, scores, or compliance results.** Incomplete analysis
@@ -201,20 +226,20 @@ filter.
 
 ### 4. ChainScope bounty triage built — `crates/bounty`
 
-Wraps `cs immune list|scope|triage|meta`, shelling out and parsing output.
+**ChainScope IS installed.** `~/Developments/Personal/Hacks/Immunefi/ChainScope`
+has its own `.venv` with working `cs` and `chain-scope` entry points. Verified
+live: `cs immune list --json` returns 100 real Immunefi programs, `cs immune meta
+layerzero` returns its real bounty and flags.
 
-**ChainScope is NOT installed on this machine.** No `cs`, no `chain-scope`, and
-`pip show chain-scope` finds nothing. So the handoff's rule — *"must disable the
-control when ChainScope is absent rather than fabricate"* — is the **primary**
-path here, and it is the tested one: `absent_binary_is_reported_unavailable_not_empty`
-and `unavailable_reason_states_that_nothing_was_retrieved` both assert that a
-missing tool yields an explicit reason, never an empty-looking success.
+An earlier session concluded it was "not installed" from `command -v cs` being
+empty and `pip show chain-scope` failing. Both inferences were wrong — see below
+for the three bugs that mistake caused.
+
+Wrapscs immune list/scope/triage/meta, shelling out and parsing output.
 
 `extract_json` pulls the trailing payload out of noisy stdout, because
 `cs immune triage` prints progress lines before its JSON. `meta` has no `--json`,
-so it parses the `key : value` table and leaves unrecognised fields `None` —
-`missing_bounty_field_stays_none_not_zero` guards against an absent bounty
-becoming `0.0`.
+so it parses the `key : value` table.
 
 Complements `crates/web3`: ChainScope maps source, does not audit deployed
 bytecode, and a hotspot ranking is not a verdict.

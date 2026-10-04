@@ -61,6 +61,19 @@ pub enum BountyError {
 /// console script under its full name.
 const CANDIDATE_BINARIES: [&str; 2] = ["cs", "chain-scope"];
 
+/// Extra locations to probe when the entry points are not on `PATH`.
+///
+/// ChainScope is a private, pip-installed checkout rather than a system tool.
+/// Its console scripts live in the project's own `.venv/bin`, which is not on
+/// `PATH` unless the venv is activated -- so `command -v cs` fails even though
+/// the tool is fully installed and working.
+///
+/// `CHAINSCOPE_BIN` overrides this entirely and takes precedence over both.
+const CANDIDATE_EXTRA_PATHS: [&str; 2] = [
+    "~/Developments/Personal/Hacks/Immunefi/ChainScope/.venv/bin/cs",
+    "~/Developments/Personal/Hacks/Immunefi/ChainScope/.venv/bin/chain-scope",
+];
+
 /// One in-scope contract address, as published in the program's scope page.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScopedAddress {
@@ -199,12 +212,17 @@ pub struct ChainScope {
 }
 
 impl ChainScope {
-    /// Locate ChainScope on `PATH`.
+    /// Locate ChainScope.
     ///
-    /// Returns `None` when no candidate binary responds to `--version`. A
-    /// non-zero-status or absent response counts as missing.
+    /// Probe order: `$CHAINSCOPE_BIN`, then `cs`/`chain-scope` on `PATH`, then
+    /// the known checkout's `.venv/bin`.
+    ///
+    /// Probes with `--help`, **not** `--version`: ChainScope's Typer app defines
+    /// no `--version` option, so `cs --version` exits **2** and prints usage. A
+    /// `--version` probe therefore reports a fully working tool as absent --
+    /// which is exactly the bug that hid it. `--help` exits 0.
     pub fn discover() -> Option<Self> {
-        match Self::discover_with(&CANDIDATE_BINARIES) {
+        match Self::discover_all() {
             Ok(Availability::Available { bin }) => Some(Self {
                 bin,
                 timeout: DEFAULT_TIMEOUT,
@@ -213,31 +231,54 @@ impl ChainScope {
         }
     }
 
+    /// Probe every known location, in order.
+    ///
+    /// Note this cannot use `or_else`: `discover_with` returns
+    /// `Ok(Unavailable)` for "looked, not there", so a plain `or_else` would
+    /// never reach the fallback. Check the variant explicitly.
+    pub fn discover_all() -> Result<Availability, BountyError> {
+        if let Ok(explicit) = std::env::var("CHAINSCOPE_BIN") {
+            let expanded = expand_tilde(&explicit);
+            if self_probes(&expanded) {
+                return Ok(Availability::Available { bin: expanded });
+            }
+            return Ok(Availability::Unavailable {
+                reason: format!(
+                    "CHAINSCOPE_BIN is set to `{explicit}` but that binary did not respond to `--help`"
+                ),
+            });
+        }
+        match Self::discover_with(&CANDIDATE_BINARIES)? {
+            found @ Availability::Available { .. } => Ok(found),
+            // Nothing on PATH; try the known checkout's own virtualenv before
+            // concluding the tool is absent.
+            _ => Self::discover_with(&CANDIDATE_EXTRA_PATHS),
+        }
+    }
+
     /// Probe specific binaries; exposed for tests.
+    ///
+    /// Only the given names are tried -- no implicit fallback paths -- so tests
+    /// can assert on exact behaviour.
     pub fn discover_with(binaries: &[&str]) -> Result<Availability, BountyError> {
-        for bin in binaries {
-            let ok = std::process::Command::new(bin)
-                .arg("--version")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            if ok {
+        let expanded: Vec<String> = binaries.iter().map(|b| expand_tilde(b)).collect();
+        let refs: Vec<&str> = expanded.iter().map(String::as_str).collect();
+        for bin in refs {
+            if self_probes(bin) {
                 return Ok(Availability::Available {
-                    bin: (*bin).to_string(),
+                    bin: bin.to_string(),
                 });
             }
         }
         Ok(Availability::Unavailable {
-            reason: format!("none of {:?} responded to `--version` on PATH", binaries),
+            reason: format!("none of {binaries:?} responded to `--help` on PATH"),
         })
     }
 
     /// Report availability without constructing a client.
     pub fn availability() -> Availability {
-        Self::discover_with(&CANDIDATE_BINARIES).unwrap_or(Availability::Unavailable {
-            reason: "the PATH probe itself failed".to_string(),
+        Self::discover_all().unwrap_or(Availability::Unavailable {
+            reason: "the probe itself failed".to_string(),
         })
     }
 
@@ -355,6 +396,71 @@ impl ChainScope {
     }
 }
 
+/// Treat ChainScope's textual "no value" markers as unreported.
+///
+/// The tool emits Python's `None` for unset fields. Storing that literal would
+/// present "None" as if it were a network name or a known-issue count.
+fn normalise_optional(value: &str) -> Option<&str> {
+    let v = value.trim();
+    if v.is_empty() || v.eq_ignore_ascii_case("none") || v.eq_ignore_ascii_case("null") {
+        None
+    } else {
+        Some(v)
+    }
+}
+
+/// Parse a boolean the way ChainScope actually prints it.
+///
+/// `cs immune meta` emits Python `True`/`False`, not `yes`/`no`. Matching only
+/// "yes" made every real program report `poc_required: Some(false)` -- asserting
+/// a PoC was not required when the tool had said it was.
+fn parse_bool(value: &str) -> Option<bool> {
+    let v = value.trim();
+    if v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes") {
+        Some(true)
+    } else if v.eq_ignore_ascii_case("false") || v.eq_ignore_ascii_case("no") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Does this path respond as the ChainScope CLI?
+///
+/// Uses `--help`, not `--version`: ChainScope's Typer app has no `--version`
+/// option, so that flag exits 2 even for a healthy install.
+fn self_probes(bin: &str) -> bool {
+    if bin.contains('/') && !std::path::Path::new(bin).exists() {
+        return false;
+    }
+    std::process::Command::new(bin)
+        .arg("--help")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Expand a leading `~` so hard-coded home-relative paths resolve.
+///
+/// Deliberately minimal: only `~` and `~/...`, which is all the fallback list
+/// uses. Anything else is passed through untouched.
+fn expand_tilde(path: &str) -> String {
+    if path == "~" {
+        if let Ok(home) = std::env::var("HOME") {
+            return home;
+        }
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{home}/{rest}");
+        }
+    }
+    path.to_string()
+}
+
 /// Deserialize an optional field, treating an absent key as the empty default.
 ///
 /// A program that publishes no repos legitimately omits `repos`, which is not a
@@ -435,9 +541,14 @@ impl BountyMeta {
                 "max bounty" => {
                     meta.max_bounty = value.trim_start_matches('$').replace(',', "").parse().ok()
                 }
-                "network" => meta.network = Some(value.to_string()),
-                "PoC required" => meta.poc_required = Some(value.eq_ignore_ascii_case("yes")),
-                "known issues" => meta.known_issues = Some(value.to_string()),
+                "network" => {
+                    // ChainScope prints Python's `None` for an unset field.
+                    // Recording the literal string "None" would look like a real
+                    // network name, so treat it as unreported.
+                    meta.network = normalise_optional(value).map(str::to_string);
+                }
+                "PoC required" => meta.poc_required = parse_bool(value),
+                "known issues" => meta.known_issues = normalise_optional(value).map(str::to_string),
                 _ => {}
             }
         }
@@ -537,24 +648,35 @@ mod tests {
     }
 
     #[test]
-    fn meta_parses_the_documented_table() {
+    fn meta_parses_captured_real_chainscope_output() {
+        // Captured verbatim from `cs immune meta layerzero`, not hand-written.
+        // The earlier fixture was invented, and invented fixtures are how the
+        // True/yes and None bugs below survived.
         let text = "\
-Aera  (aera)
-  max bounty    : $5,000,000
-  launched      : 2023-01-01
-  network       : Ethereum
-  PoC required  : yes
-  known issues  : none listed
-  audits (2) - findings here are likely ineligible:
-    Halborn  2024-01-01  https://example.com/a
+LayerZero  (layerzero)
+  max bounty    : $15,000,000
+  launched      : 2023-05-17
+  last updated  : 2026-10-02
+  network       : None
+  primacy (dflt) : None
+  primacy (crit) : None
+  PoC required  : True
+  KYC required  : True
+  known issues  : 1
+  audits (0) — findings here are likely ineligible:
 ";
         let m = BountyMeta::parse(text);
-        assert_eq!(m.project.as_deref(), Some("Aera"));
-        assert_eq!(m.max_bounty, Some(5_000_000.0));
-        assert_eq!(m.network.as_deref(), Some("Ethereum"));
-        assert_eq!(m.poc_required, Some(true));
-        assert_eq!(m.known_issues.as_deref(), Some("none listed"));
-        assert_eq!(m.audits.len(), 1, "{:?}", m.audits);
+        assert_eq!(m.project.as_deref(), Some("LayerZero"));
+        assert_eq!(m.max_bounty, Some(15_000_000.0));
+        // ChainScope prints Python True/False, not yes/no.
+        assert_eq!(m.poc_required, Some(true), "True must parse as true");
+        // Python `None` means unreported, not the string "None".
+        assert_eq!(
+            m.network, None,
+            "literal None must not become a network name"
+        );
+        assert_eq!(m.known_issues.as_deref(), Some("1"));
+        assert!(m.audits.is_empty());
     }
 
     #[test]
@@ -563,5 +685,111 @@ Aera  (aera)
         assert_eq!(m.network.as_deref(), Some("Arbitrum"));
         assert_eq!(m.max_bounty, None);
         assert_eq!(m.poc_required, None);
+    }
+
+    /// The exact failure that shipped: matching only "yes" reported
+    /// `poc_required: Some(false)` for a program that requires a PoC.
+    #[test]
+    fn poc_required_is_not_silently_false_for_a_real_program() {
+        let m = BountyMeta::parse("X  (x)\n  PoC required  : True\n");
+        assert_ne!(
+            m.poc_required,
+            Some(false),
+            "must not report 'no PoC required' when ChainScope said True"
+        );
+        assert_eq!(m.poc_required, Some(true));
+    }
+
+    #[test]
+    fn python_none_does_not_become_data() {
+        for marker in ["None", "none", "null"] {
+            let m = BountyMeta::parse(&format!("X  (x)\n  network : {marker}\n"));
+            assert_eq!(m.network, None, "`{marker}` must parse as unreported");
+        }
+        let m = BountyMeta::parse("X  (x)\n  known issues  : None\n");
+        assert_eq!(m.known_issues, None);
+    }
+
+    #[test]
+    fn tilde_expands_only_for_home_paths() {
+        std::env::set_var("HOME", "/home/tester");
+        assert_eq!(expand_tilde("~/x/cs"), "/home/tester/x/cs");
+        assert_eq!(expand_tilde("/abs/cs"), "/abs/cs");
+        assert_eq!(expand_tilde("cs"), "cs");
+        std::env::remove_var("HOME");
+    }
+
+    /// Regression guard for the bug that hid a working tool.
+    ///
+    /// ChainScope's Typer app has no `--version`, so `cs --version` exits 2. A
+    /// `--version` probe therefore reports a healthy install as absent -- which
+    /// is exactly what happened, leaving the bounty panel permanently disabled
+    /// while the tool sat installed in its own .venv.
+    #[test]
+    fn probe_does_not_rely_on_a_version_flag() {
+        // Any working binary that rejects `--version` but accepts `--help` must
+        // still be recognised as present.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let script = dir.path().join("faketool");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             if [ \"$1\" = \"--version\" ]; then echo 'No such option' >&2; exit 2; fi\n\
+             if [ \"$1\" = \"--help\" ]; then echo usage; exit 0; fi\n\
+             exit 2\n",
+        )
+        .expect("write");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755));
+        }
+        let path = script.to_string_lossy().to_string();
+
+        assert!(
+            !self_probes_version_flag(&path),
+            "precondition: --version exits non-zero for this tool"
+        );
+        assert!(
+            self_probes(&path),
+            "a tool that answers --help must be reported available"
+        );
+    }
+
+    /// The probe this crate previously used, kept so the test above documents
+    /// the behaviour that was replaced rather than just asserting the new one.
+    fn self_probes_version_flag(bin: &str) -> bool {
+        std::process::Command::new(bin)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// If ChainScope is installed, discovery must actually find it.
+    ///
+    /// On a machine without it this still passes -- it asserts the two outcomes
+    /// are distinguishable, not that the tool is present.
+    #[test]
+    fn discovery_agrees_with_reality() {
+        let availability = ChainScope::availability();
+        let on_path = std::process::Command::new("cs")
+            .arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if on_path {
+            assert!(
+                availability.is_available(),
+                "`cs` is on PATH and answers --help, so discovery must find it"
+            );
+        }
+        // Whether or not it is installed, the reason must never imply an empty
+        // catalogue rather than a missing tool.
+        assert!(!availability.reason().is_empty());
     }
 }
