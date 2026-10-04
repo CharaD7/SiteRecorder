@@ -6,16 +6,36 @@ and what to do first.
 
 ## Verified baseline
 
-`main` @ `1f4ca7d`. 294 Rust tests pass (283 prior + 11 in `crates/bounty`),
-0 failures. 5 SiteRecorder Playwright tests pass.
+`main` @ `a5bac0f`. **294 Rust tests pass, 0 failures** (283 prior + 11 in
+`crates/bounty`). **19 Playwright tests pass** (17 + 2 audit), all with
+`--retries=0` so no green test is hiding a flake.
 
 ```bash
 cargo test --workspace --no-fail-fast
 cargo check --workspace --all-targets
 node --check ui/app.js
-pnpm exec playwright test tests/sr_search_badges.spec.ts \
-  tests/sr_findings_layout.spec.ts --workers=1
+
+cd ~/Developments/Personal/PTest
+pnpm exec playwright test tests/siterecorder_ui.spec.ts \
+  tests/sr_search_badges.spec.ts tests/sr_findings_layout.spec.ts \
+  --workers=1 --retries=0
+
+# The audit needs BOTH budgets raised; see the comment atop the spec.
+pnpm exec playwright test tests/sr_control_audit.spec.ts \
+  --workers=1 --retries=0 --timeout=1500000 --global-timeout=2700000
 ```
+
+Audit result: **54 sections, 0 controls faking success, 0 console errors.**
+That last figure started at 4 and is now 0 because of the loader guards below.
+
+### Trap: `globalTimeout`, not just `timeout`
+
+`playwright.config.ts` sets `globalTimeout: 300 * 1000`, which caps the **entire
+suite** regardless of the per-test `timeout`. Raising only the per-test budget
+produces `Timed out waiting 300s for the test suite to run` and *no results at
+all* — which reads like a crash rather than a config ceiling. The audit needs
+`--global-timeout=2700000` as well. That config is shared by ~20 unrelated suites
+(eoro, Wyze, LambdaTest), so pass it per-invocation instead of editing the file.
 
 ### `cargo fmt --check` does NOT pass — correction
 
@@ -80,6 +100,26 @@ Renders all 54 sections and records:
 
 Skips destructive controls and secret/file inputs rather than clicking them.
 
+**It found five real bugs, none of which the grep could see:**
+
+| where | defect |
+|---|---|
+| `renderContent` | called `setupAuthProfiles()`, which was never defined → section threw and rendered inert |
+| `loadInterfaces` | `.map` on a null reply from `packet_list_interfaces` |
+| `loadIrPlaybooks` | `Object.entries(null)` throws |
+| `loadThreatFeeds` | `.map` on a null reply |
+| `loadThreatActors` | `.map` on a null reply |
+| `loadIndicators` | `.map` on a null reply |
+
+The four null cases share one shape: the command answers `null` when nothing is
+configured, and the loader treated that as a crash. They now guard and say so.
+
+**Caveat on scope.** The audit reports `all_flags=18` but only `fake-success`
+asserts; `no-listener` and `no-provenance` are *recorded, not yet adjudicated*.
+Read them before treating the suite as clean. `no-listener` in particular will
+include controls that are genuinely decorative, and controls whose handler is
+attached by code the audit skipped.
+
 ### 3. `assetSearch` / `profileSearch` wired
 
 The handoff called these "genuinely wireable". Added `filterRenderedRows` in
@@ -116,8 +156,8 @@ bytecode, and a hotspot ranking is not a verdict.
 ## Next
 
 - **`CWE→OWASP` qualified review** — still open, still gating §5.1. See below.
-- **Run the audit's `(a)`/`(c)` arms and triage the output.** `(b)` is wired;
-  the no-listener and console-error findings need a human read before any fix.
+- **Run the audit's `(a)`/`(c)` arms and triage the output.** `(b)` asserts and is
+  clean; the 18 recorded `no-listener` / `no-provenance` flags are unreviewed.
 - **Wire `crates/bounty` into the UI and `src/main.rs`.** The crate is built and
   tested but not yet exposed over IPC, so nothing in the app calls it yet.
 - **Decide the `cargo fmt` question** (687 diffs, above).
