@@ -46,22 +46,22 @@
             <button class="team-tab active" data-team="red" id="tabRed">
                 <span class="team-icon">🔴</span>
                 <span>Red Team</span>
-                <span class="team-badge" id="redBadge">0</span>
+                <span class="team-badge" id="redBadge" data-tooltip="Targets and findings loaded from the database">0</span>
             </button>
             <button class="team-tab" data-team="gray" id="tabGray">
                 <span class="team-icon">🔘</span>
                 <span>Gray Team</span>
-                <span class="team-badge" id="grayBadge">0</span>
+                <span class="team-badge" id="grayBadge" data-tooltip="Not tracked: no backend call reports a count for this team, so none is shown">—</span>
             </button>
             <button class="team-tab" data-team="blue" id="tabBlue">
                 <span class="team-icon">🔵</span>
                 <span>Blue Team</span>
-                <span class="team-badge" id="blueBadge">0</span>
+                <span class="team-badge" id="blueBadge" data-tooltip="Not tracked: no backend call reports a count for this team, so none is shown">—</span>
             </button>
             <button class="team-tab" data-team="white" id="tabWhite">
                 <span class="team-icon">⚪</span>
                 <span>White Team</span>
-                <span class="team-badge" id="whiteBadge">0</span>
+                <span class="team-badge" id="whiteBadge" data-tooltip="Not tracked: no backend call reports a count for this team, so none is shown">—</span>
             </button>
         </nav>
 
@@ -803,7 +803,7 @@
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">Saved Profiles</span>
-                    <input type="text" class="input input-sm" placeholder="Search..." style="width:160px;" id="profileSearch">
+                    <input type="text" class="input input-sm" placeholder="Search..." style="width:160px;" id="profileSearch" oninput="filterRenderedRows('profileSearch', 'profileList')">
                 </div>
                 <div class="card-body" id="profileList">
                     <div class="empty-state">
@@ -1962,7 +1962,7 @@
     <div class="card">
         <div class="card-header">
             <span class="card-title">Asset List</span>
-            <input type="text" class="input input-sm" placeholder="Search assets..." style="width:200px;" id="assetSearch">
+            <input type="text" class="input input-sm" placeholder="Search assets..." style="width:200px;" id="assetSearch" oninput="filterRenderedRows('assetSearch', 'assetList')">
         </div>
         <div class="card-body" id="assetList"></div>
     </div>

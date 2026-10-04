@@ -929,6 +929,7 @@
         } else if (section === 'red-sessions' || section === 'red-auth') {
             renderTemplate(content, 'content-authprofiles');
             setupAuthProfiles();
+            loadAuthProfiles();
         } else if (section === 'red-network') {
             renderTemplate(content, 'content-networkscanner');
             setupNetworkScanner();
@@ -1227,16 +1228,25 @@
     }
 
     function updateTeamBadges() {
-        const counts = {
-            red: (state.data.targets?.length || 0) + (state.data.findings?.length || 0),
-            gray: (state.data.simulations?.length || 0) + (state.data.correlations?.length || 0),
-            blue: (state.data.alerts?.length || 0) + (state.data.incidents?.length || 0),
-            white: (state.data.risks?.length || 0),
-        };
-        Object.entries(counts).forEach(([team, n]) => {
+        // Only Red has a real backend count: targets and findings both come from
+        // the database. Gray/Blue/White counts are built from client-side arrays
+        // that no command ever populates, so a "0" there would assert "we looked
+        // and found nothing" when in fact nothing was queried. Show the em dash
+        // and say why, rather than claiming a count we do not have.
+        const red = document.getElementById('redBadge');
+        if (red) {
+            red.textContent = (state.data.targets?.length || 0) + (state.data.findings?.length || 0);
+            red.setAttribute('data-tooltip', 'Targets and findings loaded from the database');
+        }
+        for (const team of ['gray', 'blue', 'white']) {
             const el = document.getElementById(`${team}Badge`);
-            if (el) el.textContent = n;
-        });
+            if (!el) continue;
+            el.textContent = '—';
+            el.setAttribute(
+                'data-tooltip',
+                'Not tracked: no backend call reports a count for this team, so none is shown'
+            );
+        }
     }
 
     function updateSidebarCounts() {
@@ -3360,6 +3370,49 @@
         $('#profileEditorTitle').textContent = 'New Authentication Profile';
     }
 
+    /**
+     * Wire the auth-profiles template (content-authprofiles).
+     *
+     * renderContent() called this for `red-sessions`, but no such function
+     * existed, so navigating to that section threw `setupAuthProfiles is not
+     * defined` and left the panel inert. Found by the control audit, not by
+     * reading the logs by hand.
+     */
+    function setupAuthProfiles() {
+        $('#newProfileBtn')?.addEventListener('click', () => {
+            state.data.editingProfileId = null;
+            resetAuthProfileForm();
+            $('#profileEditor').style.display = 'block';
+            $('#profileEditor')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+
+        $('#saveAuthBtn')?.addEventListener('click', saveAuthProfile);
+        $('#testAuthBtn')?.addEventListener('click', testAuthProfile);
+
+        // Show the credential fields only for auth types that use them; a Bearer
+        // token profile has no username/password, so leaving them visible would
+        // invite the operator to fill fields that are never sent.
+        $('#authProfileType')?.addEventListener('change', e => {
+            const type = e.target.value;
+            const usesForm = type === 'form' || type === 'basic';
+            const usesTotp = type === 'totp';
+            const fields = $('#formAuthFields');
+            if (fields) fields.style.display = usesForm ? 'block' : 'none';
+            const totpFields = $('#totpFields');
+            if (totpFields) totpFields.style.display = usesTotp ? 'block' : 'none';
+        });
+
+        // Import is not implemented. Say so rather than silently doing nothing,
+        // and do not claim any file was read.
+        $('#importProfilesBtn')?.addEventListener('click', () => {
+            showToast(
+                'warning',
+                'Import Not Implemented',
+                'Bulk profile import is not implemented. No file was read.'
+            );
+        });
+    }
+
     async function loadAuthProfiles() {
         const list = $('#profileList');
         if (!list) return;
@@ -3375,6 +3428,7 @@
 
         list.innerHTML = state.data.authProfiles.map(p => `
             <div style="padding:12px; border:1px solid var(--border-primary); border-radius:8px; margin-bottom:8px; cursor:pointer;"
+                 data-search="${escapeHtml([p.name, p.target, p.type].filter(Boolean).join(' ').toLowerCase())}"
                  onclick="editAuthProfile('${p.id}')">
                 <div class="flex items-center justify-between">
                     <div>
@@ -5107,7 +5161,9 @@
             const container = $('#assetList');
             if (!container) return;
             container.innerHTML = assets.map(a => `
-                <div class="finding-card">
+                <div class="finding-card" data-search="${escapeHtml([
+                    a.name, a.asset_type, a.environment, a.criticality, a.owner, ...(a.tags || [])
+                ].filter(Boolean).join(' ').toLowerCase())}">
                     <div class="finding-card-header" onclick="toggleFindingCard(this)">
                         <div class="flex items-center gap-3">
                             <span class="status-icon">${a.criticality === 'Critical' ? '🔴' : a.criticality === 'High' ? '🟠' : a.criticality === 'Medium' ? '🟡' : '🟢'}</span>
@@ -5487,6 +5543,57 @@
             if (filter === 'all') card.style.display = '';
             else card.style.display = card.dataset.status === filter ? '' : 'none';
         });
+    }
+
+    /**
+     * Filter an already-rendered list against a text input, by substring.
+     *
+     * Used by the asset and auth-profile search boxes. Both lists are rendered
+     * from real backend data, so this filters what is already on screen -- it
+     * makes no new request and invents no results.
+     *
+     * Rows opt in with a `data-search` attribute holding the lowercased haystack
+     * (name, type, environment, owner). Rows are matched on every whitespace-
+     * separated term, so "prod web" narrows rather than widens.
+     *
+     * A search that matches nothing shows an explicit .filter-no-match notice.
+     * Hiding every row without comment reads as "the list is empty", which
+     * would be a different and false statement.
+     */
+    function filterRenderedRows(inputId, listId) {
+        const input = document.getElementById(inputId);
+        const list = document.getElementById(listId);
+        if (!input || !list) return;
+
+        const rows = Array.from(list.querySelectorAll('[data-search]'));
+        // Remove any stale notice before recomputing.
+        list.querySelectorAll('.filter-no-match').forEach(n => n.remove());
+
+        const terms = String(input.value || '').toLowerCase().split(/\s+/).filter(Boolean);
+        if (terms.length === 0) {
+            rows.forEach(r => { r.style.display = ''; });
+            return;
+        }
+
+        let visible = 0;
+        rows.forEach(row => {
+            const haystack = (row.getAttribute('data-search') || '').toLowerCase();
+            const match = terms.every(t => haystack.includes(t));
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+
+        if (visible === 0) {
+            const notice = document.createElement('div');
+            notice.className = 'filter-no-match';
+            notice.setAttribute('role', 'status');
+            const termList = terms.map(t => escapeHtml(t)).join(', ');
+            notice.innerHTML = `
+                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-title">No matches</div>
+                <div class="empty-state-text">No row matches ${termList}.</div>`;
+            list.appendChild(notice);
+        }
     }
 
     // ========================================
@@ -7819,6 +7926,14 @@
             const interfaces = await invoke('packet_list_interfaces');
             const select = $('#captureInterface');
             if (!select) return;
+            // The command answers null when capture is unavailable on this host.
+            // Treat that as "no interfaces", not as a crash on .map -- and say
+            // so in the control rather than presenting an empty dropdown that
+            // looks like a failed enumeration.
+            if (!Array.isArray(interfaces) || interfaces.length === 0) {
+                select.innerHTML = '<option value="">No capture interfaces reported</option>';
+                return;
+            }
             select.innerHTML = interfaces.map(iface =>
                 `<option value="${iface.name}">${iface.name} (${iface.ips?.join(', ') || 'no IP'}) ${iface.is_loopback ? '[loopback]' : ''}</option>`
             ).join('');
@@ -9127,6 +9242,7 @@
     // Inline onclick attributes resolve against the global scope, not this
     // IIFE, so every handler used here must also be exported.
     window.toggleFindingCard = toggleFindingCard;
+    window.filterRenderedRows = filterRenderedRows;
     window.switchTeam = switchTeam;
     window.loadScan = loadScan;
     window.deleteScan = deleteScan;

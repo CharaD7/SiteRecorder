@@ -1865,6 +1865,18 @@ select.input[data-custom-select-initialized="true"] {
     max-width: 400px;
 }
 
+/* Search with no matches. Hiding every row with no explanation reads as an
+   empty list, which is a different (and false) statement. */
+.filter-no-match {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8) var(--space-6);
+    text-align: center;
+    color: var(--text-secondary);
+}
+
 /* === Loading Skeleton === */
 .skeleton {
     background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-hover) 50%, var(--bg-tertiary) 75%);
