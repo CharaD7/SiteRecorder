@@ -206,6 +206,38 @@ window.__TAURI__ = { invoke: async (cmd, args) => {
       return [ { id:'a1', timestamp:'2026-01-31T09:00:00Z', actor:'op-1', action:'app_start', target:null, details:'database opened', ip_address:null, prev_hash:'GENESIS', hash:'abc123' },
                { id:'a2', timestamp:'2026-01-31T09:05:00Z', actor:'op-1', action:'finding_created', target:'f1', details:'SQL Injection (CRITICAL)', ip_address:null, prev_hash:'abc123', hash:'def456' } ];
     case 'verify_audit_integrity': return { valid:true, entries_checked:2, first_invalid_seq:null, reason:null };
+    case 'blueteam_get_ir_playbooks':
+      // A map of name -> steps; loadIrPlaybooks iterates Object.entries.
+      return { 'Ransomware Containment': ['Isolate the host','Preserve volatile memory','Restore from known-good backup'],
+               'Credential Theft': ['Rotate exposed secrets','Force session revocation','Audit sign-in logs'] };
+    case 'grayteam_get_apt_techniques':
+      // A flat array of technique ids -- loadAptTechniques maps it straight into
+      // badge markup.
+      return ['T1566','T1059','T1071','T1003'];
+    case 'blueteam_get_threat_feeds':
+      return [ { name:'Ethereum Attacker DEX', description:'Known malicious trading infra', enabled:true, indicator_count:142 },
+               { name:'North Korean phishing infra', description:'State-actor phishing C2', enabled:false, indicator_count:57 } ];
+    case 'blueteam_get_threat_actors':
+      return [ { name:'APT28', country:'RU', description:'Fancy Bear', motivation:'Espionage', sophistication:'High',
+                 aliases:['Fancy Bear','Sednit'], mitre_techniques:['T1566','T1059'] } ];
+    case 'blueteam_get_malware_analysis':
+      // A single analysis object, not a list -- loadMalwareAnalysis reads
+      // analysis.sample_name / risk_score / file_type directly.
+      return { sample_name:'invoice_2026.exe', file_type:'PE32 executable', file_size:284160,
+               md5:'d41d8cd98f00b204e9800998ecf8427e', sha256:'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+               risk_score:92, signatures:[ {name:'Emotet', matched:true} ], iocs:[{type:'domain', value:'evil.example'}] };
+    case 'whiteteam_get_vendors':
+      // Field names AND types taken from loadVendors' template: name, tier,
+      // risk_level, description, contract_start/end, and services/data_access
+      // as ARRAYS (the template calls .map on both -- a string throws and the
+      // pane renders blank).
+      return [ { name:'Acme Cloud', tier:'1', risk_level:'High', description:'Primary cloud provider',
+                 contract_start:'2024-01-01', contract_end:'2026-12-31',
+                 data_access:['production','pii'], services:['compute','storage'],
+                 assessments:[{ framework:'SOC 2', readiness_score:88 }] },
+               { name:'Beta Payments', tier:'2', risk_level:'Medium', description:'Payment processor',
+                 contract_start:'2025-03-01', contract_end:'2027-02-28',
+                 data_access:['limited'], services:['api'], assessments:[] } ];
     case 'bounty_status':
       // ChainScope IS installed on this machine, at
       // ~/Developments/Personal/Hacks/Immunefi/ChainScope/.venv/bin/cs.

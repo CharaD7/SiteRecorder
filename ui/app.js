@@ -2566,7 +2566,11 @@
         if (!list) return;
 
         try {
-            const profiles = await invoke('list_auth_profiles');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#authProfilesList'); if (_p) showSkeleton(_p, 3); }
+            const profiles = await invoke('list_auth_profiles');            clearSkeleton(document.querySelector('#authProfilesList'));
+
             state.data.authProfiles = profiles || [];
 
             if (state.data.authProfiles.length === 0) {
@@ -3196,7 +3200,11 @@
         if (!container) return;
 
         try {
-            const wordlists = await invoke('password_get_wordlists');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#wordlistManagerContent'); if (_p) showSkeleton(_p, 2); }
+            const wordlists = await invoke('password_get_wordlists');            clearSkeleton(document.querySelector('#wordlistManagerContent'));
+
             state.data.wordlists = wordlists || [];
 
             if (state.data.wordlists.length === 0) {
@@ -4785,7 +4793,11 @@ async function listBountyPrograms() {
         const group = $('#aptGroupSelect')?.value || 'apt28';
 
         try {
-            const techniques = await invoke('grayteam_get_apt_techniques', { group });
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#aptResults'); if (_p) showSkeleton(_p, 3); }
+            const techniques = await invoke('grayteam_get_apt_techniques', { group });            clearSkeleton(document.querySelector('#aptResults'));
+
             const container = $('#aptResults');
             if (!container) return;
 
@@ -4923,7 +4935,11 @@ async function listBountyPrograms() {
 
     async function loadIrPlaybooks() {
         try {
-            const playbooks = await invoke('blueteam_get_ir_playbooks');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#irPlaybooks'); if (_p) showSkeleton(_p, 2); }
+            const playbooks = await invoke('blueteam_get_ir_playbooks');            clearSkeleton(document.querySelector('#irPlaybooks'));
+
             const container = $('#irPlaybooks');
             if (!container) return;
 
@@ -4972,7 +4988,11 @@ async function listBountyPrograms() {
 
     async function loadThreatFeeds() {
         try {
-            const feeds = await invoke('blueteam_get_threat_feeds');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#threatFeedsContainer'); if (_p) showSkeleton(_p, 3); }
+            const feeds = await invoke('blueteam_get_threat_feeds');            clearSkeleton(document.querySelector('#threatFeedsContainer'));
+
             const container = $('#threatFeedsContainer');
             if (!container) return;
             // A null reply means none are configured, not a failed enumeration;
@@ -4996,7 +5016,11 @@ async function listBountyPrograms() {
 
     async function loadThreatActors() {
         try {
-            const actors = await invoke('blueteam_get_threat_actors');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#threatActorsContainer'); if (_p) showSkeleton(_p, 3); }
+            const actors = await invoke('blueteam_get_threat_actors');            clearSkeleton(document.querySelector('#threatActorsContainer'));
+
             const container = $('#threatActorsContainer');
             if (!container) return;
             if (!Array.isArray(actors) || actors.length === 0) {
@@ -5023,7 +5047,11 @@ async function listBountyPrograms() {
 
     async function loadIndicators() {
         try {
-            const indicators = await invoke('blueteam_get_indicators');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#indicatorsContainer'); if (_p) showSkeleton(_p, 4); }
+            const indicators = await invoke('blueteam_get_indicators');            clearSkeleton(document.querySelector('#indicatorsContainer'));
+
             const container = $('#indicatorsContainer');
             if (!container) return;
             if (!Array.isArray(indicators) || indicators.length === 0) {
@@ -5232,7 +5260,11 @@ async function listBountyPrograms() {
 
     async function loadVendors() {
         try {
-            const vendors = await invoke('whiteteam_get_vendors');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#vendorResults'); if (_p) showSkeleton(_p, 3); }
+            const vendors = await invoke('whiteteam_get_vendors');            clearSkeleton(document.querySelector('#vendorResults'));
+
             const container = $('#vendorResults');
             if (!container) return;
 
@@ -5341,7 +5373,11 @@ async function listBountyPrograms() {
 
     async function loadNotifications() {
         try {
-            const notifications = await invoke('cross_get_notifications');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#notificationList'); if (_p) showSkeleton(_p, 3); }
+            const notifications = await invoke('cross_get_notifications');            clearSkeleton(document.querySelector('#notificationList'));
+
             const container = $('#notificationList');
             if (!container) return;
             container.innerHTML = notifications.map(n => `
@@ -5363,7 +5399,11 @@ async function listBountyPrograms() {
 
     async function loadReportTemplates() {
         try {
-            const templates = await invoke('cross_get_report_templates');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#reportTemplates'); if (_p) showSkeleton(_p, 2); }
+            const templates = await invoke('cross_get_report_templates');            clearSkeleton(document.querySelector('#reportTemplates'));
+
             const container = $('#reportTemplates');
             if (!container) return;
             container.innerHTML = templates.map(t => `
@@ -5388,7 +5428,11 @@ async function listBountyPrograms() {
 
     async function loadIntegrations() {
         try {
-            const integrations = await invoke('cross_get_integrations');
+            // Placeholder before the await, so a slow backend shows a loading
+            // state rather than an empty pane that reads as "nothing found".
+            { const _p = $('#integrationList'); if (_p) showSkeleton(_p, 2); }
+            const integrations = await invoke('cross_get_integrations');            clearSkeleton(document.querySelector('#integrationList'));
+
             const container = $('#integrationList');
             if (!container) return;
             container.innerHTML = integrations.map(i => `

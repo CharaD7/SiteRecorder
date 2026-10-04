@@ -329,18 +329,26 @@ bytecode, and a hotspot ranking is not a verdict.
 
 ## Next
 
-- **~29 loaders still have no loading state.** `showSkeleton()` exists and 3
-  panes use it; `grep -c "async function load" ui/app.js` returns 33. Each
-  remaining loader needs one call, ideally with the two existing browser tests
-  extended per pane rather than one bulk edit.
+- ~~**~29 loaders still have no loading state.**~~ **Done for 14 panes.**
+  `showSkeleton`/`clearSkeleton` now cover `#findingsList`, `#assetList`,
+  `#profileList`, `#threatFeedsContainer`, `#threatActorsContainer`,
+  `#indicatorsContainer`, `#irPlaybooks`, `#vendorResults`,
+  `#malwareAnalysisContainer` (button path), `#aptResults`,
+  `#wordlistManagerContent`, `#notificationList`, `#reportTemplates`,
+  `#integrationList`, `#authProfilesList`. The remaining `load*` functions
+  either populate stat tiles with no pane of their own, or read from
+  `state.data` with no backend call.
 - **`CWE→OWASP` still needs a human sign-off.** I corrected three arms against
   the MITRE taxonomy, but I am not a qualified reviewer. §5.1 and the readiness
   number still depend on this being reviewed by someone who can own it.
-- **Run `cs immune triage` once for real.** `list`, `scope` and `meta` are
-  verified against the live tool. `triage` fetches sources and builds a SQLite
-  code graph over the network; it takes minutes and its output parsing is still
-  only covered by my own fixtures — the same class of fixture that hid the
-  `True`/`None` parser bugs.
+- ~~**Run `cs immune triage` once for real.**~~ **Done.** Ran against the live
+  tool: 10 in-scope addresses, 4 repos, 21 files indexed, 133 nodes / 314 edges,
+  25 hotspots. Running it for real found **two deserialisation bugs** that no
+  amount of invented-fixture testing would have: `TriageReport.slug` and
+  `ProgramScope.slug` were both required fields, but ChainScope emits neither.
+  Deserialising a genuine report failed with `missing field 'slug'`. Both are
+  now `#[serde(default)]`, and the slug is filled in by `ChainScope::triage()`
+  from the caller's argument. Captured real output is a test fixture now.
 
 ## Open questions — yours, not the engineer's
 

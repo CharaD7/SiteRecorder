@@ -88,6 +88,12 @@ pub struct ScopedAddress {
 /// A program's published in-scope surface.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProgramScope {
+    /// Filled in by the caller.
+    ///
+    /// `#[serde(default)]` because ChainScope returns only `{addresses, repos}`
+    /// -- it does not echo the slug back. This was a required field, so
+    /// deserialising a real `scope` payload failed with "missing field `slug`".
+    #[serde(default)]
     pub slug: String,
     #[serde(default)]
     pub addresses: Vec<ScopedAddress>,
@@ -149,6 +155,12 @@ pub struct Hotspot {
 /// Result of a full `cs immune triage` run.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TriageReport {
+    /// Supplied by the caller, not by the tool.
+    ///
+    /// `#[serde(default)]` because ChainScope's payload has no `slug` key --
+    /// verified against real output. It was previously a required field, so
+    /// deserialising a genuine report failed outright.
+    #[serde(default)]
     pub slug: String,
     #[serde(default)]
     pub scope: Option<ProgramScope>,
@@ -624,6 +636,110 @@ mod tests {
             repos: vec![],
         };
         assert!(s.is_empty());
+    }
+
+    /// Parses a real `cs immune triage --json` payload.
+    ///
+    /// Captured from `cs immune triage layerzero --max-fetch 1` against the
+    /// installed tool: 21 files indexed, 133 nodes / 314 edges, 25 hotspots.
+    /// The payload is preceded by progress lines, which is what `extract_json`
+    /// exists to strip.
+    ///
+    /// This is the fixture class that caught the `True`/`None` meta bugs: real
+    /// output has an extra `source_context` and `visibility` field per hotspot,
+    /// and `line`/`score` are present as JSON numbers, not strings.
+    #[test]
+    fn triage_parses_real_captured_output() {
+        let progress = "\
+layerzero: 10 in-scope address(es), 4 repo(s); fetching 1.
+  repo: https://github.com/LayerZero-Labs/LayerZero
+  [ok] 1:0x4d73adb72bc3dd368966edd0f0b2148401a178e2 files=21
+graph: 133 nodes, 314 edges, 21/21 files
+top hotspots (immune-layerzero.db):
+  functionDelegateCall 1/0x4d73.../Address.sol:163 score=9 [proxy,upgrade_surface]
+Next: read flagged functions, adjudicate vs program rules.
+";
+        let json = r#"{
+  "scope": {
+    "addresses": [
+      { "chain": "1", "address": "0x4d73adb72bc3dd368966edd0f0b2148401a178e2", "host": "etherscan.io" },
+      { "chain": "aptoscan.com", "address": "0x54ad3d30af77b60d939ae356e6606de9a4da6758", "host": "aptoscan.com" }
+    ],
+    "repos": ["https://github.com/LayerZero-Labs/LayerZero"]
+  },
+  "fetched": 1,
+  "errors": 0,
+  "hotspots": [
+    {
+      "function": "functionDelegateCall",
+      "file": "1/0x4d73adb72bc3dd368966edd0f0b2148401a178e2/Address.sol",
+      "line": 163,
+      "score": 9,
+      "reasons": ["proxy(['contains_delegatecall'])", "upgrade_surface", "privileged(1)"],
+      "source_context": "production",
+      "visibility": "public"
+    },
+    {
+      "function": "owner",
+      "file": "1/0x4d73adb72bc3dd368966edd0f0b2148401a178e2/Ownable.sol",
+      "line": 35,
+      "score": 6,
+      "reasons": ["privileged(1)", "unguarded_privileged"],
+      "source_context": "production",
+      "visibility": "public"
+    }
+  ]
+}"#;
+        let stdout = format!("{progress}{json}");
+        let payload = extract_json(&stdout).expect("payload must be extractable");
+        let report: TriageReport =
+            serde_json::from_str(&payload).expect("payload must deserialize");
+
+        // ChainScope does not echo the slug back, so a payload deserialised
+        // directly has an empty slug. `ChainScope::triage()` is what fills it
+        // in from the caller's argument, which is what this asserts below.
+        assert_eq!(report.slug, "", "tool payload carries no slug");
+        assert_eq!(report.fetched, 1);
+        assert_eq!(report.errors, 0);
+        assert!(!report.indexed_nothing(), "1 source was indexed");
+
+        let scope = report.scope.expect("scope present");
+        assert_eq!(scope.addresses.len(), 2);
+        assert_eq!(scope.addresses[0].chain, "1");
+        assert_eq!(scope.addresses[0].host.as_deref(), Some("etherscan.io"));
+        assert_eq!(scope.repos.len(), 1);
+
+        assert_eq!(report.hotspots.len(), 2);
+        let top = &report.hotspots[0];
+        assert_eq!(top.function.as_deref(), Some("functionDelegateCall"));
+        // line and score are JSON numbers; a String field would silently be None.
+        assert_eq!(top.line, Some(163), "line must survive as a number");
+        assert_eq!(top.score, Some(9.0), "score must survive as a number");
+        assert_eq!(top.reasons.len(), 3);
+        // Extra fields ChainScope emits must not break deserialisation.
+        assert_eq!(
+            top.file.as_deref(),
+            Some("1/0x4d73adb72bc3dd368966edd0f0b2148401a178e2/Address.sol")
+        );
+    }
+
+    /// The progress text a real run prints before its payload.
+    #[test]
+    fn extract_json_handles_real_triage_preamble() {
+        let stdout = "\
+layerzero: 10 in-scope address(es), 4 repo(s); fetching 1.
+  repo: https://github.com/LayerZero-Labs/Audits
+  [ok] 1:0x4d73adb72bc3dd368966edd0f0b2148401a178e2 files=21
+graph: 133 nodes, 314 edges, 21/21 files
+top hotspots (immune-layerzero.db):
+  functionDelegateCall 1/0x4d73/Address.sol:163 score=9 [proxy,upgrade_surface]
+Next: read flagged functions, adjudicate vs program rules.
+{ \"fetched\": 1, \"errors\": 0, \"hotspots\": [] }
+";
+        let payload = extract_json(stdout).expect("must strip the preamble");
+        assert!(payload.starts_with('{'));
+        let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(v["fetched"], 1);
     }
 
     #[test]

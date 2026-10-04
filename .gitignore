@@ -32,6 +32,16 @@
 .DS_Store
 Thumbs.db
 
+# ChainScope working files. `cs immune triage` writes its fetched sources, its
+# SQLite code graph and a surface report into the CURRENT directory, so running
+# a triage from the repo root would otherwise drop several hundred KB of
+# generated data into the tree.
+.chainsource/
+*_surface/
+immune-*.db
+immune-*.db-shm
+immune-*.db-wal
+
 # Temporary files
 tmp/
 temp/
