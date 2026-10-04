@@ -113,6 +113,43 @@ The stub answers `bounty_status` with `available: false` to mirror the real
 machine. A test asserts the badge, the reason, hidden controls, that
 `bounty_status` was genuinely invoked, and that `#bountyResults` is empty.
 
+## Loading states — measured, and mostly missing
+
+Answering "do we have sleek loading animations?" honestly: **the animation
+primitives exist; almost nothing uses them.**
+
+Present:
+- `.spinner` / `-sm` / `-lg` with `@keyframes spin` — used at **15 call sites**
+- `.skeleton` with a `@keyframes shimmer` gradient
+- `fadeIn` / `slideUp` / `toastIn` / `slideInRight`
+
+Missing:
+- **`.skeleton` is never emitted.** `class="skeleton"` appears nowhere in
+  `index.html` or `app.js`. It is fully-styled dead CSS.
+- **33 `async function load*` loaders. 0 of them render a loading state before
+  awaiting `invoke()`.** They leave the pane as-is (stale content) or blank.
+
+Measured, not inferred — `loading panes currently show nothing while awaiting
+the backend` delays `list_findings` by 1.5s and samples mid-flight:
+
+```
+MIDFLIGHT: {"spinner":false,"skeleton":false,"anyLoadingText":false,"childCount":3}
+SKELETON_IN_DOM: false
+```
+
+`childCount: 3` is the *previous* render still sitting there. So the worst case
+is not a blank pane — it is a pane showing **stale data with no indication it is
+stale**, which reads as current. That is a subtler failure than no spinner, and
+it is the same failure mode as the rest of this file: a plausible-looking result
+(previous rows) that is not the result just requested.
+
+The test asserts the *current* behaviour, so adding real skeletons will fail it
+loudly. That is intentional — it should be changed deliberately.
+
+**Not built yet:** a `withLoading(pane, fn)` helper that renders a shape-matched
+skeleton before `await` and swaps it for real content after. The `.skeleton` CSS
+is already there to receive it.
+
 ## Three bugs the "ChainScope is absent" belief produced
 
 Worth recording, because each one is a case of trusting a plausible inference
