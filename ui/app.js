@@ -2168,15 +2168,15 @@
 
         return `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${result.status === 'VULNERABLE' ? '🔴' : '🟢'}</span>
-                        <span class="font-medium">${escapeHtml(result.check_name || 'Unknown Check')}</span>
+                        <span class="finding-card-title">${escapeHtml(result.check_name || 'Unknown Check')}</span>
                         <span class="badge badge-${severity}">${result.severity || 'INFO'}</span>
                         <span class="badge badge-info">${escapeHtml(result.method || 'N/A')}</span>
                         ${result.response_code ? `<span class="badge badge-${result.response_code < 300 ? 'success' : 'error'}">${result.response_code}</span>` : ''}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-tertiary mb-2">${escapeHtml(result.endpoint || '')}</div>
@@ -2479,14 +2479,14 @@
 
         return `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${statusIcon}</span>
-                        <span class="font-medium">${escapeHtml(result.check_name || 'Unknown Check')}</span>
+                        <span class="finding-card-title">${escapeHtml(result.check_name || 'Unknown Check')}</span>
                         <span class="badge badge-${severity}">${result.severity || 'INFO'}</span>
                         <span class="badge badge-${statusClass}">${result.status || 'UNKNOWN'}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     ${findingsList || '<div class="text-tertiary text-sm">No detailed findings.</div>'}
@@ -3539,14 +3539,14 @@
 
             hostsHtml += `
                 <div class="card mb-3">
-                    <div class="card-header" style="cursor:pointer;" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="card-header" style="cursor:pointer;" onclick="toggleFindingCard(this)">
                         <div class="flex items-center gap-3">
                             <span class="status-dot online"></span>
                             <span style="font-weight:500;">${host.ip}</span>
                             ${host.hostname ? `<span class="text-secondary">${host.hostname}</span>` : ''}
                             <span class="badge badge-info">${openPorts.length} open</span>
                         </div>
-                        <span class="text-tertiary text-sm">▼</span>
+                        <span class="finding-card-chevron">▼</span>
                     </div>
                     <div class="card-body hidden">
                         ${portsHtml || '<div class="text-tertiary text-sm">No open ports found.</div>'}
@@ -3968,14 +3968,14 @@
 
         const findingsHtml = result.findings.map(f => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${f.severity === 'CRITICAL' ? '🔴' : f.severity === 'HIGH' ? '🟠' : f.severity === 'MEDIUM' ? '🟡' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
                         <span class="badge badge-${f.severity.toLowerCase()}">${f.severity}</span>
                         <span class="badge badge-info">${escapeHtml(f.category?.replace(/_/g, ' ') || '')}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description)}</div>
@@ -4047,14 +4047,14 @@
 
         const findingsHtml = result.findings.map(f => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${f.severity === 'CRITICAL' ? '🔴' : f.severity === 'HIGH' ? '🟠' : f.severity === 'MEDIUM' ? '🟡' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
                         <span class="badge badge-${f.severity.toLowerCase()}">${f.severity}</span>
                         ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description)}</div>
@@ -4117,14 +4117,14 @@
 
         const findingsHtml = result.findings.map(f => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${f.severity === 'CRITICAL' ? '🔴' : f.severity === 'HIGH' ? '🟠' : f.severity === 'MEDIUM' ? '🟡' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
                         <span class="badge badge-${f.severity.toLowerCase()}">${f.severity}</span>
                         <span class="badge badge-info">${escapeHtml(f.category?.replace(/_/g, ' ') || '')}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description)}</div>
@@ -4203,14 +4203,14 @@
 
         const findingsHtml = result.findings.map(f => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${f.severity === 'CRITICAL' ? '🔴' : f.severity === 'HIGH' ? '🟠' : f.severity === 'MEDIUM' ? '🟡' : f.severity === 'OPTIMIZATION' ? '🔵' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
                         <span class="badge badge-${f.severity.toLowerCase() === 'optimization' ? 'info' : f.severity.toLowerCase()}">${f.severity}</span>
                         ${f.swc_id ? `<span class="badge badge-warning">${escapeHtml(f.swc_id)}</span>` : ''}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description)}</div>
@@ -4261,13 +4261,13 @@
 
         const findingsHtml = result.findings.map(f => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${f.severity === 'CRITICAL' ? '🔴' : f.severity === 'HIGH' ? '🟠' : f.severity === 'MEDIUM' ? '🟡' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
                         <span class="badge badge-${f.severity.toLowerCase()}">${f.severity}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description)}</div>
@@ -4403,7 +4403,7 @@
 
         const threatsHtml = model.threats.map(t => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${t.severity === 'Critical' ? '🔴' : t.severity === 'High' ? '🟠' : t.severity === 'Medium' ? '🟡' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(t.name)}</span>
@@ -4411,7 +4411,7 @@
                         <span class="badge badge-info">${escapeHtml(t.stride_category)}</span>
                         <span class="badge badge-warning">Risk: ${t.risk_score.toFixed(1)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(t.description)}</div>
@@ -4470,14 +4470,14 @@
 
         const scenariosHtml = exercise.scenarios.map(s => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">⚔️</span>
                         <span class="font-medium">${escapeHtml(s.name)}</span>
                         <span class="badge badge-info">${escapeHtml(s.attack_type)}</span>
                         <span class="badge badge-warning">${s.duration_minutes}min</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(s.description)}</div>
@@ -4537,14 +4537,14 @@
 
         const rulesHtml = rules.map(r => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">🛡️</span>
                         <span class="font-medium">${escapeHtml(r.name)}</span>
                         <span class="badge badge-info">${escapeHtml(r.rule_type)}</span>
                         ${r.tested ? '<span class="badge badge-success">Tested</span>' : '<span class="badge badge-warning">Untested</span>'}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(r.description)}</div>
@@ -4707,9 +4707,9 @@
             for (const [name, steps] of Object.entries(playbooks)) {
                 html += `
                     <div class="finding-card mb-2">
-                        <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                        <div class="finding-card-header" onclick="toggleFindingCard(this)">
                             <span class="font-medium">📋 ${escapeHtml(name)}</span>
-                            <span class="text-tertiary text-sm">▼</span>
+                            <span class="finding-card-chevron">▼</span>
                         </div>
                         <div class="finding-card-body hidden">
                             <ol class="text-sm">${steps.map((s, i) => `<li style="padding:2px 0;">${escapeHtml(s)}</li>`).join('')}</ol>
@@ -4769,10 +4769,10 @@
             if (!container) return;
             container.innerHTML = actors.map(a => `
                 <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="finding-card-header" onclick="toggleFindingCard(this)">
                         <span class="font-medium">${escapeHtml(a.name)}</span>
                         <span class="badge badge-warning">${escapeHtml(a.country || 'Unknown')}</span>
-                        <span class="text-tertiary text-sm">▼</span>
+                        <span class="finding-card-chevron">▼</span>
                     </div>
                     <div class="finding-card-body hidden">
                         <div class="text-sm text-secondary mb-2">${escapeHtml(a.description || '')}</div>
@@ -4998,14 +4998,14 @@
 
             container.innerHTML = vendors.map(v => `
                 <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="finding-card-header" onclick="toggleFindingCard(this)">
                         <div class="flex items-center gap-3">
                             <span class="status-icon">${v.risk_level === 'Critical' ? '🔴' : v.risk_level === 'High' ? '🟠' : v.risk_level === 'Medium' ? '🟡' : '🟢'}</span>
                             <span class="font-medium">${escapeHtml(v.name)}</span>
                             <span class="badge badge-${v.risk_level === 'Critical' ? 'critical' : v.risk_level === 'High' ? 'high' : v.risk_level === 'Medium' ? 'warning' : 'success'}">${escapeHtml(v.risk_level || '')}</span>
                             <span class="badge badge-info">${escapeHtml(v.tier || '')}</span>
                         </div>
-                        <span class="text-tertiary text-sm">▼</span>
+                        <span class="finding-card-chevron">▼</span>
                     </div>
                     <div class="finding-card-body hidden">
                         <div class="text-sm text-secondary mb-2">${escapeHtml(v.description || '')}</div>
@@ -5035,14 +5035,14 @@
 
             container.innerHTML = modules.map(m => `
                 <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="finding-card-header" onclick="toggleFindingCard(this)">
                         <div class="flex items-center gap-3">
                             <span class="status-icon">${m.completion_rate >= 90 ? '🟢' : m.completion_rate >= 70 ? '🟡' : '🔴'}</span>
                             <span class="font-medium">${escapeHtml(m.name)}</span>
                             <span class="badge badge-info">${escapeHtml(m.category?.replace(/_/g, ' ') || '')}</span>
                             <span class="badge badge-${m.completion_rate >= 90 ? 'success' : m.completion_rate >= 70 ? 'warning' : 'error'}">${m.completion_rate.toFixed(0)}%</span>
                         </div>
-                        <span class="text-tertiary text-sm">▼</span>
+                        <span class="finding-card-chevron">▼</span>
                     </div>
                     <div class="finding-card-body hidden">
                         <div class="text-sm text-secondary mb-2">${escapeHtml(m.description || '')}</div>
@@ -5067,14 +5067,14 @@
             if (!container) return;
             container.innerHTML = assets.map(a => `
                 <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="finding-card-header" onclick="toggleFindingCard(this)">
                         <div class="flex items-center gap-3">
                             <span class="status-icon">${a.criticality === 'Critical' ? '🔴' : a.criticality === 'High' ? '🟠' : a.criticality === 'Medium' ? '🟡' : '🟢'}</span>
                             <span class="font-medium">${escapeHtml(a.name)}</span>
                             <span class="badge badge-info">${escapeHtml(a.asset_type?.replace(/_/g, ' ') || '')}</span>
                             <span class="badge badge-${a.environment === 'Production' ? 'error' : 'success'}">${escapeHtml(a.environment?.replace(/_/g, ' ') || '')}</span>
                         </div>
-                        <span class="text-tertiary text-sm">▼</span>
+                        <span class="finding-card-chevron">▼</span>
                     </div>
                     <div class="finding-card-body hidden">
                         <div class="text-sm text-secondary mb-2">${escapeHtml(a.url || a.ip_addresses?.join(', ') || '')}</div>
@@ -5116,14 +5116,14 @@
             if (!container) return;
             container.innerHTML = templates.map(t => `
                 <div class="finding-card">
-                    <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <div class="finding-card-header" onclick="toggleFindingCard(this)">
                         <div class="flex items-center gap-3">
                             <span class="status-icon">📋</span>
                             <span class="font-medium">${escapeHtml(t.name)}</span>
                             <span class="badge badge-info">${escapeHtml(t.report_type)}</span>
                             <span class="badge badge-success">${escapeHtml(t.format)}</span>
                         </div>
-                        <span class="text-tertiary text-sm">▼</span>
+                        <span class="finding-card-chevron">▼</span>
                     </div>
                     <div class="finding-card-body hidden">
                         <div class="text-sm text-secondary mb-2">${escapeHtml(t.description || '')}</div>
@@ -5418,14 +5418,14 @@
 
         container.innerHTML = scans.map(s => `
             <div class="finding-card" data-status="${s.status}">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-dot ${s.status === 'running' ? 'running' : s.status === 'completed' ? 'online' : 'error'}"></span>
                         <span class="font-medium">${escapeHtml(s.name || 'Untitled Scan')}</span>
                         <span class="badge badge-${s.status === 'running' ? 'warning' : s.status === 'completed' ? 'success' : 'error'}">${escapeHtml(s.status)}</span>
                         <span class="badge badge-info">${escapeHtml(s.type || 'web')}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">Target: <code>${escapeHtml(s.target || 'N/A')}</code></div>
@@ -5688,7 +5688,7 @@
 
         container.innerHTML = visible.map(f => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${severityIcon(f.severity)}</span>
                         <span class="font-medium">${escapeHtml(f.title)}</span>
@@ -5698,7 +5698,7 @@
                         ${f.cwe_id ? `<span class="badge badge-info">${escapeHtml(f.cwe_id)}</span>` : ''}
                         ${(f.mitre_techniques || []).map(t => `<span class="badge badge-info" title="MITRE ATT&CK">${escapeHtml(t)}</span>`).join('')}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(f.description || '')}</div>
@@ -6332,14 +6332,14 @@
 
         container.innerHTML = reports.map(r => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">📋</span>
                         <span class="font-medium">${escapeHtml(r.title)}</span>
                         <span class="badge badge-info">${escapeHtml(r.type)}</span>
                         <span class="badge badge-success">Generated</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(r.scope || '')}</div>
@@ -6404,14 +6404,14 @@
 
         container.innerHTML = simulations.map(s => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">⚔️</span>
                         <span class="font-medium">${escapeHtml(s.name)}</span>
                         <span class="badge badge-info">${escapeHtml(s.actor)}</span>
                         <span class="badge badge-${s.status === 'completed' ? 'success' : s.status === 'running' ? 'warning' : 'info'}">${escapeHtml(s.status)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(s.description || '')}</div>
@@ -6475,14 +6475,14 @@
 
         container.innerHTML = correlations.map(c => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${c.confidence > 0.8 ? '🔴' : c.confidence > 0.5 ? '🟡' : '🟢'}</span>
                         <span class="font-medium">${escapeHtml(c.title)}</span>
                         <span class="badge badge-${c.confidence > 0.8 ? 'critical' : c.confidence > 0.5 ? 'warning' : 'success'}">${(c.confidence * 100).toFixed(0)}%</span>
                         <span class="badge badge-info">${escapeHtml(c.type)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(c.description || '')}</div>
@@ -6605,13 +6605,13 @@
 
         container.innerHTML = reports.map(r => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">📋</span>
                         <span class="font-medium">${escapeHtml(r.title)}</span>
                         <span class="badge badge-info">${escapeHtml(r.type)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm"><strong>Created:</strong> ${new Date(r.createdAt).toLocaleString()}</div>
@@ -6753,14 +6753,14 @@
 
         container.innerHTML = alerts.map(a => `
             <div class="finding-card" data-severity="${a.severity}" data-ack="${a.acknowledged}">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${a.severity === 'critical' ? '🔴' : a.severity === 'high' ? '🟠' : a.severity === 'medium' ? '🟡' : '🔵'}</span>
                         <span class="font-medium">${escapeHtml(a.title)}</span>
                         <span class="badge badge-${a.severity === 'critical' ? 'critical' : a.severity === 'high' ? 'high' : a.severity === 'medium' ? 'warning' : 'info'}">${escapeHtml(a.severity)}</span>
                         ${a.acknowledged ? '<span class="badge badge-success">Ack</span>' : '<span class="badge badge-warning">New</span>'}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">${escapeHtml(a.description || '')}</div>
@@ -6879,14 +6879,14 @@
 
         container.innerHTML = samples.map(s => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">${s.risk >= 80 ? '🔴' : s.risk >= 50 ? '🟠' : '🟡'}</span>
                         <span class="font-medium">${escapeHtml(s.name)}</span>
                         <span class="badge badge-${s.risk >= 80 ? 'critical' : s.risk >= 50 ? 'high' : 'warning'}">Risk: ${s.risk}/100</span>
                         <span class="badge badge-info">${escapeHtml(s.status)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm mb-2"><strong>Type:</strong> ${escapeHtml(s.type || '')} · <strong>SHA256:</strong> <code>${s.sha256 || 'N/A'}</code></div>
@@ -7148,14 +7148,14 @@
 
         container.innerHTML = advisoryNote('DEMO DATA — these endpoints are hardcoded examples, not a real scan. No network sweep was performed.') + endpoints.map(e => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-dot ${e.protected ? 'online' : 'error'}"></span>
                         <span class="font-medium">${escapeHtml(e.name)}</span>
                         <span class="badge badge-info">${escapeHtml(e.os || 'Unknown')}</span>
                         ${e.isolated ? '<span class="badge badge-warning">Isolated</span>' : ''}
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm mb-2"><strong>IP:</strong> ${escapeHtml(e.ip || 'N/A')} · <strong>Last Seen:</strong> ${e.lastSeen ? new Date(e.lastSeen).toLocaleString() : 'N/A'}</div>
@@ -7278,13 +7278,13 @@
 
         container.innerHTML = reports.map(r => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">📋</span>
                         <span class="font-medium">${escapeHtml(r.title)}</span>
                         <span class="badge badge-info">${escapeHtml(r.type)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm"><strong>Created:</strong> ${new Date(r.createdAt).toLocaleString()}</div>
@@ -7337,13 +7337,13 @@
 
         container.innerHTML = reports.map(r => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-icon">📋</span>
                         <span class="font-medium">${escapeHtml(r.title)}</span>
                         <span class="badge badge-info">${escapeHtml(r.type)}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm"><strong>Created:</strong> ${new Date(r.createdAt).toLocaleString()}</div>
@@ -8156,14 +8156,14 @@
 
         container.innerHTML = sessions.map(s => `
             <div class="finding-card">
-                <div class="finding-card-header" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <div class="finding-card-header" onclick="toggleFindingCard(this)">
                     <div class="flex items-center gap-3">
                         <span class="status-dot ${s.status === 'recording' ? 'running' : s.status === 'completed' ? 'online' : 'offline'}"></span>
                         <span class="font-medium">${escapeHtml(s.sessionId || 'Unknown Session')}</span>
                         <span class="badge badge-${s.status === 'recording' ? 'warning' : s.status === 'completed' ? 'success' : 'info'}">${escapeHtml(s.status)}</span>
                         <span class="badge badge-info">${escapeHtml(s.mode || 'both')}</span>
                     </div>
-                    <span class="text-tertiary text-sm">▼</span>
+                    <span class="finding-card-chevron">▼</span>
                 </div>
                 <div class="finding-card-body hidden">
                     <div class="text-sm text-secondary mb-2">URL: <code>${escapeHtml(s.url || 'N/A')}</code></div>
@@ -8600,6 +8600,17 @@
 
     function advisoryNote(text) {
         return `<div class="advisory-inline">⚠️ ${escapeHtml(text)}</div>`;
+    }
+
+    /** Expand/collapse a finding card, keeping the chevron rotation in sync
+     *  with the body. Replaces 29 copies of an inline handler that could only
+     *  toggle visibility, so the affordance never indicated open state. */
+    function toggleFindingCard(header) {
+        const body = header.nextElementSibling;
+        if (!body) return;
+        const isOpen = body.classList.toggle('hidden') === false;
+        const card = header.closest('.finding-card');
+        if (card) card.classList.toggle('is-open', isOpen);
     }
 
     function escapeHtml(text) {
@@ -9043,6 +9054,9 @@
 
     // Expose for inline handlers
     window.dismissToast = dismissToast;
+    // Inline onclick attributes resolve against the global scope, not this
+    // IIFE, so every handler used here must also be exported.
+    window.toggleFindingCard = toggleFindingCard;
     window.switchTeam = switchTeam;
     window.loadScan = loadScan;
     window.deleteScan = deleteScan;

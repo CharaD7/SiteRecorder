@@ -1358,12 +1358,25 @@ select.input[data-custom-select-initialized="true"] {
     border-color: var(--bg-elevated);
 }
 
+.finding-card[data-severity="CRITICAL"] { border-left: 3px solid var(--severity-critical); }
+.finding-card[data-severity="HIGH"]     { border-left: 3px solid var(--severity-high); }
+.finding-card[data-severity="MEDIUM"]   { border-left: 3px solid var(--severity-medium); }
+.finding-card[data-severity="LOW"]      { border-left: 3px solid var(--severity-low); }
+.finding-card[data-severity="INFO"]     { border-left: 3px solid var(--severity-info); }
+
+/* Severity summary tiles mirror the row accent colours so the two agree. */
+.stat-card[data-severity="CRITICAL"] { border-top: 2px solid var(--severity-critical); }
+.stat-card[data-severity="HIGH"]     { border-top: 2px solid var(--severity-high); }
+.stat-card[data-severity="MEDIUM"]   { border-top: 2px solid var(--severity-medium); }
+.stat-card[data-severity="LOW"]      { border-top: 2px solid var(--severity-low); }
+.stat-card[data-severity="INFO"]     { border-top: 2px solid var(--severity-info); }
+
 .finding-card-header {
     padding: var(--space-3) var(--space-4);
     cursor: pointer;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
     user-select: none;
 }
 
@@ -1371,10 +1384,55 @@ select.input[data-custom-select-initialized="true"] {
     background: var(--bg-hover);
 }
 
+/* Title and metadata sit in one wrapping row so a long title with several
+   badges stays on aligned baselines instead of shoving the chevron around. */
+.finding-card-header > .flex:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    align-items: center;
+}
+
+/* Truncate rather than wrap the title; it is the longest field and wrapping
+   pushed every badge below it. */
+.finding-card-title {
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 46ch;
+}
+
+/* Fixed-width chevron keeps every row's affordance aligned. */
+.finding-card-chevron {
+    flex: 0 0 auto;
+    align-self: center;
+    color: var(--text-tertiary);
+    font-size: var(--text-sm);
+    line-height: 1;
+    transition: var(--transition-fast);
+}
+
+.finding-card.is-open .finding-card-chevron {
+    transform: rotate(180deg);
+}
+
 .finding-card-body {
-    padding: var(--space-4);
+    padding: var(--space-4) var(--space-5);
     border-top: 1px solid var(--border-primary);
     background: var(--bg-primary);
+}
+
+/* Action buttons in the expanded body get a consistent baseline. */
+.finding-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--border-secondary);
 }
 
 .finding-card-body.hidden {
