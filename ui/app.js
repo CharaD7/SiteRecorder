@@ -2651,6 +2651,7 @@
         try {
             const profile = await invoke('get_auth_profile', { id });
             if (!profile) return;
+            state.data.editingProfileId = id;
 
             $('#authProfileName').value = profile.name || '';
             $('#authProfileTarget').value = profile.target_url || '';
@@ -3428,15 +3429,33 @@
     }
 
     async function testAuthProfile() {
-        showToast('info', 'Testing Login', 'Attempting authentication with provided credentials...');
-        addActivity('Testing authentication profile');
-        setTimeout(() => {
-            showToast('success', 'Login Successful', 'Authentication verified successfully.');
-        }, 1500);
+        // Previously reported "Login Successful / Authentication verified
+        // successfully" after a fixed 1.5s delay, contradicting the backend,
+        // which was fixed to refuse to claim an unperformed login.
+        const id = state.data.editingProfileId;
+        if (!id) {
+            showToast('warning', 'No Profile Selected', 'Select a profile to test.');
+            return;
+        }
+
+        try {
+            const result = await invoke('test_auth_profile', { id });
+            if (result.outcome === 'authenticated') {
+                showToast('success', 'Login Verified', 'Credentials were accepted by the target.');
+            } else if (result.outcome === 'invalid') {
+                showToast('error', 'Profile Invalid', (result.validation_errors || []).join('; ') || 'The profile cannot work as configured.');
+            } else {
+                showToast('warning', 'Not Verified',
+                    'The profile is well-formed, but credentials were not checked. Browser-based login testing is not implemented.');
+            }
+        } catch (e) {
+            showToast('error', 'Test Failed', String(e));
+        }
     }
 
     function editAuthProfile(id) {
         const profile = state.data.authProfiles.find(p => p.id === id);
+        state.data.editingProfileId = id;
         if (!profile) return;
 
         $('#authProfileName').value = profile.name;
@@ -6515,19 +6534,34 @@
     }
 
     function runCorrelation() {
-        const container = $('#correlationResults');
-        container.innerHTML = '<div class="card"><div class="card-body"><div class="flex items-center gap-3"><div class="spinner spinner-sm"></div><span>Running correlation analysis...</span></div></div></div>';
+        // This previously waited two seconds and then populated three
+        // hardcoded attack chains -- including confidence scores -- with no
+        // backend call, before reporting "Analysis Complete". Correlation is
+        // not implemented, so it says so instead of inventing chains.
+        state.data.correlations = [];
+        loadCorrelation();
 
-        setTimeout(() => {
-            state.data.correlations = [
-                { id: 'corr_1', title: 'SQLi → Data Exfiltration Chain', confidence: 0.92, type: 'chain', findings: ['SQL Injection', 'DB Access', 'Data Export'], description: 'SQL injection vulnerability can be chained with database access to exfiltrate sensitive data.' },
-                { id: 'corr_2', title: 'XSS → Session Hijacking', confidence: 0.78, type: 'chain', findings: ['Stored XSS', 'Session Token Theft'], description: 'Stored XSS can be used to steal session tokens and hijack user accounts.' },
-                { id: 'corr_3', title: 'Weak Auth + No MFA', confidence: 0.65, type: 'cluster', findings: ['Weak Passwords', 'No MFA'], description: 'Multiple systems have weak authentication without MFA protection.' },
-            ];
-            loadCorrelation();
-            showToast('success', 'Analysis Complete', '3 correlations discovered.');
-            addActivity('Correlation analysis: 3 findings');
-        }, 2000);
+        const container = $('#correlationResults');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Correlation analysis</span>
+                    <span class="badge badge-warning">Unavailable</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-sm mb-2">No correlation analysis was performed. Nothing was examined.</p>
+                    <p class="text-sm text-tertiary mb-2">A real implementation would need:</p>
+                    <ul class="text-sm">
+                        <li>• A shared event store to correlate findings, alerts and incidents against</li>
+                        <li>• Time- and entity-keyed join logic to establish an attack chain</li>
+                        <li>• A stated confidence method, rather than an unexplained number</li>
+                    </ul>
+                </div>
+            </div>`;
+
+        showToast('warning', 'Not Available',
+            'Correlation analysis is not implemented; no chains were generated.');
     }
 
     // ========================================
