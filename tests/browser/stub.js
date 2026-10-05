@@ -121,6 +121,14 @@
 window.__calls = {};
 window.__TAURI__ = { invoke: async (cmd, args) => {
   window.__calls[cmd] = (window.__calls[cmd] || 0) + 1;
+  // Delay hooks. `state.tauri` is captured from this function at app init, so
+  // a test cannot slow the backend by wrapping it afterwards -- it has to be
+  // slow from the first call. A loader that shows a skeleton resolves too fast
+  // to observe otherwise, which is how a permanent `aria-busy` leak hides.
+  if (window.__delayMs) await new Promise(r => setTimeout(r, window.__delayMs));
+  if (window.__failCommands && window.__failCommands.includes(cmd)) {
+    throw new Error(`forced failure: ${cmd}`);
+  }
   const findings = window.__findings = window.__findings || [
     { id:'f1', title:'SQL Injection in login form', severity:'CRITICAL', status:'new', category:'web',
       cwe_id:'CWE-89', cve_ids:['CVE-2024-0001'], description:'Unparameterised query.',

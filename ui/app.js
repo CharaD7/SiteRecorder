@@ -2599,6 +2599,10 @@
                 </div>
             `).join('');
         } catch (e) {
+            // The error replaces the placeholder content, but `aria-busy` is a
+            // separate attribute and survives: without this the pane tells
+            // assistive tech it is still loading long after the load failed.
+            clearSkeleton(list);
             list.innerHTML = `<div class="text-error">Failed to load profiles: ${escapeHtml(String(e))}</div>`;
         }
     }
@@ -3514,6 +3518,10 @@
                     'The profile is well-formed, but credentials were not checked. Browser-based login testing is not implemented.');
             }
         } catch (e) {
+            // Clear the skeleton too. Without this the pane keeps
+            // aria-busy="true" forever, so assistive tech is told to
+            // wait for a load that has already failed.
+            clearSkeleton(list);
             showToast('error', 'Test Failed', String(e));
         }
     }
@@ -4812,6 +4820,10 @@ async function listBountyPrograms() {
                 </div>
             `;
         } catch (e) {
+            // Clear the skeleton too. Without this the pane keeps
+            // aria-busy="true" forever, so assistive tech is told to
+            // wait for a load that has already failed.
+            clearSkeleton(document.querySelector('#aptResults'));
             showToast('error', 'Load Failed', String(e));
         }
     }
@@ -4961,6 +4973,10 @@ async function listBountyPrograms() {
             }
             container.innerHTML = html || '<div class="text-tertiary">No playbooks loaded.</div>';
         } catch (e) {
+            // Clear the skeleton too. Without this the pane keeps
+            // aria-busy="true" forever, so assistive tech is told to
+            // wait for a load that has already failed.
+            clearSkeleton($('#irPlaybooks'));
             console.error('Failed to load playbooks:', e);
         }
     }
@@ -5011,7 +5027,7 @@ async function listBountyPrograms() {
                     <span class="badge badge-info">${f.indicator_count?.toLocaleString()} IOCs</span>
                 </div>
             `).join('');
-        } catch (e) { console.error('Failed to load feeds:', e); }
+        } catch (e) { clearSkeleton($('#threatFeedsContainer'));  console.error('Failed to load feeds:', e);  }
     }
 
     async function loadThreatActors() {
@@ -5042,7 +5058,7 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { console.error('Failed to load actors:', e); }
+        } catch (e) { clearSkeleton($('#threatActorsContainer'));  console.error('Failed to load actors:', e);  }
     }
 
     async function loadIndicators() {
@@ -5065,7 +5081,7 @@ async function listBountyPrograms() {
                     <span class="badge badge-warning">${i.confidence}%</span>
                 </div>
             `).join('');
-        } catch (e) { console.error('Failed to load indicators:', e); }
+        } catch (e) { clearSkeleton($('#indicatorsContainer'));  console.error('Failed to load indicators:', e);  }
     }
 
     // ========================================
@@ -5137,10 +5153,15 @@ async function listBountyPrograms() {
     }
 
     async function loadMalwareAnalysis() {
+        // Placeholder before the await. Without this the pane sits empty for the
+        // whole backend round-trip, which reads as "no analysis available".
+        { const _p = $('#malwareAnalysisContainer'); if (_p) showSkeleton(_p, 3); }
         try {
             const analysis = await invoke('blueteam_get_malware_analysis');
             const container = $('#malwareAnalysisContainer');
             if (!container) return;
+
+            clearSkeleton(container);
 
             container.innerHTML = `
                 <div class="card mb-3">
@@ -5183,7 +5204,12 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `;
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) {
+            // Clear the placeholder on failure too, or the pane shows an
+            // eternal skeleton with only a toast saying what went wrong.
+            clearSkeleton($('#malwareAnalysisContainer'));
+            showToast('error', 'Load Failed', String(e));
+        }
     }
 
     // ========================================
@@ -5288,7 +5314,7 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) { clearSkeleton($('#vendorResults'));  showToast('error', 'Load Failed', String(e));  }
     }
 
     // ========================================
@@ -5368,7 +5394,7 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) { clearSkeleton($('#assetList'));  showToast('error', 'Load Failed', String(e));  }
     }
 
     async function loadNotifications() {
@@ -5394,7 +5420,7 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('') || '<div class="empty-state"><div class="empty-state-icon">🔕</div><div class="empty-state-title">No Notifications</div><div class="empty-state-text">You are all caught up!</div></div>';
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) { clearSkeleton($('#notificationList'));  showToast('error', 'Load Failed', String(e));  }
     }
 
     async function loadReportTemplates() {
@@ -5423,7 +5449,7 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) { clearSkeleton($('#reportTemplates'));  showToast('error', 'Load Failed', String(e));  }
     }
 
     async function loadIntegrations() {
@@ -5447,7 +5473,7 @@ async function listBountyPrograms() {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { showToast('error', 'Load Failed', String(e)); }
+        } catch (e) { clearSkeleton($('#integrationList'));  showToast('error', 'Load Failed', String(e));  }
     }
 
     // ========================================

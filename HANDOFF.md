@@ -6,11 +6,11 @@ and what to do first.
 
 ## Verified baseline
 
-`main` @ `6d88ad8`. **304 Rust tests pass, 0 failures** (283 prior + 11 in
-`crates/bounty` + 5 CWE-mapping + 5 more). **25 Playwright tests pass**
-(17 non-audit + 8 audit), all with `--retries=0` so no green test is hiding a
-flake. `cargo fmt --all -- --check` is clean; `cargo check --all-targets` has
-zero warnings.
+`main` @ `c3408f2`. **341 Rust tests pass, 0 failures** (306 prior + 29 in
+`crates/auditbot` + 6 gate-integration). **Playwright: 29 pass** (25 prior + 4
+new skeleton/aria-busy tests), all with `--retries=0` so no green test is
+hiding a flake. `cargo fmt --all --check` is clean; `cargo clippy --all-targets`
+has zero warnings.
 
 ```bash
 cargo test --workspace --no-fail-fast
@@ -59,15 +59,12 @@ all* — which reads like a crash rather than a config ceiling. The audit needs
 `--global-timeout=2700000` as well. That config is shared by ~20 unrelated suites
 (eoro, Wyze, LambdaTest), so pass it per-invocation instead of editing the file.
 
-### `cargo fmt --check` does NOT pass — correction
+### `cargo fmt --check` — resolved
 
-The previous version of this file listed `cargo fmt --check` as green. It is not.
-At `1f4ca7d` it reports **687 diffs across the workspace**, in committed code
-(working tree clean apart from the two deliberately untracked planning docs).
-This predates this session's work. `crates/bounty` *is* fmt-clean; the other 687
-are not. **Not fixed here** — a 687-file reformat would bury the substantive
-commits. Either commit that as a standalone "reformat" change or amend the
-claim here.
+An earlier version of this file listed `cargo fmt --check` as green, then
+corrected it to red (687 diffs at `1f4ca7d`) and deferred the reformat as too
+burdensome. **That is now fixed**: `cargo fmt --all --check` passes across the
+whole workspace. The counts above were taken after the fix.
 
 ## CWE→OWASP review — done, three corrections
 
@@ -127,8 +124,9 @@ Present:
 Missing:
 - **`.skeleton` is never emitted.** `class="skeleton"` appears nowhere in
   `index.html` or `app.js`. It is fully-styled dead CSS.
-- **33 `async function load*` loaders. 0 of them render a loading state before
-  awaiting `invoke()`.** They leave the pane as-is (stale content) or blank.
+- ~~**33 `async function load*` loaders. 0 of them render a loading state before
+  awaiting `invoke()`.**~~ **Fixed for 16 panes.** Every `showSkeleton` call
+  site now clears on both the success path and the failure path.
 
 Measured, not inferred — `loading panes currently show nothing while awaiting
 the backend` delays `list_findings` by 1.5s and samples mid-flight:
@@ -329,15 +327,62 @@ bytecode, and a hotspot ranking is not a verdict.
 
 ## Next
 
-- ~~**~29 loaders still have no loading state.**~~ **Done for 14 panes.**
-  `showSkeleton`/`clearSkeleton` now cover `#findingsList`, `#assetList`,
-  `#profileList`, `#threatFeedsContainer`, `#threatActorsContainer`,
+- ~~**~29 loaders still have no loading state.**~~ **Done for 16 panes.**
+  `showSkeleton`/`clearSkeleton` cover `#findingsList`, `#assetList`,
+  `#authProfilesList` (via `loadAuthProfilesList`), `#authProfilesList`
+  (`loadAuthProfiles`), `#threatFeedsContainer`, `#threatActorsContainer`,
   `#indicatorsContainer`, `#irPlaybooks`, `#vendorResults`,
-  `#malwareAnalysisContainer` (button path), `#aptResults`,
-  `#wordlistManagerContent`, `#notificationList`, `#reportTemplates`,
-  `#integrationList`, `#authProfilesList`. The remaining `load*` functions
-  either populate stat tiles with no pane of their own, or read from
-  `state.data` with no backend call.
+  `#malwareAnalysisContainer`, `#aptResults`, `#wordlistManagerContent`,
+  `#notificationList`, `#reportTemplates`, `#integrationList`.
+  The remaining `load*` functions either populate stat tiles with no pane of
+  their own, or read from `state.data` with no backend call.
+
+  **Counting these by grep is unreliable and was wrong twice.** `grep -c
+  "showSkeleton("` returns 16, which includes the function declaration, so 15
+  call sites — but several use variable indirection (`const list =
+  $('#profileList')` then `showSkeleton(list, 2)`), so a naive selector grep
+  finds nothing. Ground truth is `tests/sr_skeleton_loading.spec.ts`, which
+  resolves the pane in the live DOM.
+
+  **`loadAptTechniques` was wrongly listed as unwired.** It is wired: the
+  button listener is at `app.js:4743` and the function at `app.js:4792`. The
+  earlier claim that its wiring "was not conclusively removed" is resolved —
+  it was never removed.
+
+### Two real defects found while verifying the above
+
+- **`#malwareAnalysisContainer` had no loading state at all.** The HANDOFF
+  previously claimed it was covered "(button path)"; it was not. `grep` said
+  otherwise because the pane is assigned to a local after the `await`. Fixed:
+  placeholder before the await, cleared on both paths.
+- **11 loaders leaked `aria-busy="true"` permanently when their backend call
+  failed.** `clearSkeleton` removes only the attribute; the skeleton markup is
+  removed by whatever writes `innerHTML` next. Loaders whose `catch` only called
+  `showToast` or `console.error` therefore left a pane telling assistive tech
+  it was still loading, forever. This is worse than showing an error — the user
+  is told to wait for something that will never arrive. Fixed in all 11, plus
+  `loadAuthProfilesList`, whose `catch` set `innerHTML` but left the attribute.
+
+### The test that caught them, and the test that did not
+
+The first version of `sr_skeleton_loading.spec.ts` **passed against the broken
+code**, which made it worthless. Three separate causes, each of which made the
+assertion vacuous:
+
+1. It checked panes in `white-reports`, where **none** of them are rendered —
+   they live in `<template id="content-blue-intel">` and friends. With a
+   "skip when missing" check, an absent pane looks identical to a clean one.
+2. `addInitScript` was registered **after** `page.goto`. It only applies to
+   *subsequent* navigations, so the failing shim never ran — and
+   `app.js` captures the stub's `invoke` into `state.tauri` at init, so the
+   app kept calling the original regardless.
+3. Even slowed, the loaders resolved faster than the sample, so `aria-busy` had
+   already been cleared by observation time.
+
+The spec now registers its hooks before `goto`, samples **mid-flight** against a
+delayed backend, and has a guard test that fails loudly if the pane→section
+mapping goes stale. **Verified by negative control**: with the fixes reverted it
+fails and names all 5 affected panes; with them applied it passes 4/4.
 - **`CWE→OWASP` still needs a human sign-off.** I corrected three arms against
   the MITRE taxonomy, but I am not a qualified reviewer. §5.1 and the readiness
   number still depend on this being reviewed by someone who can own it.
@@ -389,3 +434,66 @@ never made green. Both were genuine defects rather than bad expectations:
 
 `sr_control_audit.spec.ts` is the harness that would have caught both without me
 having to notice them by reading a log.
+
+## `crates/auditbot` — evidence-gated bounty pipeline
+
+New crate. Triage → evidence → verify → dedupe → report, where **a report is
+rendered from a confirmed verdict and never from a premise established before
+one**. `FindingReport::from_verdict` returns `None` for anything that is not
+`Confirmed`; that single gate is the whole design.
+
+**Verification runs Foundry**, which is at `~/.foundry/bin/forge` (1.7.1) and
+**not on `PATH`**. `Verifier::forge()` probes the well-known path explicitly —
+without that, every verdict would be `ToolMissing` in a non-login shell.
+
+### The bug worth remembering
+
+The verdict semantics were **backwards at first**. I wrote `[FAIL] →
+Confirmed`, reasoning "a failing test reproduces the bug." Running against real
+Foundry disproved it: a Foundry PoC encodes its claim as a `require`, so an
+exploit test that **passes** proves the vulnerability exists, and the same
+`[PASS]` from a control test proves it does not. The original code would have
+published every non-reproduction as a finding.
+
+The fix is `ExpectedOutcome::Exploitable | Safe` on the request: the caller
+declares what the PoC claims, because the mapping cannot be inferred from
+output. The load-bearing test runs **one PoC against a vulnerable and a safe
+contract** and asserts opposite verdicts.
+
+Building those fixtures surfaced three real PoC-authoring requirements: the
+drained ether needs a `receive()` hook on both the vault and the test, the
+deploying contract otherwise *is* the owner, and the owner must not be
+`msg.sender`.
+
+### Honesty properties, each covered by a test
+
+- A compile error is `Inconclusive`, **never `Refuted`** — nothing ran, so "we
+  checked and it is fine" would be false.
+- An unrecognised output shape is `Inconclusive`, not guessed at. A parser
+  assuming "no failures mentioned means pass" manufactures a clean bill of
+  health from a tool crash.
+- `Inconclusive` always carries a reason.
+- No report without `Confirmed`.
+- Novelty is never asserted. `audit_refs` are URLs, so dedupe is a cheap screen
+  over reference titles, not a reading of the audit texts. Every report carries
+  that caveat verbatim.
+- A missing binary yields `Inconclusive`, so the gate degrades honestly.
+
+### Gating (`pipeline.rs`)
+
+Verification is process execution, so it checks `Capability::ExecuteProcess`
+before anything else. **A refusal is not a result**: the run returns
+`StepOutcome::Blocked { reason }` naming what stopped it — not a verdict, not an
+empty report, and specifically not worded like a negative result. The summary
+test asserts the wording `"did not confirm"` is *absent*, because "we were not
+allowed to check" and "we checked and it is fine" are different claims.
+
+**Submission remains manual.** Nothing in the crate transmits to a program.
+
+### Known limitations
+
+- Integration tests are **unit** PoCs, not fork tests. Real fork testing needs
+  an RPC URL and forge-std.
+- Dedupe matches identifiers against audit-reference URLs only.
+- The CWE→OWASP mapping still needs a qualified human sign-off; this crate does
+  not change that.
