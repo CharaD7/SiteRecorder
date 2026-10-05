@@ -23,8 +23,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+pub mod compare;
 pub mod send;
 
+pub use compare::{compare_outcomes, Comparison, Difference, Importance};
 pub use send::{SendOutcome, Sender};
 
 #[derive(Debug, Error)]

@@ -1604,6 +1604,20 @@ async fn fuzz_run(
         .map_err(|e| e.to_string())
 }
 
+/// Compare two responses.
+///
+/// Two `SendOutcome`s in, a structural difference list out. Only `structural`
+/// and `noticeable` differences mean the responses behaved differently;
+/// `trivial` ones are per-request noise like a nonce, and the summary says so
+/// rather than presenting two live responses as different every time.
+#[tauri::command]
+fn compare_responses(
+    left: SendOutcome,
+    right: SendOutcome,
+) -> Result<repeater::Comparison, String> {
+    Ok(repeater::compare_outcomes(&left, &right))
+}
+
 #[tauri::command]
 async fn proxy_clear_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let proxy_lock = state.http_proxy.lock().await;
@@ -2676,6 +2690,7 @@ fn run_gui_mode() {
             intruder_run,
             fuzz_plan,
             fuzz_run,
+            compare_responses,
             // Packet capture commands
             packet_list_interfaces,
             packet_start_capture,
