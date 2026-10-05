@@ -31,6 +31,8 @@ use network::{NetworkScanner, ScanConfig as NetworkScanConfig};
 use os_pentest::{OsPentest, OsScanConfig, TargetOs};
 use packet_capture::PacketCapture;
 use passwords::{CrackConfig, HashType, PasswordCracker};
+use repeater::send::{HttpSender, Sender};
+use repeater::{observe, RawRequest, SendOutcome};
 use web3::{Blockchain, ContractScanConfig, WalletSecurityConfig, Web3Auditor};
 use white_team::WhiteTeam;
 
@@ -1417,6 +1419,79 @@ async fn proxy_set_config(config: ProxyConfig, state: State<'_, AppState>) -> Re
     }
 }
 
+/// A request plus anything worth looking at, without sending it.
+///
+/// Parse failures are returned as `Err` with the reason, but a request that
+/// parses while containing something odd still returns, with `observations`
+/// populated. The UI shows those as "worth reading", never as findings.
+#[derive(Serialize)]
+struct RepeaterPreview {
+    request_id: String,
+    method: String,
+    target: String,
+    url: Option<String>,
+    observations: Vec<repeater::Observation>,
+}
+
+/// Load text into the Repeater and describe it.
+#[tauri::command]
+fn repeater_preview(text: String) -> Result<RepeaterPreview, String> {
+    let raw = RawRequest::new(text);
+    let parsed = raw.parse().map_err(|e| e.to_string())?;
+    Ok(RepeaterPreview {
+        request_id: raw.id,
+        method: parsed.method.clone(),
+        target: parsed.target.clone(),
+        // A missing Host header yields None rather than a guessed URL: a wrong
+        // guess would put the operator's cursor on a host they never typed.
+        url: parsed.absolute_url().ok(),
+        observations: observe(&parsed),
+    })
+}
+
+/// Send a request and return what came back.
+///
+/// Redirects are not followed and the response is returned exactly as received,
+/// so what the operator sees is what the server said. An unreachable target is
+/// an `Err` naming the likely cause, never a fabricated success.
+#[tauri::command]
+async fn repeater_send(text: String) -> Result<SendOutcome, String> {
+    let raw = RawRequest::new(text);
+    let parsed = raw.parse().map_err(|e| e.to_string())?;
+    let url = parsed.absolute_url().map_err(|e| e.to_string())?;
+
+    tracing::info!("Repeater sending {} {}", parsed.method, url);
+    HttpSender::new()
+        .send(&url, &parsed)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Take a request captured by the proxy and hand it to the Repeater.
+///
+/// The proxy records `method`, `url` and headers; this rebuilds the raw text so
+/// the Repeater edits the same thing the server saw, rather than a re-render of
+/// it that might have lost a header.
+#[tauri::command]
+fn repeater_from_proxy_session(session: http_proxy::ProxySession) -> Result<String, String> {
+    let req = &session.request;
+    let mut text = format!("{} {} HTTP/1.1\n", req.method, req.url);
+    for (k, v) in &req.headers {
+        text.push_str(&format!("{k}: {v}\n"));
+    }
+    text.push('\n');
+    text.push_str(req.body.as_deref().unwrap_or(""));
+    Ok(text)
+}
+
+/// Convenience for the UI: a request that always parses, for a beginner who has
+/// not written one yet. Fails loudly rather than sending anything.
+#[tauri::command]
+fn repeater_example_request() -> String {
+    "GET / HTTP/1.1\nHost: example.com\nUser-Agent: SiteRecorder-Repeater/1.0\nAccept: */*\n\n"
+        .to_string()
+}
+
 #[tauri::command]
 async fn proxy_clear_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let proxy_lock = state.http_proxy.lock().await;
@@ -2481,6 +2556,10 @@ fn run_gui_mode() {
             proxy_get_config,
             proxy_set_config,
             proxy_clear_sessions,
+            repeater_preview,
+            repeater_send,
+            repeater_from_proxy_session,
+            repeater_example_request,
             // Packet capture commands
             packet_list_interfaces,
             packet_start_capture,

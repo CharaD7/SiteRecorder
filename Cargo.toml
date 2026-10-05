@@ -20,6 +20,7 @@ members = [
     "crates/web3",
     "crates/bounty",
     "crates/auditbot",
+    "crates/repeater",
     "crates/gray-team",
     "crates/blue-team",
     "crates/white-team",
@@ -82,6 +83,7 @@ blue-team = { path = "crates/blue-team" }
 white-team = { path = "crates/white-team" }
 cross-team = { path = "crates/cross-team" }
 http-proxy = { path = "crates/http-proxy" }
+repeater = { path = "crates/repeater" }
 packet-capture = { path = "crates/packet-capture" }
 auth-engine = { path = "crates/auth-engine" }
 
