@@ -32,11 +32,14 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 pub mod cluster;
+pub mod fuzz;
 pub mod run;
 
 /// Re-exported so callers can build a [`MarkedRequest`] template and a
 /// [`repeater::Sender`] without depending on two crates directly.
 pub use repeater;
+
+pub use fuzz::{FuzzPlan, FuzzTarget, ParameterLocation};
 
 #[cfg(test)]
 mod tests;
@@ -91,6 +94,11 @@ impl MarkedRequest {
 
     /// Substitute `payload` into every marked position.
     ///
+    /// Each `§...§` span is replaced **as a whole**. Replacing the markers
+    /// individually would splice the payload in twice (`§x§` becoming
+    /// `payloadpayload`), which for a JSON body produces malformed output that
+    /// the server rejects for reasons unrelated to the test.
+    ///
     /// Every position receives the same payload. Burp's "sniper" mode, which
     /// varies one position at a time, is deliberately not implemented: it
     /// multiplies requests by the position count, and the operator has to
@@ -100,7 +108,11 @@ impl MarkedRequest {
         if !self.text.contains(POSITION_MARKER) {
             return Err(IntruderError::NoPositions);
         }
-        Ok(self.text.replace(POSITION_MARKER, payload))
+        let re = regex::Regex::new(&format!(
+            "{POSITION_MARKER}[^{POSITION_MARKER}]*{POSITION_MARKER}"
+        ))
+        .expect("static pattern");
+        Ok(re.replace_all(&self.text, payload).to_string())
     }
 
     /// How many marked positions there are.

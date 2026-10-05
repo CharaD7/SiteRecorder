@@ -1568,6 +1568,42 @@ async fn intruder_run(
         .map_err(|e| e.to_string())
 }
 
+/// Show what the Fuzzer *would* do, without sending anything.
+///
+/// This exists because automatic placement is also automatic risk: a value the
+/// operator never considered gets varied. Nothing is sent until they have seen
+/// this list.
+#[tauri::command]
+fn fuzz_plan(
+    text: String,
+    payload_count: usize,
+    config: Option<AttackConfig>,
+) -> Result<intruder::FuzzPlan, String> {
+    let cfg = config.unwrap_or_default();
+    intruder::fuzz::plan(&text, payload_count, &cfg).map_err(|e| e.to_string())
+}
+
+/// Run the fuzzing plan. Returns one report per varied value.
+#[tauri::command]
+async fn fuzz_run(
+    text: String,
+    source: PayloadSource,
+    config: Option<AttackConfig>,
+) -> Result<Vec<AttackReport>, String> {
+    let payloads = intruder::load_payloads(&source).map_err(|e| e.to_string())?;
+    let config = config.unwrap_or_default();
+    let runner = Runner::new(repeater::send::HttpSender::new(), config.clone());
+
+    tracing::info!(
+        "Fuzzer starting: {} payloads, cap {}",
+        payloads.len(),
+        config.max_requests
+    );
+    intruder::fuzz::run(&text, &payloads, config, &runner, None)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn proxy_clear_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let proxy_lock = state.http_proxy.lock().await;
@@ -2638,6 +2674,8 @@ fn run_gui_mode() {
             repeater_example_request,
             intruder_preview,
             intruder_run,
+            fuzz_plan,
+            fuzz_run,
             // Packet capture commands
             packet_list_interfaces,
             packet_start_capture,
