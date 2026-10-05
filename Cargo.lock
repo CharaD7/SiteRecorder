@@ -444,6 +444,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41e67cd8309bbd06cd603a9e693a784ac2e5d1e955f11286e355089fcab3047c"
 
 [[package]]
+name = "auditbot"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "bounty",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "auth-engine"
 version = "0.1.0"
 dependencies = [

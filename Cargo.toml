@@ -19,6 +19,7 @@ members = [
     "crates/cloud",
     "crates/web3",
     "crates/bounty",
+    "crates/auditbot",
     "crates/gray-team",
     "crates/blue-team",
     "crates/white-team",
