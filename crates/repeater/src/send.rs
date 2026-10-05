@@ -16,7 +16,9 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-use crate::{ParsedRequest, RepeaterError};
+pub use crate::RepeaterError;
+
+use crate::ParsedRequest;
 
 /// The result of sending a request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

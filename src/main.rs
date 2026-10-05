@@ -26,6 +26,7 @@ use credentials::CredentialVault;
 use cross_team::CrossTeam;
 use gray_team::GrayTeam;
 use http_proxy::{HttpProxy, ProxyConfig};
+use intruder::{AttackConfig, AttackReport, MarkedRequest, PayloadSource, Runner};
 use mobile::{MobileAnalyzer, MobileScanConfig, MobileTarget};
 use network::{NetworkScanner, ScanConfig as NetworkScanConfig};
 use os_pentest::{OsPentest, OsScanConfig, TargetOs};
@@ -1492,6 +1493,81 @@ fn repeater_example_request() -> String {
         .to_string()
 }
 
+/// Load and validate an Intruder template without sending anything.
+///
+/// Returns the position count and the target URL so the UI can show what will
+/// happen before the operator commits to traffic.
+#[tauri::command]
+fn intruder_preview(text: String) -> Result<IntruderPreview, String> {
+    let marked = MarkedRequest::new(text);
+    let positions = marked.position_count();
+    if positions == 0 {
+        return Err(
+            "No payload positions. Put § around the value you want to vary, \
+                    like /search?q=§value§."
+                .to_string(),
+        );
+    }
+
+    // Substitute once to check the request is actually deliverable, then
+    // discard it. Validating up front is what stops 500 doomed requests.
+    let url = marked
+        .substitute("probe")
+        .ok()
+        .and_then(|t| repeater::ParsedRequest::parse(&t).ok())
+        .and_then(|p| p.absolute_url().ok());
+
+    if url.is_none() {
+        return Err(
+            "The request cannot be sent: it needs a Host header (or a full URL \
+                    in the request line) so there is somewhere to send it."
+                .to_string(),
+        );
+    }
+
+    Ok(IntruderPreview {
+        positions,
+        url,
+        template_for_display: marked.display_text(),
+    })
+}
+
+#[derive(Serialize)]
+struct IntruderPreview {
+    positions: usize,
+    url: Option<String>,
+    template_for_display: String,
+}
+
+/// Run an attack.
+///
+/// The caps are applied here and reported back: a capped run must not read as
+/// a clean one, so `stopped_because` travels with the results rather than being
+/// logged and forgotten.
+#[tauri::command]
+async fn intruder_run(
+    text: String,
+    source: PayloadSource,
+    config: Option<AttackConfig>,
+) -> Result<AttackReport, String> {
+    let marked = MarkedRequest::new(text);
+    let payloads = intruder::load_payloads(&source).map_err(|e| e.to_string())?;
+
+    let config = config.unwrap_or_default();
+    tracing::info!(
+        "Intruder starting: {} payloads, cap {}, concurrency {}",
+        payloads.len(),
+        config.max_requests,
+        config.max_concurrency
+    );
+
+    let runner = Runner::new(repeater::send::HttpSender::new(), config);
+    runner
+        .run(&marked, &payloads, None)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn proxy_clear_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let proxy_lock = state.http_proxy.lock().await;
@@ -2560,6 +2636,8 @@ fn run_gui_mode() {
             repeater_send,
             repeater_from_proxy_session,
             repeater_example_request,
+            intruder_preview,
+            intruder_run,
             // Packet capture commands
             packet_list_interfaces,
             packet_start_capture,

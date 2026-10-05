@@ -21,6 +21,7 @@ members = [
     "crates/bounty",
     "crates/auditbot",
     "crates/repeater",
+    "crates/intruder",
     "crates/gray-team",
     "crates/blue-team",
     "crates/white-team",
@@ -84,6 +85,7 @@ white-team = { path = "crates/white-team" }
 cross-team = { path = "crates/cross-team" }
 http-proxy = { path = "crates/http-proxy" }
 repeater = { path = "crates/repeater" }
+intruder = { path = "crates/intruder" }
 packet-capture = { path = "crates/packet-capture" }
 auth-engine = { path = "crates/auth-engine" }
 
@@ -113,4 +115,14 @@ tauri-build = "1.5"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+# Disk headroom: incremental compilation had accumulated 13G of cache under
+# target/debug on this machine and filled the volume, which surfaced as a
+# linker bus error rather than an out-of-space message. It buys little for a
+# project this size and is rebuilt from scratch when needed.
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false
 

@@ -3433,6 +3433,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "intruder"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "regex",
+ "repeater",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "io-lifetimes"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6389,6 +6406,7 @@ dependencies = [
  "headless_chrome",
  "http-proxy",
  "indicatif",
+ "intruder",
  "libc",
  "mobile",
  "network",
