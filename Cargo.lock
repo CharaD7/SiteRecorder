@@ -1014,6 +1014,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "collaborator"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4613,6 +4627,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "packet-inspector"
+version = "0.1.0"
+dependencies = [
+ "packet-capture",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pango"
 version = "0.15.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6096,6 +6122,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sequencer"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.7",
+ "num-bigint",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6394,6 +6437,7 @@ dependencies = [
  "chrono",
  "clap",
  "cloud",
+ "collaborator",
  "crawler",
  "credentials",
  "cross-team",
@@ -6413,6 +6457,7 @@ dependencies = [
  "notifier",
  "os-pentest",
  "packet-capture",
+ "packet-inspector",
  "passwords",
  "printpdf",
  "rand 0.8.5",
@@ -6420,10 +6465,12 @@ dependencies = [
  "repeater",
  "rusqlite",
  "scanner",
+ "sequencer",
  "serde",
  "serde_json",
  "session",
  "signal-hook",
+ "spammer",
  "tauri",
  "tauri-build",
  "tempfile",
@@ -6525,6 +6572,22 @@ dependencies = [
  "gobject-sys 0.15.10",
  "libc",
  "system-deps 5.0.0",
+]
+
+[[package]]
+name = "spammer"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.7",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -7789,6 +7852,7 @@ checksum = "2f87b8aa10b915a06587d0dec516c282ff295b475d94abf425d62b57710070a2"
 dependencies = [
  "getrandom 0.3.4",
  "js-sys",
+ "rand 0.9.2",
  "serde",
  "wasm-bindgen",
 ]

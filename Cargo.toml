@@ -29,6 +29,10 @@ members = [
     "crates/http-proxy",
     "crates/packet-capture",
     "crates/auth-engine",
+    "crates/collaborator",
+    "crates/sequencer",
+    "crates/spammer",
+    "crates/packet-inspector",
 ]
 resolver = "2"
 
@@ -88,6 +92,10 @@ repeater = { path = "crates/repeater" }
 intruder = { path = "crates/intruder" }
 packet-capture = { path = "crates/packet-capture" }
 auth-engine = { path = "crates/auth-engine" }
+collaborator = { path = "crates/collaborator" }
+sequencer = { path = "crates/sequencer" }
+spammer = { path = "crates/spammer" }
+packet-inspector = { path = "crates/packet-inspector" }
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }

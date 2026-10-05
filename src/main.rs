@@ -37,6 +37,12 @@ use repeater::{observe, RawRequest, SendOutcome};
 use web3::{Blockchain, ContractScanConfig, WalletSecurityConfig, Web3Auditor};
 use white_team::WhiteTeam;
 
+// ==================== Manual testing tools ====================
+use collaborator::{Beacon, CollaboratorClient, Interaction, InteractionSummary};
+use packet_inspector::PacketInspector;
+use sequencer::Sequencer;
+use spammer::{FloodPlan, FloodRun, Spammer, TokenPlan};
+
 mod cli;
 use cli::{Cli, Commands, CrawlArgs, RecordingModeArg};
 
@@ -145,6 +151,14 @@ struct AppState {
     credential_vault: Arc<Mutex<CredentialVault>>,
     http_proxy: Arc<Mutex<Option<HttpProxy>>>,
     packet_capture: Arc<Mutex<Option<PacketCapture>>>,
+    /// Wireshark-style packet capture and inspection engine.
+    packet_inspector: Arc<Mutex<PacketInspector>>,
+    /// Burp Spammer clone: HTTP flood and token generation.
+    spammer: Arc<Mutex<Spammer>>,
+    /// Burp Sequencer clone: randomness analysis.
+    sequencer: Arc<Mutex<Sequencer>>,
+    /// Burp Collaborator clone: out-of-band beacon polling.
+    collaborator: Arc<Mutex<CollaboratorClient>>,
     auth_engine: Arc<AuthEngine>,
     /// Shared persistence layer (Wave 1). Every crate that stores domain data
     /// goes through this connection rather than opening its own.
@@ -1714,6 +1728,199 @@ async fn packet_clear_packets(state: State<'_, AppState>) -> Result<(), String> 
     }
 }
 
+// ==================== PACKET INSPECTOR COMMANDS ====================
+
+#[tauri::command]
+async fn inspector_list_interfaces() -> Result<Vec<packet_capture::NetworkInterfaceInfo>, String> {
+    Ok(packet_inspector::list_interfaces().await)
+}
+
+#[tauri::command]
+async fn inspector_start_capture(
+    interface: String,
+    promiscuous: bool,
+    filter: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let inspector = state.packet_inspector.lock().await;
+    packet_inspector::start_capture(&inspector, &interface, promiscuous, filter.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(format!("Capture started on {}", interface))
+}
+
+#[tauri::command]
+async fn inspector_stop_capture(state: State<'_, AppState>) -> Result<String, String> {
+    let inspector = state.packet_inspector.lock().await;
+    packet_inspector::stop_capture(&inspector)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok("Capture stopped".to_string())
+}
+
+#[tauri::command]
+async fn inspector_get_packets(
+    offset: Option<usize>,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<packet_capture::PacketInfo>, String> {
+    let inspector = state.packet_inspector.lock().await;
+    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(1000);
+    packet_inspector::get_packets(&inspector, offset, limit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn inspector_get_stats(
+    state: State<'_, AppState>,
+) -> Result<packet_capture::CaptureStats, String> {
+    let inspector = state.packet_inspector.lock().await;
+    Ok(packet_inspector::get_stats(&inspector).await)
+}
+
+#[tauri::command]
+async fn inspector_get_session(
+    state: State<'_, AppState>,
+) -> Result<Option<packet_capture::CaptureSession>, String> {
+    let inspector = state.packet_inspector.lock().await;
+    packet_inspector::get_session(&inspector)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn inspector_is_capturing(state: State<'_, AppState>) -> Result<bool, String> {
+    let inspector = state.packet_inspector.lock().await;
+    Ok(packet_inspector::is_capturing(&inspector).await)
+}
+
+#[tauri::command]
+async fn inspector_add_filter(
+    filter: packet_capture::CaptureFilter,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let inspector = state.packet_inspector.lock().await;
+    packet_inspector::add_filter(&inspector, filter).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn inspector_get_filters(
+    state: State<'_, AppState>,
+) -> Result<Vec<packet_capture::CaptureFilter>, String> {
+    let inspector = state.packet_inspector.lock().await;
+    Ok(packet_inspector::get_filters(&inspector).await)
+}
+
+// ==================== SPAMMER COMMANDS ====================
+
+#[tauri::command]
+async fn spammer_generate_tokens(
+    plan: TokenPlan,
+    state: State<'_, AppState>,
+) -> Result<spammer::TokenRun, String> {
+    let spammer = state.spammer.lock().await;
+    spammer
+        .generate_tokens(&plan)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn spammer_flood(plan: FloodPlan, state: State<'_, AppState>) -> Result<FloodRun, String> {
+    let spammer = state.spammer.lock().await;
+    spammer.flood(&plan).await.map_err(|e| e.to_string())
+}
+
+// ==================== SEQUENCER COMMANDS ====================
+
+#[tauri::command]
+async fn sequencer_run(
+    plan: sequencer::SeqPlan,
+    state: State<'_, AppState>,
+) -> Result<sequencer::SequenceRun, String> {
+    let sequencer = state.sequencer.lock().await;
+    sequencer.run(&plan).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn sequencer_preview(plan: sequencer::SeqPlan) -> Result<sequencer::SequenceRun, String> {
+    // Validate the plan and render an estimate without sending anything.
+    sequencer::Sequencer
+        .validate(&plan)
+        .map_err(|e| e.to_string())?;
+    let estimate_bits = match &plan.generator {
+        sequencer::Generator::Uuid => 128,
+        sequencer::Generator::Hex { bytes } => bytes * 8,
+        sequencer::Generator::ExtractFromResponse { .. } => 0,
+    };
+    let _ = estimate_bits; // returned as part of the observations for the UI
+    Ok(sequencer::SequenceRun {
+        plan: plan.clone(),
+        sent: 0,
+        collected: 0,
+        observations: sequencer::Observations {
+            entropy_bits_per_byte: 0.0,
+            max_entropy_bits_per_byte: 0.0,
+            chi_square: 0.0,
+            chi_square_p_value: 1.0,
+            collisions: 0,
+            runs_z: 0.0,
+            distinct_values: plan.count,
+            value_width_bits: estimate_bits,
+        },
+    })
+}
+
+// ==================== COLLABORATOR COMMANDS ====================
+
+#[tauri::command]
+async fn collaborator_beacon_generate(state: State<'_, AppState>) -> Result<Beacon, String> {
+    let client = state.collaborator.lock().await;
+    client.generate_beacon().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn collaborator_beacon_interactions(
+    timeout_s: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<Interaction>, String> {
+    let client = state.collaborator.lock().await;
+    let timeout = timeout_s.unwrap_or(30);
+    client
+        .wait_for_interaction(timeout)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn collaborator_list_beacons(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let client = state.collaborator.lock().await;
+    let beacons = client.get_beacons().await;
+    Ok(beacons.iter().map(|b| b.as_str().to_string()).collect())
+}
+
+#[tauri::command]
+async fn collaborator_list_interactions(
+    state: State<'_, AppState>,
+) -> Result<Vec<InteractionSummary>, String> {
+    let client = state.collaborator.lock().await;
+    let interactions = client.get_interactions().await;
+    Ok(interactions
+        .into_iter()
+        .map(|i| InteractionSummary {
+            id: i.id,
+            beacon: i.beacon.as_str().to_string(),
+            interaction_type: i.interaction_type,
+            protocol: i.protocol,
+            remote_address: i.remote_address,
+            received_at: i.received_at,
+        })
+        .collect())
+}
+
 // ==================== AUTH ENGINE COMMANDS ====================
 
 #[tauri::command]
@@ -2525,6 +2732,10 @@ fn run_gui_mode() {
         auth_engine: Arc::new(AuthEngine::new().unwrap()),
         database: Arc::new(Mutex::new(database)),
         operator_id: Arc::new(Mutex::new(operator_id)),
+        packet_inspector: Arc::new(Mutex::new(PacketInspector::new())),
+        spammer: Arc::new(Mutex::new(Spammer::default())),
+        sequencer: Arc::new(Mutex::new(Sequencer::default())),
+        collaborator: Arc::new(Mutex::new(CollaboratorClient::new("127.0.0.1", 18080))),
     };
 
     use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu};
@@ -2698,6 +2909,27 @@ fn run_gui_mode() {
             packet_get_packets,
             packet_get_stats,
             packet_clear_packets,
+            // Packet inspector commands
+            inspector_list_interfaces,
+            inspector_start_capture,
+            inspector_stop_capture,
+            inspector_get_packets,
+            inspector_get_stats,
+            inspector_get_session,
+            inspector_is_capturing,
+            inspector_add_filter,
+            inspector_get_filters,
+            // Spammer commands
+            spammer_generate_tokens,
+            spammer_flood,
+            // Sequencer commands
+            sequencer_preview,
+            sequencer_run,
+            // Collaborator commands
+            collaborator_beacon_generate,
+            collaborator_beacon_interactions,
+            collaborator_list_beacons,
+            collaborator_list_interactions,
             // Auth engine commands
             auth_authenticate,
             auth_test_session,
