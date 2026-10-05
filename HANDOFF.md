@@ -525,3 +525,32 @@ allowed to check" and "we checked and it is fine" are different claims.
 - Dedupe matches identifiers against audit-reference URLs only.
 - The CWE→OWASP mapping still needs a qualified human sign-off; this crate does
   not change that.
+## New: manual-testing crates wired to the Tauri frontend (Packet Inspector, Spammer, Sequencer, Collaborator)
+
+Four new workspace crates were exposed through the existing Tauri command layer and fully wired into the vanilla-JS frontend (`ui/`):
+
+**Rust (`src/main.rs`)**
+- AppState fields: `packet_inspector`, `spammer`, `sequencer`, `collaborator_client` (`Arc<Mutex<...>>`)
+- 17 new `#[tauri::command]` handlers, appended after `packet_clear_packets`:
+  - **Packet Inspector (9)**: `inspector_list_interfaces`, `inspector_start_capture`, `inspector_stop_capture`, `inspector_get_packets`, `inspector_get_stats`, `inspector_get_session`, `inspector_is_capturing`, `inspector_add_filter`, `inspector_get_filters`
+  - **Spammer (2)**: `spammer_generate_tokens`, `spammer_flood`
+  - **Sequencer (2)**: `sequencer_preview`, `sequencer_run`
+  - **Collaborator (4)**: `collaborator_beacon_generate`, `collaborator_beacon_interactions`, `collaborator_list_beacons`, `collaborator_list_interactions`
+
+**Frontend (`ui/index.html` + `ui/app.js`)**
+- New sidebar entries under **"Testing Tools"**: `packet-inspector`, `spammer`, `sequencer`, `collaborator`
+- New templates: `content-packet-inspector`, `content-spammer`, `content-sequencer`, `content-collaborator` (stat cards, interface/plan controls, results tables, empty states)
+- New `setup*()` functions and state fields: `inspectorCaptureRunning`/`inspectorFilters`/`inspectorPackets`, `spammerStatus`/`spammerTokens`, `sequencerPreview`, `collaboratorBeacons`/`collaboratorInteractions`
+- Route cases in `renderContent()`, `getSectionConfig` entries (fallback toolpage), and `mockResponse` entries so web-mode works end to end
+
+**Verification**
+- `node --check ui/app.js` — syntactically valid
+- Templates balanced: 66 open / 66 close `<template>` tags
+- Every element ID referenced by the new setup functions resolves in the templates
+- `cargo check --workspace` — clean
+- **`tests/ipc_contract.rs` — all 3 tests pass**, including `every_ui_invoke_has_a_registered_command` which proves each of the 18 new UI `invoke()` calls maps to a registered Tauri command (no generic "command not found" at runtime)
+- Workspace lib suite and the four crates' smoke suites pass (spammer 6, sequencer 4, collaborator 5, packet-inspector 4)
+
+Known outstanding items (unchanged from prior state):
+- Collaborator DNS out-of-band reception remains unimplemented (self-hosted TCP only)
+- No Playwright/Visual UI tests yet for the four new tool pages

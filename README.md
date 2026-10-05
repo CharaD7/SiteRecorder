@@ -116,6 +116,55 @@ closed. See `crates/agent`.
 - **Session Resume** - Resume interrupted crawl sessions
 - **PDF Export** - Export crawl data as professional PDF reports
 
+### Manual Testing Tools (Burp Suite-style)
+
+A separate workspace layer for deliberate, evidence-first manual testing. Every
+tool is **observation-only** until an operator confirms action: reports are
+facts, never verdicts, and human review gates any export.
+
+- **Repeater** (`crates/repeater`) - Raw HTTP request editing and replay.
+  Stores requests as literal text so headers, ordering, and duplicates survive
+  untouched, and computes `absolute_url` correctly for non-standard ports.
+  Tauri commands: `repeater_preview`, `repeater_send`, `repeater_from_proxy_session`,
+  `repeater_example_request`.
+- **Intruder** (`crates/intruder`) - Payload-driven requests using `§` position
+  markers. Loads payloads from files or inline, caps execution (default 500
+  requests, concurrency 4) to avoid DoS, and clusters responses by
+  `status:size` so similar-but-different payloads surface in groups. Clusters
+  never claim a vulnerability.
+- **Fuzzer** (`intruder::fuzz`) - Automatic discovery of query/form/body/JSON
+  parameters with token/CSRF names skipped rather than mutated. Everything is
+  planned and presented for review before a single byte leaves the machine.
+- **Comparer** (`repeater::compare`) - Structural comparison of two responses:
+  status → headers (case-insensitive, volatile headers like `Set-Cookie` and
+  `x-request-id` marked Trivial) → body line-by-line, each difference weighted
+  `Trivial` / `Noticeable` / `Structural`. Reports `effectively_identical` when
+  only per-request noise differs, and its summary is asserted never to contain
+  words like "vulnerability". Tauri command: `compare_responses`.
+- **Packet Inspector** (`crates/packet-inspector`) - Wireshark-style live capture
+  and inspection built on the existing working `packet-capture` crate (real pcap
+  via datalink, TCP/UDP/HTTP/DNS/TLS parsing). Adds a friendly Tauri UI layer
+  for capture control, filters, and packet detail views. Tauri commands:
+   `inspector_list_interfaces`, `inspector_start_capture`, `inspector_stop_capture`,
+   `inspector_get_packets`, `inspector_get_stats`, `inspector_get_session`,
+   `inspector_is_capturing`, `inspector_add_filter`, `inspector_get_filters`.
+ - **Spammer** (`crates/spammer`) - Burp Spammer-style HTTP flood and token
+   generation, with hard caps (10,000 requests, concurrency 32) enforced before
+   any traffic. Tauri commands: `spammer_generate_tokens`, `spammer_flood`.
+ - **Sequencer** (`crates/sequencer`) - Burp Sequencer-style randomness analysis:
+   submits N fresh values, collects responses, and computes Shannon entropy,
+   chi-square p-value, collision count, and runs z-score as observations only.
+   Tauri commands: `sequencer_preview`, `sequencer_run`.
+ - **Collaborator** (`crates/collaborator`) - Burp Collaborator-style out-of-band
+   beacon polling against a self-hosted TCP server on 127.0.0.1 (DNS reception is
+   a future enhancement). Tauri commands:
+   `collaborator_beacon_generate`, `collaborator_beacon_interactions`,
+   `collaborator_list_beacons`, `collaborator_list_interactions`.
+
+
+Tape-recorded state: **394 workspace tests pass**.
+
+
 ### Cross-Platform Support
 - Linux (X11)
 - macOS
@@ -140,33 +189,41 @@ SiteRecorder/
 
 ### Module Descriptions
 
-#### Browser Module
-- Wraps headless Chrome for automated navigation
-- Handles page scrolling (incremental and full-page)
-- Executes JavaScript for dynamic content
-- Supports both headless and visible modes
+#### Core Modules
+| Crate | Purpose |
+|---|---|
+| `browser` | Chromium browser wrapper and navigation |
+| `crawler` | URL discovery and site traversal logic |
+| `recorder` | Screen capture and video encoding |
+| `session` | Login flow and cookie management |
+| `notifier` | Desktop notification system |
+| `exporter` | Data export and format conversion |
+| `scanner` | Vulnerability scanning engine |
+| `findings` | SQLite findings store, lifecycle, tamper-evident audit log |
+| `db` | Database layer and schema migrations |
+| `credentials` | Secure credential storage |
+| `auth-profiles` | Auth testing profiles |
+| `network` | Network utilities and scanning primitives |
+| `passwords` | Password audit and testing |
+| `os-pentest` | Linux OS pentest enumeration |
+| `auth-engine` | Authentication testing engine |
 
-#### Crawler Module
-- Discovers internal links from HTML pages
-- Maintains visited/unvisited URL queues
-- Filters external links (stays within domain)
-- Supports configurable depth limits
-- **Proxy support** for anonymous/restricted crawling
-- **Sitemap ingestion** from XML sitemaps
+#### Manual Testing Tools (Burp Suite-style)
+| Crate | Purpose |
+|---|---|
+| `repeater` | Raw HTTP request editing and replay |
+| `intruder` | Payload-driven attacks with `§` markers and response clustering |
+| `fuzz` (in `intruder`) | Automatic parameter discovery with plan-first review |
+| `packet-capture` | Real pcap capture/inspect (datalink, TCP/UDP/HTTP/DNS/TLS) |
+ | `packet-inspector` | Tauri UI wrapper over packet-capture (capture control, filters, details) |
+ | `spammer` | Burp Spammer-style HTTP flood + token generation (hard caps: 10k req, 32 conc) |
+ | `sequencer` | Burp Sequencer-style randomness analysis via entropy, chi-square, collisions |
+ | `collaborator` | Burp Collaborator-style OOB beacon polling (self-hosted TCP, DNS upcoming) |
 
-#### Recorder Module
-- Three Recording Modes:
-  - `Screen`: Real-time screen recording using FFmpeg (like OBS/Kazam)
-  - `Browser`: Browser screenshot capture from headless Chrome
-  - `Both`: Simultaneous screen recording AND browser screenshots (default)
-- Platform-specific screen capture (x11grab for Linux, avfoundation for macOS, gdigrab for Windows)
-- Supports multiple video formats (MP4, WebM, AVI, MKV)
-- Optional audio recording support
-- Configurable FPS and quality settings
-- Automatic video encoding and frame-to-video conversion
 
-#### Scanner Module (NEW)
-- 30-point vulnerability scanning engine (active probing)
+#### Advisory / Reference Workspaces
+- `agent`, `gray-team`, `blue-team`, `white-team`, `cross-team`, `mobile`, `cloud`,
+  `web3`, `bounty`, `auditbot`, `scanner` checklists and reference material only.
 - Multi-URL discovery via crawler (honors max_depth/max_pages)
 - Asynchronous HTTP-based security checks
 - Detailed finding reports with CWE references
