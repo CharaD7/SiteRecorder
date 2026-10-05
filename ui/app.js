@@ -3252,6 +3252,10 @@
             $('#importWordlistBtn')?.addEventListener('click', importCustomWordlist);
             $('#generateWordlistBtn')?.addEventListener('click', generateCustomWordlist);
         } catch (e) {
+            // The error text replaces the placeholder, but `aria-busy` is a
+            // separate attribute and survives -- the pane would tell assistive
+            // tech it is still loading after the load has failed.
+            clearSkeleton(container);
             container.innerHTML = `<div class="text-error">Failed to load wordlists: ${escapeHtml(String(e))}</div>`;
         }
     }

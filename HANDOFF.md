@@ -361,7 +361,35 @@ bytecode, and a hotspot ranking is not a verdict.
   `showToast` or `console.error` therefore left a pane telling assistive tech
   it was still loading, forever. This is worse than showing an error — the user
   is told to wait for something that will never arrive. Fixed in all 11, plus
-  `loadAuthProfilesList`, whose `catch` set `innerHTML` but left the attribute.
+  `loadAuthProfilesList` and `loadWordlistManager`, whose `catch` set `innerHTML`
+  but left the attribute.
+
+  **12 in total, not 11** — I first reported 11 from a detector that scanned a
+  fixed six-line window after each `catch`, which missed `loadFindings`. The
+  corrected check scans from the `catch` to the end of the function and reports
+  **15 skeleton loaders, zero leaks**.
+
+### Pre-existing bug found while verifying: the Wordlists tab is dead
+
+`loadWordlistManager` is **unreachable**. `addWordlistTab()` looks for
+`$('#content-passwordattack .tabs')`, but `id="content-passwordattack"` sits on
+the `<template>` element itself, and `renderTemplate()` does
+`container.appendChild(template.content.cloneNode(true))` — cloning `.content`
+**drops the template's own id**. The selector therefore always returns `null`,
+the Wordlists tab button is never created, and `#wordlistManagerContent` never
+enters the DOM.
+
+This means the `aria-busy` fix in `loadWordlistManager` is currently
+unobservable in the browser: the code path cannot be reached. The fix is still
+correct and will apply once the wiring is repaired, but it is **not** covered by
+the Playwright spec, which says so explicitly rather than implying coverage.
+
+The same pattern appears in `setupOsint()` (`$$('#content-osint .tab')` at
+`app.js:3850`). Whether its tabs are dead too was not determined.
+
+**Not fixed here** — repairing the wiring changes what the page renders and is
+outside the scope of a loading-state fix. The fix is either to give the cloned
+wrapper the id, or to scope those selectors to `#contentArea`.
 
 ### The test that caught them, and the test that did not
 
