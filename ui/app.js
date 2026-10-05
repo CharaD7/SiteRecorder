@@ -52,6 +52,27 @@
             recordingInterval: null,
             recordingStartTime: null,
             activity: [],
+            // Packet Inspector
+            inspectorCaptureRunning: false,
+            inspectorFilters: [],
+            inspectorPackets: [],
+            inspectorErrorCount: 0,
+            inspectorSession: null,
+            // Spammer
+            spammerStatus: 'Idle',
+            spammerRequestsSent: 0,
+            spammerAvgLatency: 0,
+            spammerTokens: [],
+            spammerInterval: null,
+            // Sequencer
+            sequencerStatus: 'Idle',
+            sequencerPreview: null,
+            sequencerResults: [],
+            sequencerRunning: false,
+            sequencerInterval: null,
+            // Collaborator
+            collaboratorBeacons: [],
+            collaboratorInteractions: [],
         },
         tauri: null,
     };
@@ -452,6 +473,109 @@
                 { name: 'common-passwords.txt', path: '/usr/share/wordlists/common.txt', size: '2.4 MB', entries: 500000, category: 'common' },
                 { name: 'darkweb2017-top10000.txt', path: '/usr/share/wordlists/darkweb2017.txt', size: '120 KB', entries: 10000, category: 'breach' },
                 { name: 'subdomains-10000.txt', path: '/usr/share/wordlists/subdomains.txt', size: '85 KB', entries: 10000, category: 'subdomain' },
+            ],
+            // Testing tools (newly wired crates)
+            inspector_list_interfaces: [
+                { name: 'lo', ips: ['127.0.0.1'], is_loopback: true },
+                { name: 'eth0', ips: ['192.168.1.10'], is_loopback: false },
+            ],
+            inspector_start_capture: 'capture_started_eth0',
+            inspector_stop_capture: null,
+            inspector_get_packets: [],
+            inspector_get_stats: { total_packets: 0, packets_per_second: 0, errors: 0, sessions: 0 },
+            inspector_get_session: {
+                session_id: 'session_123',
+                interface: 'eth0',
+                started_at: Date.now(),
+                packets: 0,
+                bytes: 0,
+                duration_seconds: 0,
+            },
+            inspector_is_capturing: false,
+            inspector_add_filter: 'filter added',
+            inspector_get_filters: [
+                { name: 'HTTP traffic', type: 'http', expression: 'tcp port 80 or tcp port 443', active: true },
+            ],
+            spammer_generate_tokens: [
+                { id: 'tok_1', value: 'VALUE1', template: 'value-%01' },
+                { id: 'tok_2', value: 'VALUE2', template: 'value-%02' },
+                { id: 'tok_3', value: 'VALUE3', template: 'value-%03' },
+                { id: 'tok_4', value: 'VALUE4', template: 'value-%04' },
+                { id: 'tok_5', value: 'VALUE5', template: 'value-%05' },
+            ],
+            spammer_flood: {
+                status: 'completed',
+                requests_sent: 15,
+                avg_latency_ms: 42.5,
+                errors: 0,
+                tokens_used: 15,
+            },
+            sequencer_preview: {
+                valid: true,
+                plan: {
+                    method: 'POST',
+                    url: 'https://example.com/sequence',
+                    transport: 'https',
+                    count: 10,
+                    values: ['a', 'b', 'c'],
+                },
+                estimate: {
+                    distinct: 10,
+                    width: 2,
+                    entropy: 0,
+                    p_value: 0,
+                },
+            },
+            sequencer_run: {
+                status: 'started',
+                sequence_id: 'seq_' + Date.now(),
+                requests: 10,
+            },
+            collaborator_beacon_generate: {
+                id: 'beacon_' + Date.now(),
+                subdomain: 'abc123xyz',
+                full_url: 'abc123xyz.' + (args.host || 'collaborator.local'),
+                token: 'abc123xyz',
+                transport: args.transport || 'dns',
+                created_at: Date.now(),
+                interactions: 0,
+            },
+            collaborator_beacon_interactions: [
+                {
+                    id: 'interact_1',
+                    beacon_id: 'beacon_' + Date.now(),
+                    protocol: 'http',
+                    method: 'GET',
+                    path: '/interact',
+                    query_params: 'foo=bar',
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    ip: '203.0.113.42',
+                    received_at: Date.now(),
+                },
+            ],
+            collaborator_list_beacons: [
+                {
+                    id: 'beacon_' + Date.now(),
+                    subdomain: 'abc123xyz',
+                    full_url: 'abc123xyz.' + (args.host || 'collaborator.local'),
+                    token: 'abc123xyz',
+                    transport: 'dns',
+                    created_at: Date.now(),
+                    interactions: 1,
+                },
+            ],
+            collaborator_list_interactions: [
+                {
+                    id: 'interact_1',
+                    beacon_id: 'beacon_' + Date.now(),
+                    protocol: 'http',
+                    method: 'GET',
+                    path: '/interact',
+                    query_params: 'foo=bar',
+                    headers: { 'User-Agent': 'Mozilla/5.0' },
+                    ip: '203.0.113.42',
+                    received_at: Date.now(),
+                },
             ],
         };
         return new Promise(resolve => setTimeout(() => resolve(mocks[command] || null), 100));
@@ -1089,6 +1213,18 @@
         } else if (section === 'red-recording') {
             renderTemplate(content, 'content-red-recording');
             setupRecording();
+        } else if (section === 'packet-inspector') {
+            renderTemplate(content, 'content-packet-inspector');
+            setupPacketInspector();
+        } else if (section === 'spammer') {
+            renderTemplate(content, 'content-spammer');
+            setupSpammer();
+        } else if (section === 'sequencer') {
+            renderTemplate(content, 'content-sequencer');
+            setupSequencer();
+        } else if (section === 'collaborator') {
+            renderTemplate(content, 'content-collaborator');
+            setupCollaborator();
         } else {
             renderToolPage(content, section);
         }
@@ -1399,6 +1535,12 @@
             'white-training': { icon: '🎓', title: 'Training', description: 'Security awareness & skills management', content: renderTrainingContent() },
             'white-metrics': { icon: '📈', title: 'Metrics', description: 'Security KPIs & board reporting', content: renderMetricsContent() },
             'white-reports': { icon: '📋', title: 'White Team Reports', description: 'Executive & compliance reports', content: renderWhiteReportsContent() },
+
+            // Testing tools (newly wired crates)
+            'packet-inspector': { icon: '🕵️', title: 'Packet Inspector', description: 'Live capture inspection, filters, and packet detail views' },
+            'spammer': { icon: '📣', title: 'Spammer', description: 'Burp Spammer-style HTTP flood with hard caps' },
+            'sequencer': { icon: '🔢', title: 'Sequencer', description: 'Generate ordered request sequences for protocol fuzzing' },
+            'collaborator': { icon: '🤝', title: 'Collaborator', description: 'Generate Collaborator-style beacons and collect out-of-band interactions' },
         };
         return configs[section] || { icon: '🔧', title: section, description: 'Tool configuration' };
     }
@@ -8205,6 +8347,490 @@ async function listBountyPrograms() {
     });
         $('#refreshInterfacesBtn')?.addEventListener('click', loadInterfaces);
     }
+    function startInspectorPolling() {
+        if (state.data.captureInterval) clearInterval(state.data.captureInterval);
+        state.data.captureInterval = setInterval(async () => {
+            if (!state.data.inspectorCaptureRunning) {
+                clearInterval(state.data.captureInterval);
+                return;
+            }
+            try {
+                const packets = await invoke('inspector_get_packets', { limit: 100 });
+                const stats = await invoke('inspector_get_stats');
+                state.data.inspectorPackets = packets;
+                $('#inspectorPacketCount').textContent = stats.total_packets;
+                $('#inspectorErrorCount').textContent = stats.errors;
+                loadInspectorPackets();
+                loadInspectorFilters();
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        }, 1000);
+    }
+
+    function loadInspectorPackets() {
+        const container = $('#inspectorPacketList');
+        if (!container) return;
+        const packets = state.data.inspectorPackets;
+        if (!packets || packets.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📦</div>
+                    <div class="empty-state-title">No Packets Captured</div>
+                    <div class="empty-state-text">Select an interface and start capturing to see network traffic</div>
+                </div>`;
+            return;
+        }
+        container.innerHTML = packets.map(p =>
+            `<div style="padding:8px 0; border-bottom:1px solid var(--border-secondary); display:flex; gap:12px; align-items:center; font-size:0.85rem;" class="packet-row" data-packet-id="${p.id || ''}">
+                <span class="badge badge-${p.direction === 'inbound' || (!p.layer7?.method || p.layer7.method === 'GET') ? 'success' : 'warning'}">${p.direction || '—'}</span>
+                <span class="badge">${p.l4_proto || '—'}</span>
+                <span style="flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(p.source || '')} → ${escapeHtml(p.destination || '')}</span>
+                <span class="text-tertiary text-sm">${escapeHtml(p.layer7?.method || (p.l4_proto === 'TCP' ? 'TCP' : p.l4_proto))} ${p.port || ''}</span>
+            </div>`
+        ).join('');
+    }
+
+    async function loadInspectorFilters() {
+        try {
+            const filters = await invoke('inspector_get_filters');
+            state.data.inspectorFilters = Array.isArray(filters) ? filters : [];
+            $('#inspectorFilterCount').textContent = state.data.inspectorFilters.length;
+        } catch (e) {
+            console.error('Failed to load filters:', e);
+        }
+    }
+
+    async function addInspectorFilter() {
+        const name = $('#inspectorFilterName')?.value?.trim();
+        const type = $('#inspectorFilterType')?.value;
+        const expression = $('#inspectorFilterExpr')?.value?.trim();
+        if (!name || !expression) { showToast('error', 'Missing Fields', 'Provide a filter name and expression.'); return; }
+        try {
+            const result = await invoke('inspector_add_filter', { name, type, expression });
+            showToast('success', 'Filter Added', result);
+            $('#inspectorFilterName').value = '';
+            $('#inspectorFilterExpr').value = '';
+            loadInspectorFilters();
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    // ========================================
+    // Packet Inspector (Wireshark-style)
+    // ========================================
+
+    function setupPacketInspector() {
+        loadInspectorInterfaces();
+        $('#inspectorStartBtn')?.addEventListener('click', startInspectorCapture);
+        $('#inspectorStopBtn')?.addEventListener('click', stopInspectorCapture);
+        $('#inspectorClearBtn')?.addEventListener('click', async () => {
+            try {
+                await invoke('packet_clear_packets');
+                state.data.inspectorPackets = [];
+                loadInspectorPackets();
+                showToast('success', 'Cleared', 'Packet buffer cleared.');
+            } catch (e) {
+                showToast('error', 'Failed', String(e));
+            }
+        });
+        $('#inspectorRefreshBtn')?.addEventListener('click', loadInspectorFilters);
+        $('#inspectorRefreshInterfacesBtn')?.addEventListener('click', loadInspectorInterfaces);
+        $('#inspectorAddFilterBtn')?.addEventListener('click', addInspectorFilter);
+    }
+
+    async function loadInspectorInterfaces() {
+        try {
+            const interfaces = await invoke('inspector_list_interfaces');
+            const select = $('#inspectorInterface');
+            if (!select) return;
+            if (!Array.isArray(interfaces) || interfaces.length === 0) {
+                select.innerHTML = '<option value="">No capture interfaces reported</option>';
+                return;
+            }
+            select.innerHTML = interfaces.map(iface =>
+                `<option value="${iface.name}">${iface.name} (${iface.ips?.join(', ') || 'no IP'}) ${iface.is_loopback ? '[loopback]' : ''}</option>`
+            ).join('');
+        } catch (e) {
+            console.error('Failed to load interfaces:', e);
+        }
+    }
+
+    async function startInspectorCapture() {
+        const iface = $('#inspectorInterface')?.value;
+        if (!iface) { showToast('error', 'No Interface', 'Select a network interface first.'); return; }
+        const promiscuous = $('#inspectorPromiscuous')?.checked || false;
+        const filter = $('#inspectorFilter')?.value?.trim() || null;
+
+        try {
+            const result = await invoke('inspector_start_capture', { interface: iface, promiscuous, filter });
+            $('#inspectorStartBtn').style.display = 'none';
+            $('#inspectorStopBtn').style.display = '';
+            $('#inspectorStatus').textContent = 'Capturing';
+            $('#inspectorStatus').style.color = 'var(--status-success)';
+            showToast('success', 'Capture Started', result);
+            addActivity('Packet inspector capture started on ' + iface);
+            state.data.inspectorCaptureRunning = true;
+            startInspectorPolling();
+        } catch (e) {
+            showToast('error', 'Failed to Start', String(e));
+        }
+    }
+
+    async function stopInspectorCapture() {
+        try {
+            await invoke('inspector_stop_capture');
+            $('#inspectorStartBtn').style.display = '';
+            $('#inspectorStopBtn').style.display = 'none';
+            $('#inspectorStatus').textContent = 'Idle';
+            $('#inspectorStatus').style.color = 'var(--status-error)';
+            showToast('info', 'Capture Stopped', 'Packet capture has been stopped.');
+            addActivity('Packet inspector capture stopped');
+            state.data.inspectorCaptureRunning = false;
+        } catch (e) {
+            showToast('error', 'Failed to Stop', String(e));
+        }
+    }
+
+    // ========================================
+    // Spammer (Burp Spammer-style)
+    // ========================================
+
+    function setupSpammer() {
+        $('#spammerGenerateTokensBtn')?.addEventListener('click', generateSpammerTokens);
+        $('#spammerStartFloodBtn')?.addEventListener('click', startSpammerFlood);
+        $('#spammerStopFloodBtn')?.addEventListener('click', stopSpammerFlood);
+        $('#spammerClearTokensBtn')?.addEventListener('click', () => {
+            state.data.spammerTokens = [];
+            loadSpammerTokens();
+            updateSpammerStats();
+        });
+    }
+
+    async function generateSpammerTokens() {
+        const url = $('#spammerUrl')?.value?.trim() || 'https://example.com/api/endpoint';
+        const method = $('#spammerMethod')?.value || 'GET';
+        const body = $('#spammerBody')?.value || '';
+        const tokenCount = parseInt($('#spammerTokenCount')?.value || '5', 10);
+        const concurrency = parseInt($('#spammerConcurrency')?.value || '8', 10);
+
+        try {
+            const tokens = await invoke('spammer_generate_tokens', { url, method, body, tokenCount, concurrency });
+            state.data.spammerTokens = Array.isArray(tokens) ? tokens : [];
+            loadSpammerTokens();
+            updateSpammerStats();
+            showToast('success', 'Tokens Generated', 'Generated ' + state.data.spammerTokens.length + ' tokens.');
+            $('#spammerStartFloodBtn').style.display = '';
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    function loadSpammerTokens() {
+        const container = $('#spammerTokensList');
+        if (!container) return;
+        const tokens = state.data.spammerTokens;
+        if (!tokens || tokens.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🪙</div>
+                    <div class="empty-state-title">No Tokens Generated</div>
+                    <div class="empty-state-text">Generate tokens before starting the flood.</div>
+                </div>`;
+            return;
+        }
+        container.innerHTML = tokens.map(t =>
+            `<div style="padding:8px 0; border-bottom:1px solid var(--border-secondary); font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-family:var(--font-mono);">${escapeHtml(t.value || '')}</span>
+                <span class="text-tertiary text-sm">${escapeHtml(t.template || '')}</span>
+            </div>`
+        ).join('');
+        $('#spammerTokens').textContent = tokens.length;
+    }
+
+    async function startSpammerFlood() {
+        const url = $('#spammerUrl')?.value?.trim();
+        if (!url) { showToast('error', 'No URL', 'Provide a base URL first.'); return; }
+        if (state.data.spammerTokens.length === 0) { showToast('error', 'No Tokens', 'Generate tokens before flooding.'); return; }
+
+        try {
+            const result = await invoke('spammer_flood', { url });
+            $('#spammerGenerateTokensBtn').style.display = 'none';
+            $('#spammerStopFloodBtn').style.display = '';
+            $('#spammerStatus').textContent = 'Flood Running';
+            $('#spammerStatus').style.color = 'var(--status-success)';
+            state.data.spammerStatus = 'Running';
+            addActivity('Spammer flood started on ' + url);
+            startSpammerPolling();
+            showToast('success', 'Flood Started', 'Flood started. Sending ' + state.data.spammerTokens.length + ' requests.');
+        } catch (e) {
+            showToast('error', 'Failed to Start', String(e));
+        }
+    }
+
+    async function stopSpammerFlood() {
+        try {
+            showToast('info', 'Flood Stopped', 'Flood has been stopped.');
+            addActivity('Spammer flood stopped');
+            state.data.spammerStatus = 'Stopped';
+            $('#spammerGenerateTokensBtn').style.display = '';
+            $('#spammerStopFloodBtn').style.display = 'none';
+            $('#spammerStatus').textContent = 'Idle';
+            $('#spammerStatus').style.color = 'var(--status-error)';
+            if (state.data.spammerInterval) {
+                clearInterval(state.data.spammerInterval);
+                state.data.spammerInterval = null;
+            }
+        } catch (e) {
+            showToast('error', 'Failed to Stop', String(e));
+        }
+    }
+
+    function startSpammerPolling() {
+        if (state.data.spammerInterval) clearInterval(state.data.spammerInterval);
+        state.data.spammerInterval = setInterval(async () => {
+            try {
+                const result = await invoke('spammer_flood', { status: 'status' });
+                if (result?.status === 'completed') {
+                    stopSpammerFlood();
+                }
+                state.data.spammerRequestsSent = result?.requests_sent || state.data.spammerRequestsSent;
+                state.data.spammerAvgLatency = result?.avg_latency_ms || 0;
+                updateSpammerStats();
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        }, 1500);
+    }
+
+    function updateSpammerStats() {
+        $('#spammerRequestsSent').textContent = state.data.spammerRequestsSent;
+        $('#spammerAvgLatency').textContent = state.data.spammerAvgLatency ? state.data.spammerAvgLatency + 'ms' : '0ms';
+    }
+
+    // ========================================
+    // Sequencer (pattern generator)
+    // ========================================
+
+    function setupSequencer() {
+        $('#sequencerPreviewBtn')?.addEventListener('click', previewSequencerPlan);
+        $('#sequencerRunBtn')?.addEventListener('click', runSequencer);
+        $('#sequencerStopRunBtn')?.addEventListener('click', stopSequencer);
+    }
+
+    async function previewSequencerPlan() {
+        const transport = $('#sequencerTransport')?.value;
+        const method = $('#sequencerMethod')?.value;
+        const url = $('#sequencerUrl')?.value?.trim();
+        const values = $('#sequencerValues')?.value?.trim();
+        const count = $('#sequencerCount')?.value?.trim();
+
+        if (!url || !method) { showToast('error', 'Missing Fields', 'Provide a URL/host and method.'); return; }
+
+        try {
+            const result = await invoke('sequencer_preview', { transport, method, url, values, count });
+            state.data.sequencerPreview = result;
+            if (!result?.valid) {
+                showToast('error', 'Invalid Plan', result?.error || 'Plan validation failed.');
+                return;
+            }
+            $('#sequencerStatus').textContent = 'Validated';
+            $('#sequencerStatus').style.color = 'var(--status-success)';
+            $('#sequencerSequenceCount').textContent = result?.plan?.count || 0;
+            $('#sequencerEstimateDistinct').textContent = result?.estimate?.distinct || 0;
+            $('#sequencerEstimateWidth').textContent = result?.estimate?.width || 0;
+            loadSequencerResults(result);
+            $('#sequencerRunBtn').style.display = '';
+            showToast('success', 'Plan Valid', 'Plan validated. Ready to run.');
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    function loadSequencerResults(result) {
+        const container = $('#sequencerResults');
+        if (!container) return;
+        const estimate = result?.estimate || {};
+        const plan = result?.plan || {};
+        container.innerHTML = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.85rem;">
+                <div><span class="text-tertiary">Valid:</span> ${result?.valid ? 'Yes' : 'No'}</div>
+                <div><span class="text-tertiary">Method:</span> ${plan.method || '-'}</div>
+                <div><span class="text-tertiary">Transport:</span> ${plan.transport || '-'}</div>
+                <div><span class="text-tertiary">URL/Host:</span> ${escapeHtml(plan.url || '-')}</div>
+                <div><span class="text-tertiary">Count:</span> ${plan.count || '-'}</div>
+                <div><span class="text-tertiary">Distinct values:</span> ${estimate.distinct || 0}</div>
+                <div><span class="text-tertiary">Value width:</span> ${estimate.width || 0}</div>
+                <div><span class="text-tertiary">Entropy:</span> ${estimate.entropy?.toFixed(2) || 0}</div>
+                <div><span class="text-tertiary">P-value:</span> ${estimate.p_value?.toFixed(4) || 0}</div>
+            </div>
+        `;
+    }
+
+    async function runSequencer() {
+        if (!state.data.sequencerPreview?.valid) { showToast('error', 'No Valid Plan', 'Preview a valid plan first.'); return; }
+        try {
+            const result = await invoke('sequencer_run', { ...state.data.sequencerPreview.plan });
+            $('#sequencerPreviewBtn').style.display = 'none';
+            $('#sequencerRunBtn').style.display = 'none';
+            $('#sequencerStopRunBtn').style.display = '';
+            $('#sequencerStatus').textContent = 'Running';
+            $('#sequencerStatus').style.color = 'var(--status-success)';
+            addActivity('Sequencer run started: ' + result.sequence_id);
+            startSequencerPolling(result);
+            showToast('success', 'Sequence Running', result.sequence_id || 'Sequence started.');
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    function stopSequencer() {
+        try {
+            if (state.data.sequencerInterval) {
+                clearInterval(state.data.sequencerInterval);
+                state.data.sequencerInterval = null;
+            }
+            state.data.sequencerRunning = false;
+            $('#sequencerPreviewBtn').style.display = '';
+            $('#sequencerRunBtn').style.display = '';
+            $('#sequencerStopRunBtn').style.display = 'none';
+            $('#sequencerStatus').textContent = 'Stopped';
+            $('#sequencerStatus').style.color = 'var(--status-error)';
+            addActivity('Sequencer run stopped');
+            showToast('info', 'Sequence Stopped', 'Sequence execution has been stopped.');
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    function startSequencerPolling(result) {
+        if (state.data.sequencerInterval) clearInterval(state.data.sequencerInterval);
+        state.data.sequencerRunning = true;
+        state.data.sequencerInterval = setInterval(async () => {
+            try {
+                const progress = await invoke('sequencer_run', { progress: true });
+                if (progress?.status === 'completed') {
+                    stopSequencer();
+                    loadSequencerResults(progress);
+                    addActivity('Sequencer sequence completed: ' + progress.sequence_id);
+                }
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        }, 2000);
+    }
+
+    // ========================================
+    // Collaborator (beacon + out-of-band collector)
+    // ========================================
+
+    function setupCollaborator() {
+        $('#collaboratorGenerateBeaconBtn')?.addEventListener('click', generateCollaboratorBeacon);
+        $('#collaboratorCreateBtn')?.addEventListener('click', createCollaboratorBeacon);
+        $('#collaboratorRefreshBtn')?.addEventListener('click', loadCollaboratorBeacons);
+        $('#collaboratorClearBeaconsBtn')?.addEventListener('click', () => {
+            state.data.collaboratorBeacons = [];
+            loadCollaboratorBeacons();
+            loadCollaboratorInteractions();
+        });
+    }
+
+    async function generateCollaboratorBeacon() {
+        const host = $('#collaboratorHost')?.value?.trim() || 'collaborator.local';
+        try {
+            const beacon = await invoke('collaborator_beacon_generate', { host, transport: 'dns', subdomain: '' });
+            state.data.collaboratorBeacons.push(beacon);
+            loadCollaboratorBeacons();
+            loadCollaboratorInteractions();
+            showToast('success', 'Beacon Generated', 'Generated ' + beacon.full_url);
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    async function createCollaboratorBeacon() {
+        const host = $('#collaboratorHost')?.value?.trim() || 'collaborator.local';
+        const subdomain = $('#collaboratorSubdomain')?.value?.trim();
+        const transport = $('#collaboratorTransport')?.value || 'dns';
+
+        try {
+            const beacon = await invoke('collaborator_beacon_generate', { host, transport, subdomain });
+            state.data.collaboratorBeacons.push(beacon);
+            loadCollaboratorBeacons();
+            loadCollaboratorInteractions();
+            showToast('success', 'Beacon Created', 'Created ' + beacon.full_url);
+        } catch (e) {
+            showToast('error', 'Failed', String(e));
+        }
+    }
+
+    async function loadCollaboratorBeacons() {
+        try {
+            const host = $('#collaboratorHost')?.value?.trim() || 'collaborator.local';
+            const beacons = await invoke('collaborator_list_beacons', { host });
+            state.data.collaboratorBeacons = Array.isArray(beacons) ? beacons : [];
+            $('#collaboratorBeaconCount').textContent = state.data.collaboratorBeacons.length;
+            renderCollaboratorBeacons();
+        } catch (e) {
+            console.error('Failed to load beacons:', e);
+        }
+    }
+
+    function renderCollaboratorBeacons() {
+        const container = $('#collaboratorBeaconsList');
+        if (!container) return;
+        const beacons = state.data.collaboratorBeacons;
+        if (!beacons || beacons.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🏳️</div>
+                    <div class="empty-state-title">No Beacons</div>
+                    <div class="empty-state-text">Generate a beacon to see it listed here.</div>
+                </div>`;
+            return;
+        }
+        container.innerHTML = beacons.map(b =>
+            `<div style="padding:8px 0; border-bottom:1px solid var(--border-secondary); font-size:0.85rem;">
+                <span style="font-family:var(--font-mono); color:var(--text-primary);">${escapeHtml(b.full_url || '')}</span>
+                <span class="text-tertiary text-sm ml-2">${escapeHtml(b.transport || '')} · ${b.interactions || 0} interact${b.interactions !== 1 ? 'ions' : ''}</span>
+            </div>`
+        ).join('');
+    }
+
+    async function loadCollaboratorInteractions() {
+        try {
+            const interactions = await invoke('collaborator_list_interactions');
+            state.data.collaboratorInteractions = Array.isArray(interactions) ? interactions : [];
+            $('#collaboratorInteractionCount').textContent = state.data.collaboratorInteractions.length;
+            renderCollaboratorInteractions();
+        } catch (e) {
+            console.error('Failed to load interactions:', e);
+        }
+    }
+
+    function renderCollaboratorInteractions() {
+        const container = $('#collaboratorInteractionsList');
+        if (!container) return;
+        const interactions = state.data.collaboratorInteractions;
+        if (!interactions || interactions.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📨</div>
+                    <div class="empty-state-title">No Interactions</div>
+                    <div class="empty-state-text">Interactions received via your beacons will appear here.</div>
+                </div>`;
+            return;
+        }
+        container.innerHTML = interactions.map(i =>
+            `<div style="padding:8px 0; border-bottom:1px solid var(--border-secondary); font-size:0.85rem;">
+                <span class="badge badge-${i.protocol === 'dns' ? 'warning' : 'info'}">${(i.protocol || 'http').toUpperCase()}</span>
+                <span style="flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(i.full_url || i.path || '')}</span>
+                <span class="text-tertiary text-sm">${escapeHtml(i.ip || '')} · ${i.received_at ? new Date(i.received_at).toLocaleTimeString() : '—'}</span>
+            </div>`
+        ).join('');
+    }
+
 
     async function loadInterfaces() {
         try {

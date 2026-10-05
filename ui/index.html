@@ -196,6 +196,25 @@
             </button>
         </div>
         <div class="sidebar-section">
+            <div class="sidebar-section-title">Testing Tools</div>
+            <button class="sidebar-item" data-section="packet-inspector">
+                <span class="item-icon">🕵️</span>
+                <span class="item-label">Packet Inspector</span>
+            </button>
+            <button class="sidebar-item" data-section="spammer">
+                <span class="item-icon">📣</span>
+                <span class="item-label">Spammer</span>
+            </button>
+            <button class="sidebar-item" data-section="sequencer">
+                <span class="item-icon">🔢</span>
+                <span class="item-label">Sequencer</span>
+            </button>
+            <button class="sidebar-item" data-section="collaborator">
+                <span class="item-icon">🤝</span>
+                <span class="item-label">Collaborator</span>
+            </button>
+        </div>
+        <div class="sidebar-section">
             <div class="sidebar-section-title">Utilities</div>
             <button class="sidebar-item" data-section="red-osint">
                 <span class="item-icon">🕵️</span>
@@ -2200,6 +2219,349 @@
                 <div class="empty-state-icon">📦</div>
                 <div class="empty-state-title">No Packets Captured</div>
                 <div class="empty-state-text">Select an interface and start capturing to see network traffic</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Packet Inspector (Wireshark-style) -->
+<template id="content-packet-inspector">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🕵️ Packet Inspector</h1>
+            <p class="content-subtitle">Live capture inspection, filters, and packet detail views</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-success" id="inspectorStartBtn">▶ Start Capture</button>
+            <button class="btn btn-danger" id="inspectorStopBtn" style="display:none;">⏹ Stop Capture</button>
+            <button class="btn btn-secondary" id="inspectorRefreshBtn">🔄 Refresh</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="inspectorStatus" style="color:var(--status-error);">Idle</div>
+            <div class="stat-label">Capture Status</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="inspectorPacketCount">0</div>
+            <div class="stat-label">Packets</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="inspectorFilterCount">0</div>
+            <div class="stat-label">Filters</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="inspectorErrorCount">0</div>
+            <div class="stat-label">Errors</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Capture Interface</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Network Interface</label>
+                    <select class="input" id="inspectorInterface"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Promiscuous Mode</label>
+                    <label class="checkbox" style="margin-top:8px;">
+                        <input type="checkbox" id="inspectorPromiscuous">
+                        <span>Enable promiscuous mode</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">BPF Capture Filter</label>
+                    <input type="text" class="input" id="inspectorFilter" placeholder="e.g., tcp port 80">
+                </div>
+            </div>
+            <button class="btn btn-secondary mt-2" id="inspectorRefreshInterfacesBtn">🔄 Refresh Interfaces</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Capture Filters</span>
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Filter Name</label>
+                    <input type="text" class="input" id="inspectorFilterName" placeholder="e.g., HTTP traffic">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Filter Type</label>
+                    <select class="input" id="inspectorFilterType">
+                        <option value="capture">capture</option>
+                        <option value="packet">packet</option>
+                        <option value="http">http</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Filter Expression</label>
+                    <input type="text" class="input" id="inspectorFilterExpr" placeholder="e.g., tcp port 80">
+                </div>
+            </div>
+            <button class="btn btn-primary mt-2" id="inspectorAddFilterBtn">➕ Add Filter</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Captured Packets</span>
+            <button class="btn btn-sm btn-secondary" id="inspectorClearBtn">Clear</button>
+        </div>
+        <div class="card-body" id="inspectorPacketList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📦</div>
+                <div class="empty-state-title">No Packets Captured</div>
+                <div class="empty-state-text">Select an interface and start capturing to see network traffic</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Spammer (Burp Spammer-style HTTP flood) -->
+<template id="content-spammer">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">📣 Spammer</h1>
+            <p class="content-subtitle">Burp Spammer-style HTTP flood with hard caps (10,000 requests, concurrency 32)</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="spammerGenerateTokensBtn">🪙 Generate Tokens</button>
+            <button class="btn btn-success" id="spammerStartFloodBtn" style="display:none;">▶ Start Flood</button>
+            <button class="btn btn-danger" id="spammerStopFloodBtn" style="display:none;">⏹ Stop Flood</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="spammerStatus" style="color:var(--status-error);">Idle</div>
+            <div class="stat-label">Flood Status</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="spammerRequestsSent">0</div>
+            <div class="stat-label">Requests Sent</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="spammerTokens">0</div>
+            <div class="stat-label">Tokens</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="spammerAvgLatency">0ms</div>
+            <div class="stat-label">Avg Latency</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Request Template</span>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Base URL</label>
+                <input type="text" class="input" id="spammerUrl" placeholder="https://example.com/api/endpoint">
+            </div>
+            <div class="form-group">
+                <label class="form-label">HTTP Method</label>
+                <select class="input" id="spammerMethod">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Request Body (optional)</label>
+                <textarea class="input" id="spammerBody" rows="4" placeholder='{ "key": "VALUE" }'></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Token Count</label>
+                <input type="number" class="input" id="spammerTokenCount" value="5" min="1" max="10000">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Concurrency</label>
+                <input type="number" class="input" id="spammerConcurrency" value="8" min="1" max="32">
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Tokens</span>
+            <button class="btn btn-sm btn-secondary" id="spammerClearTokensBtn">Clear</button>
+        </div>
+        <div class="card-body" id="spammerTokensList">
+            <div class="empty-state">
+                <div class="empty-state-icon">🪙</div>
+                <div class="empty-state-title">No Tokens Generated</div>
+                <div class="empty-state-text">Generate tokens before starting the flood.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Sequencer (request/response pattern generator) -->
+<template id="content-sequencer">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🔢 Sequencer</h1>
+            <p class="content-subtitle">Generate ordered request sequences for protocol fuzzing</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="sequencerPreviewBtn">🔍 Preview</button>
+            <button class="btn btn-success" id="sequencerRunBtn" style="display:none;">▶ Run Sequence</button>
+            <button class="btn btn-danger" id="sequencerStopRunBtn" style="display:none;">⏹ Stop</button>
+        </div>
+    </div>
+
+    <div class="grid grid-4 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="sequencerStatus" style="color:var(--status-error);">Idle</div>
+            <div class="stat-label">State</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="sequencerSequenceCount">0</div>
+            <div class="stat-label">Sequence Length</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="sequencerEstimateDistinct">0</div>
+            <div class="stat-label">Estimated Distinct</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="sequencerEstimateWidth">0</div>
+            <div class="stat-label">Value Width</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Sequence Plan</span>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Transport</label>
+                <select class="input" id="sequencerTransport">
+                    <option value="http">HTTP</option>
+                    <option value="https">HTTPS</option>
+                    <option value="tcp">TCP</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Method</label>
+                <select class="input" id="sequencerMethod">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Base URL / Host</label>
+                <input type="text" class="input" id="sequencerUrl" placeholder="https://example.com/sequence">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Values (comma-separated or $T tokens)</label>
+                <input type="text" class="input" id="sequencerValues" placeholder="a,b,c or $T1-$T100">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Count / Range</label>
+                <input type="text" class="input" id="sequencerCount" placeholder="e.g., 10 or $T1-$T50">
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Preview / Results</span>
+        </div>
+        <div class="card-body" id="sequencerResults">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Preview</div>
+                <div class="empty-state-text">Enter a plan and click Preview to validate and estimate.</div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Collaborator (beacon + out-of-band interaction collector) -->
+<template id="content-collaborator">
+    <div class="content-header">
+        <div>
+            <h1 class="content-title">🤝 Collaborator</h1>
+            <p class="content-subtitle">Generate Collaborator-style beacons and collect out-of-band interactions</p>
+        </div>
+        <div class="content-actions">
+            <button class="btn btn-primary" id="collaboratorGenerateBeaconBtn">🏳️ Generate Beacon</button>
+            <button class="btn btn-secondary" id="collaboratorRefreshBtn">🔄 Refresh</button>
+        </div>
+    </div>
+
+    <div class="grid grid-2 mb-4">
+        <div class="stat-card">
+            <div class="stat-value" id="collaboratorBeaconCount">0</div>
+            <div class="stat-label">Beacons</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="collaboratorInteractionCount">0</div>
+            <div class="stat-label">Interactions</div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">Generate Beacon</span>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Host (server hostname for the .interact.rs-like domain)</label>
+                <input type="text" class="input" id="collaboratorHost" placeholder="collaborator.local">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Subdomain (leave empty for auto-generated)</label>
+                <input type="text" class="input" id="collaboratorSubdomain" placeholder="e.g., abc123 (empty = auto)">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Transport</label>
+                <select class="input" id="collaboratorTransport">
+                    <option value="dns">DNS</option>
+                    <option value="http">HTTP</option>
+                    <option value="https">HTTPS</option>
+                </select>
+            </div>
+            <button class="btn btn-primary mt-2" id="collaboratorCreateBtn">➕ Create Beacon</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <span class="card-title">My Beacons</span>
+            <button class="btn btn-sm btn-secondary" id="collaboratorClearBeaconsBtn">Clear</button>
+        </div>
+        <div class="card-body" id="collaboratorBeaconsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">🏳️</div>
+                <div class="empty-state-title">No Beacons</div>
+                <div class="empty-state-text">Generate a beacon to see it listed here.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Interactions</span>
+        </div>
+        <div class="card-body" id="collaboratorInteractionsList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📨</div>
+                <div class="empty-state-title">No Interactions</div>
+                <div class="empty-state-text">Interactions received via your beacons will appear here.</div>
             </div>
         </div>
     </div>
