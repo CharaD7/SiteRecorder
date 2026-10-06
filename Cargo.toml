@@ -33,6 +33,7 @@ members = [
     "crates/sequencer",
     "crates/spammer",
     "crates/packet-inspector",
+    "crates/activity",
 ]
 resolver = "2"
 
@@ -62,6 +63,8 @@ indicatif = "0.17"
 libc = "0.2"
 ctrlc = "3.4"
 printpdf = "0.7"
+# Shared utilities
+activity = { path = "crates/activity" }
 
 # Workspace crates
 db = { path = "crates/db" }

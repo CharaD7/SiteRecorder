@@ -1225,6 +1225,10 @@
         } else if (section === 'collaborator') {
             renderTemplate(content, 'content-collaborator');
             setupCollaborator();
+        } else if (section === 'live-triage') {
+            renderTemplate(content, 'content-live-triage');
+            renderLiveTriageContent();
+            setupLiveTriage();
         } else {
             renderToolPage(content, section);
         }
@@ -1541,6 +1545,9 @@
             'spammer': { icon: '📣', title: 'Spammer', description: 'Burp Spammer-style HTTP flood with hard caps' },
             'sequencer': { icon: '🔢', title: 'Sequencer', description: 'Generate ordered request sequences for protocol fuzzing' },
             'collaborator': { icon: '🤝', title: 'Collaborator', description: 'Generate Collaborator-style beacons and collect out-of-band interactions' },
+
+            // Live Triage Console
+            'live-triage': { icon: '📺', title: 'Live Triage Console', description: 'Real-time event log across all tools — watch what is happening now' },
         };
         return configs[section] || { icon: '🔧', title: section, description: 'Tool configuration' };
     }
@@ -9678,6 +9685,219 @@ async function listBountyPrograms() {
             feed.insertBefore(entry, feed.firstChild);
             while (feed.children.length > 50) feed.removeChild(feed.lastChild);
         }
+    }
+
+    // ========================================
+    // Live Triage Console
+    // ========================================
+
+    function renderLiveTriageContent() {
+        // Content is rendered directly from the template; this hook
+        // exists so the console can refresh its event sources.
+        loadEventSources();
+        refreshEventLog();
+    }
+
+    // Event sources: the backend activity log.
+    const EVENT_SOURCES = new Set();
+    let eventSourcesLoaded = false;
+
+    // Refresh the level/source/filter controls from events actually seen.
+    async function loadEventSources() {
+        if (eventSourcesLoaded) return;
+        const sources = EVENT_SOURCES;
+        const allEvents = await invoke('get_activity', { limit: 500, offset: 0 });
+        for (const ev of allEvents) {
+            sources.add(ev.source);
+        }
+        const select = $('#sourceFilter');
+        if (!select) return;
+        const current = select.value;
+        const existing = new Set(Array.from(select.querySelectorAll('option')).map(o => o.value));
+        for (const s of sources) {
+            if (!existing.has(s)) {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            }
+        }
+        select.value = existing.has(current) ? current : 'all';
+        eventSourcesLoaded = true;
+    }
+
+    // Level filter -> Event.level
+    const LEVEL_MAP = { all: 'any', debug: 'debug', info: 'info', warning: 'warning', error: 'error' };
+
+    async function refreshEventLog() {
+        const container = $('#eventLog');
+        if (!container) return;
+
+        const limit = 25;
+        const pageIndicator = $('#pageIndicator');
+        const levelFilter = $('#levelFilter')?.value || 'info';
+        const sourceFilter = $('#sourceFilter')?.value || 'all';
+        const searchText = ($('#eventSearch')?.value || '').toLowerCase().trim();
+
+        // Determine the base offset from the page indicator
+        let page = parseInt(pageIndicator?.textContent || '1', 10);
+        if (page < 1) page = 1;
+        const offset = (page - 1) * limit;
+
+        const allEvents = await invoke('get_activity', { limit: limit + 1, offset });
+        let filtered = allEvents.filter(ev => {
+            if (LEVEL_MAP[levelFilter] !== 'any' && ev.level !== LEVEL_MAP[levelFilter]) return false;
+            if (sourceFilter !== 'all' && ev.source !== sourceFilter) return false;
+            if (searchText && !ev.message.toLowerCase().includes(searchText)) return false;
+            return true;
+        });
+
+        // Trim to page size and detect if a next page exists
+        const nextPageHasMore = filtered.length > limit;
+        if (nextPageHasMore) filtered = filtered.slice(0, limit);
+
+        // Update pagination controls
+        if (pageIndicator) pageIndicator.textContent = String(page);
+        const hasPrev = offset > 0 || filtered.length > limit;
+
+        // Update event stats bar
+        const statsEl = $('#eventStats');
+        if (statsEl) {
+            statsEl.style.display = filtered.length > 0 ? 'block' : 'none';
+            const countEl = $('#eventCountText');
+            if (countEl) countEl.textContent = `${filtered.length} events · ${new Date().toLocaleTimeString()}`;
+            const pillsEl = $('#filterPills');
+            if (pillsEl) {
+                const parts = [];
+                if (sourceFilter !== 'all') parts.push(`source: ${sourceFilter}`);
+                if (levelFilter !== 'info') parts.push(`level: ${levelFilter}`);
+                if (searchText) parts.push(`search: "${searchText}"`);
+                pillsEl.innerHTML = parts.map(p => `<span class="badge badge-ghost">${p}</span>`).join(' ');
+            }
+        }
+
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <div class="empty-state-title">No Events Match</div>
+                    <div class="empty-state-text">Adjust your filters or wait for new activity.</div>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = filtered.map(ev => {
+            const time = ev.timestamp.toLocaleString();
+            const levelClass = {
+                debug: 'badge-debug',
+                info: 'badge-info',
+                warning: 'badge-warning',
+                error: 'badge-error',
+            }[ev.level] || 'badge-ghost';
+            return `
+                <div style="padding:10px 12px; border-bottom:1px solid var(--border-secondary); display:flex; gap:12px; align-items:flex-start; font-size:0.9rem;">
+                    <div style="min-width:130px; color:var(--text-tertiary); font-family:var(--font-mono); font-size:0.8rem;">
+                        <div>${time}</div>
+                        <div style="margin-top:2px;">${ev.source}</div>
+                    </div>
+                    <span class="${levelClass}" style="white-space:nowrap;">${ev.level.toUpperCase()}</span>
+                    <div style="flex:1; color:var(--text-secondary);">${escapeHtml(ev.message)}</div>
+                </div>
+            `;
+        }).join('');
+
+        // Auto-scroll to the newest event (which is at the top after sorting)
+        container.scrollTop = 0;
+
+        // Wire pagination buttons
+        const prevBtn = $('#pagePrevBtn');
+        const nextBtn = $('#pageNextBtn');
+        if (prevBtn) prevBtn.disabled = offset <= 0;
+        if (nextBtn) nextBtn.disabled = !nextPageHasMore;
+
+        // Re-attach listeners in case the container was re-rendered
+        prevBtn?.addEventListener('click', () => {
+            document.getElementById('pageIndicator').textContent = String(Math.max(1, page - 1));
+            refreshEventLog();
+        });
+        nextBtn?.addEventListener('click', () => {
+            document.getElementById('pageIndicator').textContent = String(page + 1);
+            refreshEventLog();
+        });
+    }
+
+    let activityPollInterval = null;
+
+    async function setupLiveTriage() {
+        const levelFilter = $('#levelFilter');
+        const sourceFilter = $('#sourceFilter');
+        const eventSearch = $('#eventSearch');
+        const liveToggle = $('#liveToggle');
+        const consoleClearBtn = $('#consoleClearBtn');
+        const consoleExportBtn = $('#consoleExportBtn');
+
+        // Filters trigger re-render
+        levelFilter?.addEventListener('change', () => refreshEventLog());
+        sourceFilter?.addEventListener('change', () => {
+            loadEventSources();
+            refreshEventLog();
+        });
+        eventSearch?.addEventListener('input', () => refreshEventLog());
+
+        // Clear log
+        consoleClearBtn?.addEventListener('click', async () => {
+            if (confirm('Clear the entire event log?')) {
+                await invoke('clear_activity');
+                refreshEventLog();
+                showToast('info', 'Log Cleared', 'All activity events have been cleared.');
+            }
+        });
+
+        // Export log
+        consoleExportBtn?.addEventListener('click', async () => {
+            const events = await invoke('get_activity', { limit: 500, offset: 0 });
+            const rows = events.map(ev => ({
+                timestamp: ev.timestamp.toISOString(),
+                level: ev.level,
+                source: ev.source,
+                message: ev.message,
+            }));
+            const csv = 'timestamp,level,source,message\n' + rows.map(r =>
+                `"${r.timestamp}",${r.level},${r.source},"${r.message.replace(/"/g, '""')}"`
+            ).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `activity-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showToast('success', 'Log Exported', 'Activity log saved as CSV.');
+        });
+
+        // Live auto-refresh
+        function startPolling() {
+            if (activityPollInterval) clearInterval(activityPollInterval);
+            refreshEventLog();
+            activityPollInterval = setInterval(refreshEventLog, 2000);
+        }
+
+        liveToggle?.addEventListener('change', () => {
+            if (liveToggle.checked) {
+                startPolling();
+            } else {
+                if (activityPollInterval) {
+                    clearInterval(activityPollInterval);
+                    activityPollInterval = null;
+                }
+            }
+        });
+
+        // Initial load
+        await loadEventSources();
+        startPolling();
     }
 
     // ========================================

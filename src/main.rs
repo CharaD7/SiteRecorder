@@ -16,6 +16,7 @@ use notifier::{NotificationConfig, Notifier};
 use recorder::{Recorder, RecordingConfig, VideoFormat};
 use scanner::{ScanConfig, ScanReport, VulnerabilityScanner};
 use session::SessionManager;
+use activity::{Activity, Event};
 
 use auth_engine::{ApiKeyLocation, AuthEngine, AuthType as EngineAuthType, OAuth2GrantType};
 use auth_profiles::{AuthProfile, AuthProfileManager};
@@ -159,6 +160,8 @@ struct AppState {
     sequencer: Arc<Mutex<Sequencer>>,
     /// Burp Collaborator clone: out-of-band beacon polling.
     collaborator: Arc<Mutex<CollaboratorClient>>,
+    /// Shared activity/event log surfaced to the Live Triage Console.
+    activity: Arc<Activity>,
     auth_engine: Arc<AuthEngine>,
     /// Shared persistence layer (Wave 1). Every crate that stores domain data
     /// goes through this connection rather than opening its own.
@@ -190,6 +193,12 @@ async fn start_recording(
     status.pages_visited = 0;
     status.pages_discovered = 0;
     let session_id = status.session_id.clone();
+    info!("Starting recording: {} -> {}", session_id, settings.url);
+    state
+        .activity
+        .info("recorder", format!("Starting recording of {}", settings.url))
+        .await
+        .ok();
     eprintln!("Created session: {}", session_id);
     drop(status);
 
@@ -215,6 +224,12 @@ async fn start_recording(
 async fn stop_recording(state: State<'_, AppState>) -> Result<(), String> {
     let mut status = state.status.lock().await;
     status.is_running = false;
+    info!("Recording stopped");
+    state
+        .activity
+        .info("recorder", "Recording session stopped")
+        .await
+        .ok();
     Ok(())
 }
 
@@ -232,6 +247,11 @@ async fn run_vulnerability_scan(
     state: State<'_, AppState>,
 ) -> Result<ScanReport, String> {
     info!("Starting vulnerability scan for: {}", url);
+    state
+        .activity
+        .info("scanner", format!("Starting vulnerability scan: {}", url))
+        .await
+        .ok();
 
     let mut config = ScanConfig::new(&url).map_err(|e| e.to_string())?;
     if let Some(dir) = output_dir {
@@ -278,6 +298,18 @@ async fn run_vulnerability_scan(
         "Vulnerability scan completed. Risk score: {:.1}",
         report.summary.risk_score
     );
+    state
+        .activity
+        .info(
+            "scanner",
+            format!(
+                "Vulnerability scan completed: {} findings, risk score {:.1}",
+                report.summary.risk_score,
+                report.summary.vulnerable
+            ),
+        )
+        .await
+        .ok();
 
     Ok(report)
 }
@@ -289,29 +321,45 @@ async fn get_scan_results(state: State<'_, AppState>) -> Result<Option<ScanRepor
 }
 
 #[tauri::command]
-async fn list_vuln_scans(output_dir: String) -> Result<Vec<scanner::ScanMeta>, String> {
+async fn list_vuln_scans(output_dir: String, state: State<'_, AppState>) -> Result<Vec<scanner::ScanMeta>, String> {
     let dir = std::path::PathBuf::from(output_dir);
-    Ok(VulnerabilityScanner::list_scans(&dir))
+    let scans = VulnerabilityScanner::list_scans(&dir);
+    state
+        .activity
+        .debug("scanner", format!("Listed {} stored scans", scans.len()))
+        .await
+        .ok();
+    Ok(scans)
 }
 
 #[tauri::command]
-async fn load_vuln_scan(output_dir: String, scan_id: String) -> Result<ScanReport, String> {
+async fn load_vuln_scan(output_dir: String, scan_id: String, state: State<'_, AppState>) -> Result<ScanReport, String> {
     let path = std::path::PathBuf::from(output_dir)
         .join("scans")
         .join(format!("{}.json", scan_id));
     let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let report: ScanReport = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+    state
+        .activity
+        .info("scanner", format!("Loaded stored scan: {}", scan_id))
+        .await
+        .ok();
     Ok(report)
 }
 
 #[tauri::command]
-async fn delete_vuln_scan(output_dir: String, scan_id: String) -> Result<(), String> {
+async fn delete_vuln_scan(output_dir: String, scan_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let path = std::path::PathBuf::from(output_dir)
         .join("scans")
         .join(format!("{}.json", scan_id));
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
         info!("Deleted scan report {:?}", path);
+        state
+            .activity
+            .info("scanner", format!("Deleted scan report: {}", scan_id))
+            .await
+            .ok();
     }
     Ok(())
 }
@@ -321,8 +369,9 @@ async fn export_vuln_scan(
     output_dir: String,
     scan_id: String,
     format: String,
+    state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let report = load_vuln_scan(output_dir, scan_id).await?;
+    let report = load_vuln_scan(output_dir, scan_id, state).await?;
     if format.eq_ignore_ascii_case("csv") {
         Ok(report.to_csv())
     } else {
@@ -336,8 +385,9 @@ async fn save_export(
     scan_id: String,
     format: String,
     dest_path: String,
+    state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let report = load_vuln_scan(output_dir, scan_id).await?;
+    let report = load_vuln_scan(output_dir, scan_id, state).await?;
     let content = if format.eq_ignore_ascii_case("csv") {
         report.to_csv()
     } else {
@@ -384,6 +434,12 @@ async fn create_auth_profile(
         )
         .ok();
 
+    state
+        .activity
+        .info("auth", format!("Auth profile created: {}", profile.name))
+        .await
+        .ok();
+
     Ok(profile)
 }
 
@@ -425,6 +481,12 @@ async fn delete_auth_profile(id: String, state: State<'_, AppState>) -> Result<(
         )
         .ok();
 
+    state
+        .activity
+        .info("auth", format!("Auth profile deleted: {}", id))
+        .await
+        .ok();
+
     Ok(())
 }
 
@@ -463,6 +525,15 @@ async fn test_auth_profile(
     // Only record use when the profile is actually usable.
     manager.update_last_used(&id).ok();
 
+    state
+        .activity
+        .info(
+            "auth",
+            format!("Tested auth profile '{}': well-formed, not tested (no browser automation)", profile.name),
+        )
+        .await
+        .ok();
+
     Ok(auth_profiles::AuthTestResult {
         success: false,
         outcome: auth_profiles::TestOutcome::NotTested,
@@ -478,13 +549,25 @@ async fn test_auth_profile(
 }
 
 #[tauri::command]
-async fn generate_totp(secret: String) -> Result<auth_profiles::TotpResult, String> {
-    auth_profiles::TotpGenerator::generate_code(&secret).map_err(|e| e.to_string())
+async fn generate_totp(secret: String, state: State<'_, AppState>) -> Result<auth_profiles::TotpResult, String> {
+    let code = auth_profiles::TotpGenerator::generate_code(&secret).map_err(|e| e.to_string())?;
+    state
+        .activity
+        .info("auth", "TOTP code generated")
+        .await
+        .ok();
+    Ok(code)
 }
 
 #[tauri::command]
-async fn validate_totp(secret: String, code: String) -> Result<bool, String> {
-    auth_profiles::TotpGenerator::validate_code(&secret, &code).map_err(|e| e.to_string())
+async fn validate_totp(secret: String, code: String, state: State<'_, AppState>) -> Result<bool, String> {
+    let valid = auth_profiles::TotpGenerator::validate_code(&secret, &code).map_err(|e| e.to_string())?;
+    state
+        .activity
+        .info("auth", format!("TOTP code validation: {}", if valid { "valid" } else { "invalid" }))
+        .await
+        .ok();
+    Ok(valid)
 }
 
 #[tauri::command]
@@ -506,6 +589,11 @@ async fn get_totp_provisioning_uri(
 async fn unlock_vault(master_password: String, state: State<'_, AppState>) -> Result<bool, String> {
     let mut vault = state.credential_vault.lock().await;
     vault.unlock(&master_password).map_err(|e| e.to_string())?;
+    state
+        .activity
+        .info("auth", "Credential vault unlocked")
+        .await
+        .ok();
     Ok(true)
 }
 
@@ -513,6 +601,11 @@ async fn unlock_vault(master_password: String, state: State<'_, AppState>) -> Re
 async fn lock_vault(state: State<'_, AppState>) -> Result<(), String> {
     let mut vault = state.credential_vault.lock().await;
     vault.lock();
+    state
+        .activity
+        .info("auth", "Credential vault locked")
+        .await
+        .ok();
     Ok(())
 }
 
@@ -1470,16 +1563,41 @@ fn repeater_preview(text: String) -> Result<RepeaterPreview, String> {
 /// so what the operator sees is what the server said. An unreachable target is
 /// an `Err` naming the likely cause, never a fabricated success.
 #[tauri::command]
-async fn repeater_send(text: String) -> Result<SendOutcome, String> {
+async fn repeater_send(text: String, state: State<'_, AppState>) -> Result<SendOutcome, String> {
     let raw = RawRequest::new(text);
     let parsed = raw.parse().map_err(|e| e.to_string())?;
     let url = parsed.absolute_url().map_err(|e| e.to_string())?;
 
     tracing::info!("Repeater sending {} {}", parsed.method, url);
-    HttpSender::new()
+    let result = HttpSender::new()
         .send(&url, &parsed)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+
+    match &result {
+        Ok(outcome) => {
+            state
+                .activity
+                .info(
+                    "repeater",
+                    format!(
+                        "Repeater sent {} {} -> HTTP {} ({} bytes)",
+                        parsed.method, url, outcome.status_code, outcome.body.len()
+                    ),
+                )
+                .await
+                .ok();
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("repeater", format!("Repeater failed: {}", e))
+                .await
+                .ok();
+        }
+    }
+
+    result
 }
 
 /// Take a request captured by the proxy and hand it to the Repeater.
@@ -1563,6 +1681,7 @@ async fn intruder_run(
     text: String,
     source: PayloadSource,
     config: Option<AttackConfig>,
+    state: State<'_, AppState>,
 ) -> Result<AttackReport, String> {
     let marked = MarkedRequest::new(text);
     let payloads = intruder::load_payloads(&source).map_err(|e| e.to_string())?;
@@ -1574,12 +1693,49 @@ async fn intruder_run(
         config.max_requests,
         config.max_concurrency
     );
+    state
+        .activity
+        .info(
+            "intruder",
+            format!(
+                "Intruder started: {} payloads against marked request, cap {}, concurrency {}",
+                payloads.len(),
+                config.max_requests,
+                config.max_concurrency
+            ),
+        )
+        .await
+        .ok();
 
     let runner = Runner::new(repeater::send::HttpSender::new(), config);
-    runner
-        .run(&marked, &payloads, None)
-        .await
-        .map_err(|e| e.to_string())
+    let result = runner.run(&marked, &payloads, None);
+
+    match result.await {
+        Ok(report) => {
+            state
+                .activity
+                .info(
+                    "intruder",
+                    format!(
+                        "Intruder completed: {} total payloads attempted, {} succeeded, {} failed",
+                        report.total_payloads,
+                        report.succeeded,
+                        report.failed
+                    ),
+                )
+                .await
+                .ok();
+            Ok(report)
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("intruder", format!("Intruder failed: {}", e))
+                .await
+                .ok();
+            Err(e.to_string())
+        }
+    }
 }
 
 /// Show what the Fuzzer *would* do, without sending anything.
@@ -1603,6 +1759,7 @@ async fn fuzz_run(
     text: String,
     source: PayloadSource,
     config: Option<AttackConfig>,
+    state: State<'_, AppState>,
 ) -> Result<Vec<AttackReport>, String> {
     let payloads = intruder::load_payloads(&source).map_err(|e| e.to_string())?;
     let config = config.unwrap_or_default();
@@ -1613,9 +1770,46 @@ async fn fuzz_run(
         payloads.len(),
         config.max_requests
     );
-    intruder::fuzz::run(&text, &payloads, config, &runner, None)
+    state
+        .activity
+        .info(
+            "intruder",
+            format!(
+                "Fuzzer started: {} payloads against marked request, cap {}",
+                payloads.len(),
+                config.max_requests
+            ),
+        )
         .await
-        .map_err(|e| e.to_string())
+        .ok();
+
+    let result = intruder::fuzz::run(&text, &payloads, config, &runner, None).await;
+
+    match &result {
+        Ok(reports) => {
+            state
+                .activity
+                .info(
+                    "intruder",
+                    format!(
+                        "Fuzzer completed: {} responses collected from {} payloads",
+                        reports.len(),
+                        payloads.len()
+                    ),
+                )
+                .await
+                .ok();
+            Ok(result.unwrap())
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("intruder", format!("Fuzzer failed: {}", e))
+                .await
+                .ok();
+            Err(e.to_string())
+        }
+    }
 }
 
 /// Compare two responses.
@@ -1668,6 +1862,18 @@ async fn packet_start_capture(
         .map_err(|e| e.to_string())?;
     *capture_lock = Some(capture);
     info!("Packet capture started on {}", interface);
+    state
+        .activity
+        .info(
+            "packet-inspector",
+            format!(
+                "Packet capture started on interface '{}', filter: {}",
+                interface,
+                filter.as_deref().unwrap_or("none")
+            ),
+        )
+        .await
+        .ok();
     Ok(format!("Capture started on {}", interface))
 }
 
@@ -1679,6 +1885,11 @@ async fn packet_stop_capture(state: State<'_, AppState>) -> Result<String, Strin
     }
     capture_lock.take();
     info!("Packet capture stopped");
+    state
+        .activity
+        .info("packet-inspector", "Packet capture stopped")
+        .await
+        .ok();
     Ok("Capture stopped".to_string())
 }
 
@@ -1822,16 +2033,60 @@ async fn spammer_generate_tokens(
     state: State<'_, AppState>,
 ) -> Result<spammer::TokenRun, String> {
     let spammer = state.spammer.lock().await;
-    spammer
-        .generate_tokens(&plan)
-        .await
-        .map_err(|e| e.to_string())
+    let result = spammer.generate_tokens(&plan).await.map_err(|e| e.to_string());
+    match &result {
+        Ok(run) => {
+            state
+                .activity
+                .info(
+                    "spammer",
+                    format!(
+                        "Token generation complete: {} tokens of type {}",
+                        run.count,
+                        run.kind
+                    ),
+                )
+                .await
+                .ok();
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("spammer", format!("Token generation failed: {}", e))
+                .await
+                .ok();
+        }
+    }
+    result
 }
 
 #[tauri::command]
 async fn spammer_flood(plan: FloodPlan, state: State<'_, AppState>) -> Result<FloodRun, String> {
     let spammer = state.spammer.lock().await;
-    spammer.flood(&plan).await.map_err(|e| e.to_string())
+    let result = spammer.flood(&plan).await.map_err(|e| e.to_string());
+    match &result {
+        Ok(run) => {
+            state
+                .activity
+                .info(
+                    "spammer",
+                    format!(
+                        "Flood complete: {} requests sent, {} successful, {} failed",
+                        run.sent, run.ok, run.failed
+                    ),
+                )
+                .await
+                .ok();
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("spammer", format!("Flood failed: {}", e))
+                .await
+                .ok();
+        }
+    }
+    result
 }
 
 // ==================== SEQUENCER COMMANDS ====================
@@ -1842,7 +2097,30 @@ async fn sequencer_run(
     state: State<'_, AppState>,
 ) -> Result<sequencer::SequenceRun, String> {
     let sequencer = state.sequencer.lock().await;
-    sequencer.run(&plan).await.map_err(|e| e.to_string())
+    let result = sequencer.run(&plan).await.map_err(|e| e.to_string());
+    match &result {
+        Ok(run) => {
+            state
+                .activity
+                .info(
+                    "sequencer",
+                    format!(
+                        "Sequencer complete: {} samples, entropy {:.2} bits/byte, {} collisions",
+                        run.collected, run.observations.entropy_bits_per_byte, run.observations.collisions
+                    ),
+                )
+                .await
+                .ok();
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("sequencer", format!("Sequencer failed: {}", e))
+                .await
+                .ok();
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -1879,7 +2157,15 @@ fn sequencer_preview(plan: sequencer::SeqPlan) -> Result<sequencer::SequenceRun,
 #[tauri::command]
 async fn collaborator_beacon_generate(state: State<'_, AppState>) -> Result<Beacon, String> {
     let client = state.collaborator.lock().await;
-    client.generate_beacon().await.map_err(|e| e.to_string())
+    let result = client.generate_beacon().await.map_err(|e| e.to_string());
+    if result.is_ok() {
+        state
+            .activity
+            .info("collaborator", "Collaborator beacon generated")
+            .await
+            .ok();
+    }
+    result
 }
 
 #[tauri::command]
@@ -1889,10 +2175,42 @@ async fn collaborator_beacon_interactions(
 ) -> Result<Vec<Interaction>, String> {
     let client = state.collaborator.lock().await;
     let timeout = timeout_s.unwrap_or(30);
-    client
-        .wait_for_interaction(timeout)
-        .await
-        .map_err(|e| e.to_string())
+    let result = client.wait_for_interaction(timeout).await.map_err(|e| e.to_string());
+    match &result {
+        Ok(interactions) => {
+            if !interactions.is_empty() {
+                state
+                    .activity
+                    .info(
+                        "collaborator",
+                        format!(
+                            "Collaborator received {} interaction(s) after {}s wait",
+                            interactions.len(),
+                            timeout
+                        ),
+                    )
+                    .await
+                    .ok();
+            } else {
+                state
+                    .activity
+                    .info(
+                        "collaborator",
+                        format!("Collaborator polled: no interactions after {}s wait", timeout),
+                    )
+                    .await
+                    .ok();
+            }
+        }
+        Err(e) => {
+            state
+                .activity
+                .error("collaborator", format!("Collaborator poll failed: {}", e))
+                .await
+                .ok();
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -1920,6 +2238,35 @@ async fn collaborator_list_interactions(
         })
         .collect())
 }
+// ==================== ACTIVITY LOG COMMANDS ====================
+
+/// Read activity events from the shared event log.
+#[tauri::command]
+async fn get_activity(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<Vec<Event>, String> {
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    state
+        .activity
+        .get_events(limit, offset)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Clear all activity events.
+#[tauri::command]
+async fn clear_activity(state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .activity
+        .clear()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ==================== AUTH ENGINE COMMANDS ====================
 
 // ==================== AUTH ENGINE COMMANDS ====================
 
@@ -2736,6 +3083,7 @@ fn run_gui_mode() {
         spammer: Arc::new(Mutex::new(Spammer::default())),
         sequencer: Arc::new(Mutex::new(Sequencer::default())),
         collaborator: Arc::new(Mutex::new(CollaboratorClient::new("127.0.0.1", 18080))),
+        activity: Arc::new(Activity::new()),
     };
 
     use tauri::{CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu};
@@ -2930,6 +3278,9 @@ fn run_gui_mode() {
             collaborator_beacon_interactions,
             collaborator_list_beacons,
             collaborator_list_interactions,
+            // Activity log commands
+            get_activity,
+            clear_activity,
             // Auth engine commands
             auth_authenticate,
             auth_test_session,

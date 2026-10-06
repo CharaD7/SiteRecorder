@@ -3,6 +3,18 @@
 version = 4
 
 [[package]]
+name = "activity"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6424,6 +6436,7 @@ checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
 name = "site-recorder"
 version = "0.1.0"
 dependencies = [
+ "activity",
  "aes-gcm",
  "agent",
  "anyhow",

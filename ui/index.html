@@ -213,6 +213,10 @@
                 <span class="item-icon">🤝</span>
                 <span class="item-label">Collaborator</span>
             </button>
+            <button class="sidebar-item" data-section="live-triage">
+                <span class="item-icon">📺</span>
+                <span class="item-label">Live Triage Console</span>
+            </button>
         </div>
         <div class="sidebar-section">
             <div class="sidebar-section-title">Utilities</div>
@@ -501,6 +505,83 @@
         </div>
         <div id="toolContent">
             <!-- Dynamic tool content -->
+        </div>
+    </template>
+
+    <!-- Live Triage Console -->
+    <template id="content-live-triage">
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">📺 Live Triage Console</h1>
+                <p class="content-subtitle">Real-time operational events from every tool — a live window into what's happening across the app</p>
+            </div>
+            <div class="content-actions" id="consoleActions">
+                <button class="btn btn-ghost" id="consoleClearBtn">🗑️ Clear Log</button>
+                <button class="btn btn-ghost" id="consoleExportBtn">📥 Export</button>
+                <div class="btn-group">
+                    <label class="switch-label" data-tooltip="Auto-refresh console">
+                        <input type="checkbox" id="liveToggle" checked>
+                        <span class="switch" id="liveSwitch"></span>
+                        <span class="switch-text">Live</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="card mb-4">
+            <div class="card-body" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:12px;">Level</label>
+                    <select class="input input-sm" id="levelFilter">
+                        <option value="all">All Levels</option>
+                        <option value="debug">Debug</option>
+                        <option value="info" selected>Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:12px;">Source</label>
+                    <select class="input input-sm" id="sourceFilter">
+                        <option value="all">All Sources</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1; min-width:200px;">
+                    <label class="form-label" style="font-size:12px;">Search</label>
+                    <input type="text" class="input input-sm" id="eventSearch" placeholder="Search events...">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:12px;">Page</label>
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <button class="btn btn-ghost btn-sm" id="pagePrevBtn" title="Previous page">◀</button>
+                        <span class="text-sm" id="pageIndicator" style="min-width:40px; text-align:center;">1</span>
+                        <button class="btn btn-ghost btn-sm" id="pageNextBtn" title="Next page">▶</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live indicator + event count -->
+        <div class="empty-state" id="eventStats" style="display:none; padding:8px 0;">
+            <span class="status-dot running" style="margin-right:6px;"></span>
+            <span class="text-sm" id="eventCountText">12 events · <span id="lastUpdateText">just now</span></span>
+            <span class="text-sm" id="filterPills" style="margin-left:12px;"></span>
+        </div>
+
+        <!-- Event log table -->
+        <div class="card">
+            <div class="card-header" style="padding:8px 12px; display:flex; justify-content:space-between; align-items:center; background:var(--bg-card);">
+                <span class="text-sm text-tertiary">Event log</span>
+                <span class="text-sm text-tertiary" id="eventsPerSource"></span>
+            </div>
+            <div id="eventLog" style="max-height:520px; overflow-y:auto;">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <div class="empty-state-title">No Events</div>
+                    <div class="empty-state-text">Run a tool or start a scan — events will appear here in real time.</div>
+                </div>
+            </div>
         </div>
     </template>
 
