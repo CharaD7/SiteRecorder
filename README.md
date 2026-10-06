@@ -162,8 +162,21 @@ facts, never verdicts, and human review gates any export.
    `collaborator_list_beacons`, `collaborator_list_interactions`.
 
 
-Tape-recorded state: **394 workspace tests pass**.
+Tape-recorded state: **all workspace tests pass** (76 suites, incl. IPC contract guard).
 
+### Activity / Live Triage Console
+A new `activity` crate (`crates/activity`) provides a shared, in-memory,
+thread-safe event log (tokio `RwLock`, max 1000 events, pagination, clear).
+Tauri commands `get_activity(limit, offset)` and `clear_activity()` expose
+it to the frontend.
+
+The **Live Triage Console** (`ui/index.html` template `content-live-triage`,
+section `live-triage`) shows every tool's events in real time (2 s auto-refresh,
+filterable by level/source, searchable, paginated, CSV-exportable). It is the
+single source of truth for "what is happening right now" across all tools.
+
+Note: the event store is **in-memory and volatile** — events are lost on
+restart. See HANDOFF.md for the event lifecycle note.
 
 ### Cross-Platform Support
 - Linux (X11)
@@ -219,7 +232,7 @@ SiteRecorder/
  | `spammer` | Burp Spammer-style HTTP flood + token generation (hard caps: 10k req, 32 conc) |
  | `sequencer` | Burp Sequencer-style randomness analysis via entropy, chi-square, collisions |
  | `collaborator` | Burp Collaborator-style OOB beacon polling (self-hosted TCP, DNS upcoming) |
-
+ | `activity` | Shared event log + Live Triage Console (in-memory, volatile until restart) |
 
 #### Advisory / Reference Workspaces
 - `agent`, `gray-team`, `blue-team`, `white-team`, `cross-team`, `mobile`, `cloud`,

@@ -554,3 +554,44 @@ Four new workspace crates were exposed through the existing Tauri command layer 
 Known outstanding items (unchanged from prior state):
 - Collaborator DNS out-of-band reception remains unimplemented (self-hosted TCP only)
 - No Playwright/Visual UI tests yet for the four new tool pages
+
+## New: activity crate + Live Triage Console (Wave 3)
+
+A new `activity` crate (`crates/activity`) provides a shared, in-memory,
+thread-safe event log used by every tool page to surface what is happening
+right now.
+
+**Rust (`crates/activity`, wired in `src/main.rs`)**
+- Store: tokio `RwLock<Vec<Event>>`, max 1000 events (FIFO retention),
+  `clear()` resets it.
+- `Event { id, timestamp: DateTime<Utc>, source, level, message }`,
+  `Level { Debug, Info, Warning, Error }`.
+- Helpers: `.info()`, `.warn()`, `.error()`, `.debug()`.
+- Tauri commands:
+  - `get_activity(limit, offset) → Vec<Event>` (newest-first).
+  - `clear_activity() → Result<(), String>`.
+- Log calls added to core commands: recording start/stop, vulnerability
+  scan (start + completion), auth profiles, TOTP, vault lock/unlock,
+  repeater send (success/error), intruder run (start/completion/error),
+  fuzz run, packet capture start/stop, token generation, spammer flood,
+  sequencer run, collaborator beacon generate, wait_for_interaction
+  (success/error/no-interaction).
+
+**Frontend (`ui/index.html` + `ui/app.js`)**
+- Sidebar entry + template `content-live-triage` + section `live-triage`.
+- Stats bar, level/source dropdowns (populated from log), free-text search,
+  25/page pagination, newest-first scrollable event log.
+- 2 s auto-refresh (toggleable), clear-log button, CSV export.
+
+**Verification**
+- `cargo test --test ipc_contract` — all 3 pass, including
+  `every_ui_invoke_has_a_registered_command` and
+  `newly_added_commands_are_reachable_from_the_ui`.
+- `cargo test --workspace --exclude recorder` — 76 suites, 0 failures.
+- `activity` unit tests pass (`respects_max_events`, `logs_and_retrieves_events`).
+- HTML parses cleanly; every UI `invoke` maps to a registered command.
+
+**Event lifecycle (important)**
+- The store is **in-memory only** — events are lost on restart.
+- If persistence is needed later, add a SQLite/DB write-back in the
+  logging helpers or snapshot the store to disk on shutdown.
